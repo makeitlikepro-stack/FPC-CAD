@@ -572,6 +572,81 @@ begin
   end;
 end;
 
+procedure TestArcMiddleSegment;
+var
+  S: TCADSketch;
+  Arc, LeftArc, RightArc, Hit: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Arc := S.AddArc(S.AddPoint(0, 0),
+      S.AddPoint(5, 0), S.AddPoint(-5, 0));
+    S.AddLineXY(3, -8, 3, 8);
+    S.AddLineXY(-3, -8, -3, 8);
+    Check(CADPlanSketchTrim(S, Arc, 0, 5, Plan, Err) and
+      (Plan.FromT > 0) and (Plan.ToT < 1) and
+      (Plan.FromT < 0.5) and (Plan.ToT > 0.5),
+      'curve trim: middle arc section is between two intersections');
+    Check(CADApplySketchTrim(S, Plan, Err),
+      'curve trim: remove middle arc and keep both curved ends');
+    LeftArc := S.EntityCount - 2;
+    RightArc := S.EntityCount - 1;
+    Check((not S.Entities[Arc].Active) and
+      S.Entities[LeftArc].Active and S.Entities[RightArc].Active and
+      (S.Entities[LeftArc].Kind = sekArc) and
+      (S.Entities[RightArc].Kind = sekArc),
+      'curve trim: two real arc survivors replace the original arc');
+    Check((CADSketchHit(S, 0, 5, 0.2, Hit) = chkNone) and
+      (CADSketchHit(S, 4.5, 2.1794495, 0.2, Hit) = chkEntity) and
+      (CADSketchHit(S, -4.5, 2.1794495, 0.2, Hit) = chkEntity),
+      'curve trim: curved gap deleted; both outer arcs remain pickable');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestWholeCircleAndArcDeletion;
+var
+  S: TCADSketch;
+  Center, Circle, Arc, Hit: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+  R: TCADSketchSolveResult;
+begin
+  S := TCADSketch.Create;
+  try
+    Center := S.AddPoint(0, 0);
+    Circle := S.AddCircle(Center, 5);
+    Check(CADPlanSketchTrim(S, Circle, 0, 5, Plan, Err) and
+      Near(Plan.FromT, 0) and Near(Plan.ToT, 1) and
+      CADApplySketchTrim(S, Plan, Err),
+      'curve trim: a circle without crossings can be removed completely');
+    Check(not S.Entities[Circle].Active and
+      (CADSketchHit(S, 0, 5, 0.2, Hit) = chkNone),
+      'curve trim: full circle deletion removes all visible geometry');
+    R := CADSolveSketch(S);
+    Check(R.Status = cssSolved,
+      'curve trim: no phantom free radius on deleted circle');
+  finally
+    S.Free;
+  end;
+  S := TCADSketch.Create;
+  try
+    Arc := S.AddArc(S.AddPoint(0, 0),
+      S.AddPoint(5, 0), S.AddPoint(-5, 0));
+    Check(CADPlanSketchTrim(S, Arc, 0, 5, Plan, Err) and
+      CADApplySketchTrim(S, Plan, Err) and
+      (not S.Entities[Arc].Active),
+      'curve trim: arc without crossings can be removed completely');
+    Check(CADSketchHit(S, 0, 5, 0.2, Hit) = chkNone,
+      'curve trim: deleted entire arc is no longer pickable');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestCircleWithOneCrossing;
 var
   S: TCADSketch;
@@ -609,6 +684,8 @@ begin
   TestLineTrimmedByCircle;
   TestRadiusAndConstraintGuard;
   TestCircleWithOneCrossing;
+  TestArcMiddleSegment;
+  TestWholeCircleAndArcDeletion;
   if Failures = 0 then
     WriteLn(Format('PASS  trim/extend planning: %d checks', [Checks]))
   else

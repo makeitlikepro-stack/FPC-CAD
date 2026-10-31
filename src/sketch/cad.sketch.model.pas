@@ -27,6 +27,7 @@ type
 
   TCADSketchPoint = record
     XParam, YParam: Integer;    { indices into Params }
+    Active: Boolean;            { hidden when its last owning entity is removed }
   end;
 
   TCADSketchEntity = record
@@ -35,6 +36,7 @@ type
     Center: Integer;            { circle, arc; line: -1 }
     RadiusParam: Integer;       { circle only; arc and line: -1 }
     Construction: Boolean;      { not part of a profile }
+    Active: Boolean;            { False = deleted; indices remain stable for undo }
   end;
 
   TCADSketchConstraintKind = (
@@ -115,6 +117,13 @@ type
       loading, where the saved constraint list already has it). }
     function AddArc(ACenter, AStart, AEnd: Integer; AAutoRule: Boolean = True): Integer;
     procedure SetConstruction(AEntity: Integer; AValue: Boolean);
+    { Stable indices: deleted entities are ignored by picking/drawing/profile.
+      Entity constraints are disabled when an entity is removed. }
+    procedure RemoveEntity(AEntity: Integer);
+    procedure SetEntityActive(AEntity: Integer; AActive: Boolean);
+    procedure SetPointActive(APoint: Integer; AActive: Boolean);
+    { Copy the entire sketch after validating a trial edit. }
+    procedure AssignFrom(ASource: TCADSketch);
     procedure FixPoint(APoint: Integer; AFixed: Boolean = True);
     procedure MovePoint(APoint: Integer; X, Y: Double);
     function PointX(APoint: Integer): Double;
@@ -211,6 +220,7 @@ begin
   if FEntityCount >= System.Length(FEntities) then
     SetLength(FEntities, Max(16, System.Length(FEntities) * 2));
   FEntities[FEntityCount] := E;
+  FEntities[FEntityCount].Active := True;
   Result := FEntityCount;
   Inc(FEntityCount);
   Inc(FRevision);
@@ -288,6 +298,7 @@ begin
     SetLength(FPoints, Max(16, System.Length(FPoints) * 2));
   FPoints[FPointCount].XParam := NewParam(X);
   FPoints[FPointCount].YParam := NewParam(Y);
+  FPoints[FPointCount].Active := True;
   Result := FPointCount;
   Inc(FPointCount);
 end;
@@ -355,6 +366,128 @@ procedure TCADSketch.SetConstruction(AEntity: Integer; AValue: Boolean);
 begin
   CheckEntity(AEntity, [sekLine, sekCircle, sekArc]);
   FEntities[AEntity].Construction := AValue;
+  Inc(FRevision);
+end;
+
+{ Inactive geometry retains its ID for references and undo snapshots. }
+procedure TCADSketch.SetEntityActive(AEntity: Integer; AActive: Boolean);
+begin
+  if (AEntity < 0) or (AEntity >= FEntityCount) then
+    raise ECADSketch.CreateFmt('sketch: entity %d does not exist', [AEntity]);
+  FEntities[AEntity].Active := AActive;
+  Inc(FRevision);
+end;
+
+procedure TCADSketch.SetPointActive(APoint: Integer; AActive: Boolean);
+begin
+  CheckPoint(APoint);
+  FPoints[APoint].Active := AActive;
+  if not AActive then
+  begin
+    FFixed[FPoints[APoint].XParam] := True;
+    FFixed[FPoints[APoint].YParam] := True;
+  end;
+  Inc(FRevision);
+end;
+
+function ConstraintUsesEntity(const C: TCADSketchConstraint; AEntity: Integer): Boolean;
+begin
+  case C.Kind of
+    sckHorizontal, sckVertical, sckLength, sckRadius, sckDiameter, sckArcRule:
+      Result := C.A = AEntity;
+    sckPointOnLine, sckPointOnCircle, sckPointLineDist, sckMidpoint:
+      Result := C.B = AEntity;
+    sckSymmetric:
+      Result := C.C = AEntity;
+    sckParallel, sckPerpendicular, sckAngle, sckCollinear,
+    sckEqualLength, sckEqualRadius, sckTangentLine, sckTangentCircles, sckConcentric:
+      Result := (C.A = AEntity) or (C.B = AEntity);
+  else
+    Result := False;
+  end;
+end;
+
+function ConstraintUsesPoint(const C: TCADSketchConstraint; APoint: Integer): Boolean;
+begin
+  case C.Kind of
+    sckCoincident, sckHorizontalPts, sckVerticalPts, sckDistance,
+    sckDistanceX, sckDistanceY, sckSymmetric:
+      Result := (C.A = APoint) or (C.B = APoint);
+    sckPointOnLine, sckPointOnCircle, sckPointLineDist, sckMidpoint:
+      Result := C.A = APoint;
+  else
+    Result := False;
+  end;
+end;
+
+procedure TCADSketch.RemoveEntity(AEntity: Integer);
+var
+  E, Other: TCADSketchEntity;
+  I, J, P: Integer;
+  StillUsed: Boolean;
+begin
+  if (AEntity < 0) or (AEntity >= FEntityCount) then
+    raise ECADSketch.CreateFmt('sketch: entity %d does not exist', [AEntity]);
+  if not FEntities[AEntity].Active then
+    Exit;
+  E := FEntities[AEntity];
+  FEntities[AEntity].Active := False;
+  for I := 0 to FConstraintCount - 1 do
+    if FConstraints[I].Active and ConstraintUsesEntity(FConstraints[I], AEntity) then
+      FConstraints[I].Active := False;
+  { A point left over from the removed entity must not stay visible as a
+    stray blue dot or contribute degrees of freedom to the solver. }
+  for J := 0 to 2 do
+  begin
+    case J of
+      0: P := E.P1;
+      1: P := E.P2;
+    else
+      P := E.Center;
+    end;
+    if (P < 0) or (P >= FPointCount) then
+      Continue;
+    StillUsed := False;
+    for I := 0 to FEntityCount - 1 do
+    begin
+      Other := FEntities[I];
+      if Other.Active and ((Other.P1 = P) or (Other.P2 = P) or
+         (Other.Center = P)) then
+      begin
+        StillUsed := True;
+        Break;
+      end;
+    end;
+    if not StillUsed then
+      for I := 0 to FConstraintCount - 1 do
+        if FConstraints[I].Active and ConstraintUsesPoint(FConstraints[I], P) then
+        begin
+          StillUsed := True;
+          Break;
+        end;
+    if not StillUsed and not FFixed[FPoints[P].XParam] and
+       not FFixed[FPoints[P].YParam] then
+      SetPointActive(P, False);
+  end;
+  Inc(FRevision);
+end;
+
+procedure TCADSketch.AssignFrom(ASource: TCADSketch);
+begin
+  if ASource = nil then
+    raise ECADSketch.Create('sketch: cannot assign a nil sketch');
+  if Self = ASource then
+    Exit;
+  FParams := Copy(ASource.FParams, 0, Length(ASource.FParams));
+  FFixed := Copy(ASource.FFixed, 0, Length(ASource.FFixed));
+  FPoints := Copy(ASource.FPoints, 0, Length(ASource.FPoints));
+  FEntities := Copy(ASource.FEntities, 0, Length(ASource.FEntities));
+  FConstraints := Copy(ASource.FConstraints, 0, Length(ASource.FConstraints));
+  FParamCount := ASource.FParamCount;
+  FPointCount := ASource.FPointCount;
+  FEntityCount := ASource.FEntityCount;
+  FConstraintCount := ASource.FConstraintCount;
+  FPlane := ASource.FPlane;
   Inc(FRevision);
 end;
 

@@ -286,7 +286,7 @@ begin
   for I := 0 to B.S.EntityCount - 1 do
   begin
     E := B.S.Entities[I];
-    if (not E.Construction) and (E.Kind <> sekCircle) then
+    if E.Active and (not E.Construction) and (E.Kind <> sekCircle) then
     begin
       Used[E.P1] := True;
       Used[E.P2] := True;
@@ -413,7 +413,7 @@ begin
   for I := 0 to B.S.EntityCount - 1 do
   begin
     E := B.S.Entities[I];
-    if E.Construction then
+    if (not E.Active) or E.Construction then
       Continue;
     if E.Kind = sekCircle then
     begin

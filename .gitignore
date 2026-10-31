@@ -1,2 +1,8 @@
 external/occt_bridge/*.so
 external/occt_bridge/*.tmp.*
+/fpc_cad
+/fpc_cad.exe
+app/lib/
+app/*.lps
+app/*.res
+app/backup/

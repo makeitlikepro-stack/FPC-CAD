@@ -47,3 +47,9 @@
 - `src/view/cad.view.viewporttarget.pas`: target on `TUIViewport3D` (FindObject / AddObject with the given id, starts hidden, Invalidate3D). Engine has no RemoveObject: a removed feature keeps a hidden object. Compiled only with the full engine (step 3 app); not in the tests.
 - Test `tests/view/view_sync_tests.lpr` (fake target + fake results, no OCCT/GL): first sync only the chain end, no-op sync without redraw, param change, csmShow mid-tree, hide/show without converting, filler failure + retry, detach, Reset, id mapping. Added to `scripts/test_view.sh`. NOT RUN here (no FPC).
 - 2026-10-31 user run: `bash scripts/test_view.sh` view mesh 36/36 PASS (640k vertices 28 ms), view sync 17/17 PASS, first compile. Merged to dev.
+
+## 2026-10-31 — Stage 4 step 3: first FPC-CAD window with the OCCT model (Candidate)
+- `app/fpc_cad.lpr` + `app/fpc_cad.lpi` (LCL + LazOpenGLContext, engine units from the sibling `../FPC-OpenGL-UI-Engine`, target `./fpc_cad` in the repo root so the bridge is found). `scripts/build_app.sh` (bridge + lazbuild, engine pin warning).
+- `src/app/cad.app.demoscene.pas`: plate 60x40x10 minus a 3x2 grid of holes (6 chained cuts), `SetHoleRadius`.
+- `src/app/cad.app.mainform.pas`: `TUIHostControl`, `TUIViewport3D` (edges on) fed by `TCADViewSync` + `TCADViewportTarget` + `CADFillMeshFromResult`; side panel: radius slider (SetParam x6 -> Recompute -> Sync), selection/hover as feature name + OCCT face/edge index, timing lines (recompute, computed/cache hits, meshes + ms, sync ms + converted); status line with OCCT version or the error. Destroy order: sync, target, document, host, bridge.
+- First GPU use of `CAD.View.ViewportTarget`. NOT BUILT here (no FPC/Lazarus).

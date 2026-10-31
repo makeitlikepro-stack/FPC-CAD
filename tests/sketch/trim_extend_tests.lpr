@@ -1040,6 +1040,61 @@ begin
   end;
 end;
 
+procedure TestIncomingPointsOnSurvivingSections;
+var
+  S: TCADSketch;
+  Line, Attached, LeftPiece, I, Arc, CirclePoint: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+  Found: Boolean;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(-10, 0, 10, 0);
+    S.AddLineXY(-3, -5, -3, 5);
+    S.AddLineXY(3, -5, 3, 5);
+    Attached := S.AddPoint(-7, 0);
+    S.PointOnLine(Attached, Line);
+    Check(CADPlanSketchTrim(S, Line, 0, 0, Plan, Err) and
+      CADApplySketchTrim(S, Plan, Err),
+      'consecutive references: target line with an interior attached point can be cut');
+    LeftPiece := S.EntityCount - 2;
+    Found := False;
+    for I := 0 to S.ConstraintCount - 1 do
+      if S.Constraints[I].Active and
+         (S.Constraints[I].Kind = sckPointOnLine) and
+         (S.Constraints[I].A = Attached) and
+         (S.Constraints[I].B = LeftPiece) then Found := True;
+    Check(Found and (not S.Entities[Line].Active),
+      'consecutive references: interior point remains linked to surviving line');
+  finally
+    S.Free;
+  end;
+
+  S := TCADSketch.Create;
+  try
+    Arc := S.AddArc(S.AddPoint(0, 0),
+      S.AddPoint(5, 0), S.AddPoint(-5, 0));
+    S.AddLineXY(0, -7, 0, 7);
+    CirclePoint := S.AddPoint(-3.535533906, 3.535533906);
+    S.PointOnCircle(CirclePoint, Arc);
+    Check(CADPlanSketchTrim(S, Arc, 3.535533906, 3.535533906, Plan, Err) and
+      CADApplySketchTrim(S, Plan, Err),
+      'consecutive references: target arc with interior attached point can be cut');
+    LeftPiece := S.EntityCount - 1;
+    Found := False;
+    for I := 0 to S.ConstraintCount - 1 do
+      if S.Constraints[I].Active and
+         (S.Constraints[I].Kind = sckPointOnCircle) and
+         (S.Constraints[I].A = CirclePoint) and
+         (S.Constraints[I].B = LeftPiece) then Found := True;
+    Check(Found and (not S.Entities[Arc].Active),
+      'consecutive references: interior point remains linked to surviving arc');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestSequentialArcToLineTrim;
 var
   S: TCADSketch;
@@ -1089,6 +1144,7 @@ begin
   TestSequentialLineToLineTrim;
   TestSequentialLineToCircleTrim;
   TestSequentialCircleToCircleTrim;
+  TestIncomingPointsOnSurvivingSections;
   TestSequentialArcToLineTrim;
   TestTrimPointOnLineFollowsBoundary;
   TestTrimAtArcEndpointAndEntityPicking;

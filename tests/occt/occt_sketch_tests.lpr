@@ -303,6 +303,58 @@ begin
   end;
 end;
 
+{ Exercises the same feature graph used by Accept Extrude: an untouched
+  crossed sketch with two selected quadrants, adjustable depth and direction.
+  Real OCCT volumes prove that a preview value is not a visual-only setting. }
+procedure TestSelectedContoursDepthAndDirection;
+var
+  D: TCADDocument;
+  S: TCADSketch;
+  F: TCADFeature;
+  Sk, Ex: TCADId;
+begin
+  D := TCADDocument.Create;
+  try
+    S := TCADSketch.Create;
+    AddPolygon(S, [0,0,10,0,10,10,0,10]);
+    S.AddLineXY(5,-2,5,12);
+    S.AddLineXY(-2,5,12,5);
+    F := TCADSketchFeature.Create;
+    F.Name := 'Selected contours';
+    F.SetParamValue('geometry', CADSketchValue(S));
+    F.SetParamValue('contours', CADText('v1:2,2;8,8'));
+    S.Free;
+    Sk := D.AttachFeature(F);
+    Ex := D.AttachFeature(NewExtrude(12));
+    Check(Link(D, Ex, Sk), 'extrude preview settings: linked sketch to extrude');
+    D.Recompute;
+    Check(Near(Vol(D, Ex), 600),
+      Format('extrude preview settings: two quadrants x 25 mm2 x 12 mm = 600, got %.3f',
+      [Vol(D, Ex)]));
+    D.SetParam(Ex, 'symmetric', CADBool(True));
+    D.Recompute;
+    Check(Near(Vol(D, Ex), 600),
+      'extrude preview settings: symmetric direction preserves selected volume');
+    D.SetParam(Ex, 'reversed', CADBool(True));
+    D.Recompute;
+    Check(Near(Vol(D, Ex), 600),
+      'extrude preview settings: reversed + symmetric preserves selected volume');
+    D.SetParam(Ex, 'length', CADFloat(20));
+    D.Recompute;
+    Check(Near(Vol(D, Ex), 1000) and
+      Near(D.Find(Ex).GetParamValue('length').F, 20) and
+      D.Find(Ex).GetParamValue('symmetric').B and
+      D.Find(Ex).GetParamValue('reversed').B,
+      'extrude preview settings: persisted depth/direction control final solid');
+    D.SetParam(Sk, 'contours', CADText('v1:2,2'));
+    D.Recompute;
+    Check(Near(Vol(D, Ex), 500),
+      'extrude preview settings: changing selected regions updates final volume');
+  finally
+    D.Free;
+  end;
+end;
+
 procedure TestErrors;
 var
   D: TCADDocument;
@@ -354,6 +406,7 @@ begin
     SetOCCT(L);
     L.ApplyOptions(DefaultPerformanceOptions);
     TestModel;
+    TestSelectedContoursDepthAndDirection;
     TestErrors;
   finally
     SetOCCT(nil);

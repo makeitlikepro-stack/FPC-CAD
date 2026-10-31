@@ -459,9 +459,10 @@ procedure CADRelinkTrimDependencies(S: TCADSketch; ARemovedEntity: Integer;
 const
   JoinTol = 1e-6;
 var
-  I, J, Chosen, P, Endpoint: Integer;
+  I, J, K, Chosen, P, Endpoint: Integer;
   C: TCADSketchConstraint;
   E: TCADSketchEntity;
+  AlreadyConnected: Boolean;
 begin
   { Scan only the ORIGINAL constraints, not the new ones added below. }
   J := S.ConstraintCount;
@@ -493,12 +494,29 @@ begin
                     S.PointY(P)-S.PointY(E.P2)) <= JoinTol then
         Endpoint := E.P2;
     end;
-    if Endpoint >= 0 then
+    if Endpoint = P then Continue; { same physical shared point ID }
+    AlreadyConnected := False;
+    for K := 0 to S.ConstraintCount - 1 do
     begin
-      { A Coincident relation is stronger than projecting onto an infinite
-        line/circle. If IDs already match the points are inherently joined. }
-      if Endpoint <> P then S.Coincident(P, Endpoint);
-    end
+      C := S.Constraints[K];
+      if not C.Active then Continue;
+      if Endpoint >= 0 then
+      begin
+        if (C.Kind = sckCoincident) and
+           (((C.A = P) and (C.B = Endpoint)) or
+            ((C.B = P) and (C.A = Endpoint))) then
+          AlreadyConnected := True;
+      end
+      else if (C.A = P) and (C.B = Chosen) and
+         (((E.Kind = sekLine) and (C.Kind = sckPointOnLine)) or
+          ((E.Kind in [sekArc, sekCircle]) and
+           (C.Kind = sckPointOnCircle))) then
+        AlreadyConnected := True;
+      if AlreadyConnected then Break;
+    end;
+    if AlreadyConnected then Continue;
+    if Endpoint >= 0 then
+      S.Coincident(P, Endpoint)
     else if E.Kind = sekLine then
       S.PointOnLine(P, Chosen)
     else

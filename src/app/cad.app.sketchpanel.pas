@@ -55,6 +55,8 @@ type
     function Layout(ALeft, ATop, AWidth: Double): Double;
     { After any sketch change: list, DOF line. }
     procedure Refresh;
+    { Selects a constraint in the list (a relation glyph was clicked). }
+    procedure SelectConstraint(AConstraint: Integer);
     property OnNewSketch: TNotifyEvent read FOnNewSketch write FOnNewSketch;
     property OnFinish: TNotifyEvent read FOnFinish write FOnFinish;
     property OnStatus: TCADStatusEvent read FOnStatus write FOnStatus;
@@ -215,6 +217,23 @@ begin
     EditConstraint(C);
     Status('Dimension added: type the new value and press Enter');
   end;
+end;
+
+procedure TCADSketchPanel.SelectConstraint(AConstraint: Integer);
+var
+  I: Integer;
+begin
+  if FMode.Sketch.Revision <> FListRevision then
+    RebuildList;
+  for I := 0 to High(FListMap) do
+    if FListMap[I] = AConstraint then
+    begin
+      FList.SelectedIndex := I;
+      FList.EnsureItemVisible(I);
+      Break;
+    end;
+  ListChange(nil);
+  Status(CADConstraintLabel(FMode.Sketch, AConstraint) + ' selected: Delete removes it');
 end;
 
 procedure TCADSketchPanel.EditConstraint(AConstraint: Integer);

@@ -23,8 +23,10 @@ uses
   CAD.View.SketchDraw;
 
 const
-  CAD_SKETCH_OBJECT_ID = 900001;      { far above feature ids (slot + 1) }
-  CAD_SKETCH_PREVIEW_ID = 900002;
+  CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
+  CAD_SKETCH_LAYER_ID = 900010;        { + Ord(TCADSketchLayer) }
+  { every sketch-mode object id is at or above this }
+  CAD_SKETCH_FIRST_ID = 900000;
 
 type
   TCADEntityEvent = procedure(Sender: TObject; AEntity: Integer) of object;
@@ -133,19 +135,22 @@ end;
 procedure TCADSketchMode.Leave;
 var
   O: TViewport3DObject;
+  L: TCADSketchLayer;
 begin
   FActive := False;
   FView.OnMouseDown := nil;
   FView.OnMouseUp := nil;
   FView.OnMouseMove := nil;
   FView.OnPointerDrag := nil;
-  O := FView.FindObject(CAD_SKETCH_OBJECT_ID);
-  if O <> nil then
-    O.Visible := False;
+  for L := Low(TCADSketchLayer) to High(TCADSketchLayer) do
+  begin
+    O := FView.FindObject(CAD_SKETCH_LAYER_ID + Ord(L));
+    if O <> nil then
+      O.Visible := False;
+  end;
   O := FView.FindObject(CAD_SKETCH_PREVIEW_ID);
   if O <> nil then
     O.Visible := False;
-  FView.Pass.EdgeColor := Viewport3DRGBA(0.08, 0.09, 0.11, 1.0);
   FView.Invalidate3D;
   Changed;
 end;
@@ -188,14 +193,28 @@ begin
     FSketch, U, V);
 end;
 
+{ SolidWorks colours: under-defined blue, fully defined black, conflicting
+  red; construction grey, hover orange, selection light blue. }
+const
+  LayerColor: array[TCADSketchLayer] of array[0..2] of Single = (
+    (0.10, 0.35, 0.95), (0.04, 0.04, 0.05), (0.90, 0.10, 0.10),
+    (0.50, 0.55, 0.65), (1.00, 0.55, 0.00), (0.00, 0.70, 0.95));
+  PointPixels = 5;
+
 procedure TCADSketchMode.RefreshSketch;
+var
+  L: TCADSketchLayer;
+  Meshes: array[TCADSketchLayer] of TV3DMeshData;
+  O: TViewport3DObject;
 begin
-  CADBuildSketchMesh(FSketch, ObjectMesh(CAD_SKETCH_OBJECT_ID));
-  { fully constrained sketch: green strokes }
-  if FActive and (FEditor.LastSolve.Status = cssSolved) and (FEditor.LastSolve.DOF = 0) then
-    FView.Pass.EdgeColor := Viewport3DRGBA(0.05, 0.55, 0.2, 1.0)
-  else
-    FView.Pass.EdgeColor := Viewport3DRGBA(0.08, 0.09, 0.11, 1.0);
+  for L := Low(TCADSketchLayer) to High(TCADSketchLayer) do
+  begin
+    Meshes[L] := ObjectMesh(CAD_SKETCH_LAYER_ID + Ord(L));
+    O := FView.FindObject(CAD_SKETCH_LAYER_ID + Ord(L));
+    O.UseEdgeColor := True;
+    O.EdgeColor := Viewport3DRGBA(LayerColor[L][0], LayerColor[L][1], LayerColor[L][2], 1.0);
+  end;
+  CADBuildSketchLayers(FEditor, PointPixels * WorldPerPixel, Meshes);
   FView.Invalidate3D;
 end;
 
@@ -246,6 +265,8 @@ begin
     Exit;
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
   FEditor.Move(U, V);
+  if FEditor.UpdateHover(U, V) then
+    RefreshSketch;                       { hover colour }
   RefreshPreview;
 end;
 

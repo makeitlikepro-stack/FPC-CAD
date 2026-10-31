@@ -21,6 +21,7 @@ uses
 
 type
   TCADStatusText = procedure(Sender: TObject; const AText: string) of object;
+  TCADConstraintEvent = procedure(Sender: TObject; AConstraint: Integer) of object;
 
   TCADSketchDims = class
   private
@@ -31,6 +32,12 @@ type
     FChips: array of TUIButton;
     FChipConstraint: array of Integer;
     FChipCount: Integer;
+    { relation glyphs (H, V, //, T ...) next to the geometry }
+    FGlyphs: array of TUIButton;
+    FGlyphConstraint: array of Integer;
+    FGlyphX, FGlyphY: array of Double;
+    FGlyphCount: Integer;
+    FOnConstraintClick: TCADConstraintEvent;
     FEdit: TUIEdit;
     FEditConstraint: Integer;
     FTimer: TTimer;
@@ -40,6 +47,8 @@ type
     function CameraKey: string;
     procedure Tick(Sender: TObject);
     procedure ChipClick(Sender: TObject);
+    procedure GlyphClick(Sender: TObject);
+    procedure PlaceGlyphs;
     procedure EditKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure EntityDoubleClick(Sender: TObject; AEntity: Integer);
     procedure PlaceChips;
@@ -56,12 +65,15 @@ type
     property OnStatus: TCADStatusText read FOnStatus write FOnStatus;
     { After a value was set from the view (the panel list refreshes). }
     property OnEdited: TNotifyEvent read FOnEdited write FOnEdited;
+    { A relation glyph was clicked (select it in the list, Delete removes). }
+    property OnConstraintClick: TCADConstraintEvent read FOnConstraintClick write FOnConstraintClick;
   end;
 
 implementation
 
 const
   ChipH = 22;
+  GlyphH = 18;
   EditW = 90;
 
 var
@@ -115,7 +127,7 @@ procedure TCADSketchDims.Tick(Sender: TObject);
 var
   K: string;
 begin
-  if not FMode.Active or (FChipCount = 0) then
+  if not FMode.Active or (FChipCount + FGlyphCount = 0) then
     Exit;
   K := CameraKey;
   if K <> FCameraKey then
@@ -152,7 +164,76 @@ begin
   FChipCount := N;
   for I := N to High(FChips) do
     FChips[I].Visible := False;
+  N := 0;
+  if FMode.Active and (FMode.Sketch <> nil) then
+  begin
+    S := FMode.Sketch;
+    for I := 0 to S.ConstraintCount - 1 do
+      if CADRelationGlyph(S, I) <> '' then
+      begin
+        if N >= Length(FGlyphs) then
+        begin
+          SetLength(FGlyphs, N + 1);
+          SetLength(FGlyphConstraint, N + 1);
+          FGlyphs[N] := FUI.CreateButton(FParent, 26, GlyphH);
+          FGlyphs[N].OnClick := @GlyphClick;
+        end;
+        FGlyphs[N].Text := UTF8String(CADRelationGlyph(S, I));
+        FGlyphs[N].Tag := N;
+        FGlyphConstraint[N] := I;
+        Inc(N);
+      end;
+  end;
+  FGlyphCount := N;
+  SetLength(FGlyphX, N);
+  SetLength(FGlyphY, N);
+  for I := N to High(FGlyphs) do
+    FGlyphs[I].Visible := False;
   PlaceChips;
+end;
+
+procedure TCADSketchDims.PlaceGlyphs;
+var
+  I, K, Stack: Integer;
+  U, V, X, Y, W: Double;
+  Ok: array of Boolean;
+begin
+  SetLength(Ok, FGlyphCount);
+  for I := 0 to FGlyphCount - 1 do
+  begin
+    Ok[I] := CADRelationAnchor(FMode.Sketch, FGlyphConstraint[I], U, V) and
+      FMode.SketchToScreen(U, V, X, Y);
+    FGlyphX[I] := X;
+    FGlyphY[I] := Y;
+    if not Ok[I] then
+    begin
+      FGlyphs[I].Visible := False;
+      Continue;
+    end;
+    { glyphs on the same spot line up to the right }
+    Stack := 0;
+    for K := 0 to I - 1 do
+      if Ok[K] and (Abs(FGlyphX[K] - X) < 2) and (Abs(FGlyphY[K] - Y) < 2) then
+        Inc(Stack);
+    W := 10 + 8 * Length(string(FGlyphs[I].Text));
+    X := FView.Left + X + 8 + Stack * (W + 2);
+    Y := FView.Top + Y + 6;
+    FGlyphs[I].Width := W;
+    FGlyphs[I].Height := GlyphH;
+    FGlyphs[I].Left := X;
+    FGlyphs[I].Top := Y;
+    FGlyphs[I].Visible := (X >= FView.Left) and (Y >= FView.Top) and
+      (X + W <= FView.Left + FView.Width) and (Y + GlyphH <= FView.Top + FView.Height);
+  end;
+end;
+
+procedure TCADSketchDims.GlyphClick(Sender: TObject);
+var
+  I: Integer;
+begin
+  I := TUIWidget(Sender).Tag;
+  if (I >= 0) and (I < FGlyphCount) and Assigned(FOnConstraintClick) then
+    FOnConstraintClick(Self, FGlyphConstraint[I]);
 end;
 
 procedure TCADSketchDims.PlaceChips;
@@ -161,6 +242,7 @@ var
   U, V, X, Y, W: Double;
 begin
   FCameraKey := CameraKey;
+  PlaceGlyphs;
   for I := 0 to FChipCount - 1 do
   begin
     if (FChipConstraint[I] <> FEditConstraint) and       { the edit box takes its place }
@@ -208,7 +290,7 @@ procedure TCADSketchDims.CloseEdit;
 begin
   FEdit.Visible := False;
   FEditConstraint := -1;
-  if FMode.Active and (FChipCount > 0) then
+  if FMode.Active and (FChipCount + FGlyphCount > 0) then
     PlaceChips;                                { the chip comes back }
 end;
 

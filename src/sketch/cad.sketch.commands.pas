@@ -59,6 +59,11 @@ function CADDimensionChipText(S: TCADSketch; AIndex: Integer): string;
 function CADDimensionAnchor(S: TCADSketch; AIndex: Integer; out U, V: Double): Boolean;
 { Active length / radius / diameter dimension on an entity, -1 = none. }
 function CADFindDimension(S: TCADSketch; AEntity: Integer): Integer;
+{ Relation glyph text shown next to the geometry ('' = not shown:
+  dimensions, coincident, arc rule, removed). }
+function CADRelationGlyph(S: TCADSketch; AIndex: Integer): string;
+{ Where a relation glyph sits (sketch mm): its first entity or point. }
+function CADRelationAnchor(S: TCADSketch; AIndex: Integer; out U, V: Double): Boolean;
 
 implementation
 
@@ -301,6 +306,70 @@ begin
       Exit(I);
   end;
   Result := -1;
+end;
+
+function CADRelationGlyph(S: TCADSketch; AIndex: Integer): string;
+var
+  C: TCADSketchConstraint;
+begin
+  C := S.Constraints[AIndex];
+  Result := '';
+  if not C.Active then
+    Exit;
+  case C.Kind of
+    sckHorizontal, sckHorizontalPts: Result := 'H';
+    sckVertical, sckVerticalPts: Result := 'V';
+    sckParallel: Result := '//';
+    sckPerpendicular: Result := '90';
+    sckCollinear: Result := '--';
+    sckEqualLength, sckEqualRadius: Result := '=';
+    sckTangentLine, sckTangentCircles: Result := 'T';
+    sckConcentric: Result := 'O';
+    sckMidpoint: Result := 'M';
+    sckPointOnLine, sckPointOnCircle: Result := 'On';
+    sckSymmetric: Result := 'S';
+  end;
+end;
+
+function EntityAnchor(S: TCADSketch; AEntity: Integer; out U, V: Double): Boolean;
+var
+  E: TCADSketchEntity;
+begin
+  E := S.Entities[AEntity];
+  if E.Kind = sekLine then
+  begin
+    U := 0.5 * (S.PointX(E.P1) + S.PointX(E.P2));
+    V := 0.5 * (S.PointY(E.P1) + S.PointY(E.P2));
+  end
+  else
+  begin
+    U := S.PointX(E.Center);
+    V := S.PointY(E.Center) + S.EntityRadius(AEntity);    { top of the circle }
+  end;
+  Result := True;
+end;
+
+function CADRelationAnchor(S: TCADSketch; AIndex: Integer; out U, V: Double): Boolean;
+var
+  C: TCADSketchConstraint;
+begin
+  U := 0;
+  V := 0;
+  C := S.Constraints[AIndex];
+  Result := CADRelationGlyph(S, AIndex) <> '';
+  if not Result then
+    Exit;
+  case C.Kind of
+    sckHorizontalPts, sckVerticalPts, sckMidpoint, sckPointOnLine, sckPointOnCircle:
+      begin
+        U := S.PointX(C.A);
+        V := S.PointY(C.A);
+      end;
+    sckSymmetric:
+      Result := EntityAnchor(S, C.C, U, V);
+  else
+    Result := EntityAnchor(S, C.A, U, V);
+  end;
 end;
 
 function CADIsDimension(AKind: TCADSketchConstraintKind): Boolean;

@@ -113,3 +113,12 @@
 - 2026-10-31 user build: `Fatal: IMPLEMENTATION expected but BEGIN found` in cad.sketch.commands.pas: a text edit put the new function bodies before the interface declaration of CADIsDimension (the first match) instead of the implementation. Bodies moved into the implementation; all new units scanned for code in the interface part.
 - 2026-10-31 user GUI check of 4d: chips did not follow a point drag; the edit box should open with its text selected; the chip stayed visible under the edit box. Fix: the chip timer key includes the sketch revision (drag moves anchors); the chip of the dimension being edited is hidden until the box closes; `SelectAll` after focusing (chip edit and panel edit).
 - 2026-10-31 user: chip drag and edit fixes confirmed. Stage 5 step 4 (a-d) merged to dev. User verdict: the sketcher foundation works, UX / UI is far from a professional sketcher; next: UX overhaul.
+
+## 2026-10-31 — Stage 5 step 5a: SolidWorks-style visual feedback (Candidate)
+- User choices: SolidWorks look; priorities: toolbar + icons + shortcuts (+ sketch undo), visual feedback, typed values while drawing, Smart Dimension + context menu. This step: visual feedback.
+- Engine (`claude/viewport-drag-hook` 496d21e): per-object edge colour (`TViewport3DObject.UseEdgeColor` / `EdgeColor`).
+- Solver: `Determined` per number (unit vector in the row space of J: squared projection on the Gram-Schmidt basis = 1; NumPy check on a rectangle with a free height: x1, y1, x2, x3 determined, y2, y3 not).
+- `src/sketch/cad.sketch.status.pas`: entity / point state under-defined, defined, conflicting (numbers of conflicting constraints).
+- Sketch drawing in 6 coloured layers (one viewport object each): under-defined blue, defined black, conflicting red, construction grey, hover orange, selection light blue; points as small squares; hover in the Select tool. Old diamonds and the global green colour removed.
+- Relation glyphs (H, V, //, 90, --, =, T, O, M, On, S) as small chips next to their geometry (stacked when on the same spot), moved with the dimension chips; a click selects the relation in the list ("Delete removes it").
+- Tests: `TestStatus` (determined flags, states for a rectangle with and without its height, conflicting top line red, glyph H and its anchor, no glyph for removed constraints and dimensions). NOT RUN here.

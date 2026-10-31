@@ -17,6 +17,7 @@ interface
 
 uses
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Commands,
+  CAD.Sketch.Status,
   OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData;
 
 { Pixel (AX, AY: top-left origin) of a AWidth x AHeight viewport -> sketch
@@ -30,11 +31,20 @@ function CADSketchToScreen(ACamera: TViewport3DCamera; AWidth, AHeight: Double;
 { Looks straight at the plane from the normal side, sketch X to the right
   where the camera allows it (its up axis is model Z). Keeps the distance. }
 procedure CADCameraToSketch(ACamera: TViewport3DCamera; S: TCADSketch);
+type
+  { One viewport object per layer, each with its own edge colour. }
+  TCADSketchLayer = (sklUnder, sklDefined, sklConflict, sklConstruction, sklHover, sklSelected);
+
 { Sketch entities as strokes (construction too). Edge id = entity + 1. }
 procedure CADBuildSketchMesh(S: TCADSketch; AMesh: TV3DMeshData);
-{ Editor previews, the snap marker (square of AMarkerSize mm), selection
-  markers (diamonds on selected points, line middles and circle centres) and
-  an origin cross of AOriginSize mm. }
+{ Entities and points split by layer: selection, then hover, then
+  construction, then the state from the last solve (under-defined, defined,
+  conflicting). Points are small squares of APointSize mm.
+  AMeshes[Ord(layer)] are cleared and filled. }
+procedure CADBuildSketchLayers(Ed: TCADSketchEditor; APointSize: Double;
+  const AMeshes: array of TV3DMeshData);
+{ Editor previews, the snap marker (square of AMarkerSize mm) and an origin
+  cross of AOriginSize mm. }
 procedure CADBuildEditorMesh(Ed: TCADSketchEditor; AMarkerSize, AOriginSize: Double;
   AMesh: TV3DMeshData);
 
@@ -223,6 +233,84 @@ begin
   AddBoundsVertices(AMesh);
 end;
 
+procedure AddEntityStrokes(S: TCADSketch; AEntity: Integer; AMesh: TV3DMeshData);
+var
+  E: TCADSketchEntity;
+  CX, CY, A1, A2: Double;
+begin
+  E := S.Entities[AEntity];
+  case E.Kind of
+    sekLine:
+      AMesh.AddPolylineEdge([P3(S, S.PointX(E.P1), S.PointY(E.P1)),
+        P3(S, S.PointX(E.P2), S.PointY(E.P2))], False, AEntity + 1);
+    sekCircle:
+      AddArcStrokes(S, AMesh, S.PointX(E.Center), S.PointY(E.Center), S.EntityRadius(AEntity),
+        0, 2 * Pi, True, AEntity + 1);
+    sekArc:
+      begin
+        CX := S.PointX(E.Center);
+        CY := S.PointY(E.Center);
+        A1 := ArcTan2(S.PointY(E.P1) - CY, S.PointX(E.P1) - CX);
+        A2 := ArcTan2(S.PointY(E.P2) - CY, S.PointX(E.P2) - CX);
+        AddArcStrokes(S, AMesh, CX, CY, S.EntityRadius(AEntity), A1, CCWSweep(A1, A2), False, AEntity + 1);
+      end;
+  end;
+end;
+
+procedure CADBuildSketchLayers(Ed: TCADSketchEditor; APointSize: Double;
+  const AMeshes: array of TV3DMeshData);
+var
+  S: TCADSketch;
+  EStates, PStates: TCADElementStates;
+  I: Integer;
+  L: TCADSketchLayer;
+  H, X, Y: Double;
+
+  function StateLayer(AState: TCADElementState): TCADSketchLayer;
+  begin
+    case AState of
+      cesDefined: Result := sklDefined;
+      cesConflict: Result := sklConflict;
+    else
+      Result := sklUnder;
+    end;
+  end;
+
+begin
+  S := Ed.Sketch;
+  for L := Low(TCADSketchLayer) to High(TCADSketchLayer) do
+    AMeshes[Ord(L)].Clear;
+  CADSketchStates(S, Ed.LastSolve, EStates, PStates);
+  for I := 0 to S.EntityCount - 1 do
+  begin
+    if Ed.IsSelected(chkEntity, I) then
+      L := sklSelected
+    else if (Ed.HoverKind = chkEntity) and (Ed.HoverIndex = I) then
+      L := sklHover
+    else if S.Entities[I].Construction then
+      L := sklConstruction
+    else
+      L := StateLayer(EStates[I]);
+    AddEntityStrokes(S, I, AMeshes[Ord(L)]);
+  end;
+  H := 0.5 * APointSize;
+  for I := 0 to S.PointCount - 1 do
+  begin
+    if Ed.IsSelected(chkPoint, I) then
+      L := sklSelected
+    else if (Ed.HoverKind = chkPoint) and (Ed.HoverIndex = I) then
+      L := sklHover
+    else
+      L := StateLayer(PStates[I]);
+    X := S.PointX(I);
+    Y := S.PointY(I);
+    AMeshes[Ord(L)].AddPolylineEdge([P3(S, X - H, Y - H), P3(S, X + H, Y - H),
+      P3(S, X + H, Y + H), P3(S, X - H, Y + H)], True, 100000 + I);
+  end;
+  for L := Low(TCADSketchLayer) to High(TCADSketchLayer) do
+    AddBoundsVertices(AMeshes[Ord(L)]);
+end;
+
 procedure AddDiamond(S: TCADSketch; AMesh: TV3DMeshData; X, Y, H: Double);
 begin
   AMesh.AddPolylineEdge([P3(S, X - H, Y), P3(S, X, Y - H), P3(S, X + H, Y), P3(S, X, Y + H)], True, 4);
@@ -235,7 +323,6 @@ var
   I: Integer;
   Pv: TCADSketchPreview;
   A1, A2, H, X, Y: Double;
-  E: TCADSketchEntity;
 begin
   S := Ed.Sketch;
   AMesh.Clear;
@@ -266,19 +353,6 @@ begin
     Y := Ed.Snap.Y;
     AMesh.AddPolylineEdge([P3(S, X - H, Y - H), P3(S, X + H, Y - H), P3(S, X + H, Y + H),
       P3(S, X - H, Y + H)], True, 3);
-  end;
-  { selection: diamonds }
-  H := 0.6 * AMarkerSize;
-  for I := 0 to High(Ed.Selection.Points) do
-    AddDiamond(S, AMesh, S.PointX(Ed.Selection.Points[I]), S.PointY(Ed.Selection.Points[I]), H);
-  for I := 0 to High(Ed.Selection.Entities) do
-  begin
-    E := S.Entities[Ed.Selection.Entities[I]];
-    if E.Kind = sekLine then
-      AddDiamond(S, AMesh, 0.5 * (S.PointX(E.P1) + S.PointX(E.P2)),
-        0.5 * (S.PointY(E.P1) + S.PointY(E.P2)), H)
-    else
-      AddDiamond(S, AMesh, S.PointX(E.Center), S.PointY(E.Center), H);
   end;
   AddBoundsVertices(AMesh);
 end;

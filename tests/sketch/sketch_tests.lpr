@@ -16,7 +16,7 @@ program sketch_tests;
 uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Constraints, CAD.Sketch.Solver,
-  CAD.Sketch.Profile, CAD.Sketch.Editor, CAD.Sketch.Commands;
+  CAD.Sketch.Profile, CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.Sketch.Status;
 
 var
   Checks, Failures: Integer;
@@ -867,6 +867,56 @@ begin
   end;
 end;
 
+procedure TestStatus;
+var
+  S: TCADSketch;
+  P0, P1, P2, P3, L0, L1, L2, L3, H, Bad: Integer;
+  R: TCADSketchSolveResult;
+  ES, PS: TCADElementStates;
+  U, V: Double;
+begin
+  S := TCADSketch.Create;
+  try
+    P0 := S.AddPoint(0, 0);
+    P1 := S.AddPoint(40, 0);
+    P2 := S.AddPoint(40, 20);
+    P3 := S.AddPoint(0, 20);
+    L0 := S.AddLine(P0, P1);
+    L1 := S.AddLine(P1, P2);
+    L2 := S.AddLine(P2, P3);
+    L3 := S.AddLine(P3, P0);
+    S.FixPoint(P0);
+    H := S.Horizontal(L0);
+    S.Vertical(L1);
+    S.Horizontal(L2);
+    S.Vertical(L3);
+    S.Length(L0, 40);
+    R := CADSolveSketch(S);
+    Check(Length(R.Determined) = S.ParamCount, 'determined flags for every number');
+    CADSketchStates(S, R, ES, PS);
+    Check((ES[L0] = cesDefined) and (ES[L1] = cesUnder) and (ES[L2] = cesUnder) and (ES[L3] = cesUnder),
+      'states: bottom defined, the height is free');
+    Check((PS[P0] = cesDefined) and (PS[P1] = cesDefined) and (PS[P2] = cesUnder), 'point states');
+    S.Length(L1, 20);
+    R := CADSolveSketch(S);
+    CADSketchStates(S, R, ES, PS);
+    Check((ES[L1] = cesDefined) and (ES[L2] = cesDefined) and (ES[L3] = cesDefined) and (PS[P3] = cesDefined),
+      'states: all defined with the height');
+    Bad := S.Length(L2, 30);
+    R := CADSolveSketch(S);
+    CADSketchStates(S, R, ES, PS);
+    Check((R.Status = cssConflicting) and (ES[L2] = cesConflict), 'states: the conflicting top line is red');
+    S.RemoveConstraint(Bad);
+    CADSolveSketch(S);
+    Check(CADRelationGlyph(S, H) = 'H', 'glyph H');
+    Check(CADRelationAnchor(S, H, U, V) and Near(U, 20) and Near(V, 0), 'H glyph at the middle of the bottom');
+    Check(CADRelationGlyph(S, Bad) = '', 'removed constraint has no glyph');
+    Check(CADRelationGlyph(S, S.Length(L2, 40)) = '', 'dimension has no glyph (it has a chip)');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -880,6 +930,7 @@ begin
   TestEditor;
   TestEditorDrag;
   TestCommands;
+  TestStatus;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

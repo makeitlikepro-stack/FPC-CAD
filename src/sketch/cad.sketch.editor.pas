@@ -65,6 +65,8 @@ type
     FCursorX, FCursorY: Double;
     FDragPoint: Integer;        { -1 = no drag }
     FSelection: TCADSketchSelection;
+    FHoverKind: TCADHitKind;
+    FHoverIndex: Integer;
     function FindSnap(X, Y: Double; AFromPoint: Integer): TCADSnap;
     function ResolvePoint(const ASnap: TCADSnap): Integer;
     function OriginPoint: Integer;
@@ -113,6 +115,11 @@ type
     procedure SelectAt(X, Y: Double; AAdd: Boolean);
     procedure ClearSelection;
     procedure SelectItem(AKind: TCADHitKind; AIndex: Integer);
+    { Item under the cursor (Select tool). True when it changed. }
+    function UpdateHover(X, Y: Double): Boolean;
+    function IsSelected(AKind: TCADHitKind; AIndex: Integer): Boolean;
+    property HoverKind: TCADHitKind read FHoverKind;
+    property HoverIndex: Integer read FHoverIndex;
     { Constraint button on the selection (CAD.Sketch.Commands); clears the
       selection on success and refreshes LastSolve. }
     function Apply(ACommand: TCADSketchCommand; out AConstraint: Integer; out AError: string): Boolean;
@@ -149,6 +156,8 @@ begin
   FSnap := NoSnap(0, 0);
   FLastSolve.DOF := -1;
   FDragPoint := -1;
+  FHoverKind := chkNone;
+  FHoverIndex := -1;
 end;
 
 procedure TCADSketchEditor.SetTool(ATool: TCADSketchTool);
@@ -156,6 +165,8 @@ begin
   Cancel;
   if ATool <> sktSelect then
     ClearSelection;
+  FHoverKind := chkNone;
+  FHoverIndex := -1;
   FTool := ATool;
 end;
 
@@ -167,6 +178,40 @@ end;
 procedure TCADSketchEditor.ClearSelection;
 begin
   CADSelectionClear(FSelection);
+end;
+
+function TCADSketchEditor.UpdateHover(X, Y: Double): Boolean;
+var
+  K: TCADHitKind;
+  I: Integer;
+begin
+  if (FTool = sktSelect) and (FDragPoint < 0) then
+    K := CADSketchHit(FSketch, X, Y, FSnapTolerance, I)
+  else
+  begin
+    K := chkNone;
+    I := -1;
+  end;
+  Result := (K <> FHoverKind) or (I <> FHoverIndex);
+  FHoverKind := K;
+  FHoverIndex := I;
+end;
+
+function TCADSketchEditor.IsSelected(AKind: TCADHitKind; AIndex: Integer): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if AKind = chkPoint then
+  begin
+    for I := 0 to High(FSelection.Points) do
+      if FSelection.Points[I] = AIndex then
+        Exit(True);
+  end
+  else if AKind = chkEntity then
+    for I := 0 to High(FSelection.Entities) do
+      if FSelection.Entities[I] = AIndex then
+        Exit(True);
 end;
 
 procedure TCADSketchEditor.SelectItem(AKind: TCADHitKind; AIndex: Integer);

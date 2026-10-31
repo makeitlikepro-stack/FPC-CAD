@@ -49,6 +49,7 @@ type
     procedure FinishClick(Sender: TObject);
     procedure SketchChanged(Sender: TObject);
     procedure SketchStatus(Sender: TObject; const AText: string);
+    procedure RelationClick(Sender: TObject; AConstraint: Integer);
     procedure FinishSketch;
     procedure ShowDocumentObjects(AVisible: Boolean);
     procedure HostResize(Sender: TObject);
@@ -161,6 +162,7 @@ begin
   FSketchPanel.OnStatus := @SketchStatus;
   FSketchDims := TCADSketchDims.Create(UI, FHost.Root, FView, FSketchMode);
   FSketchDims.OnStatus := @SketchStatus;
+  FSketchDims.OnConstraintClick := @RelationClick;
   FStatus := UI.CreateLabel(FHost.Root, 100, StatusHeight);
   FStatus.TextColor := tColor4.Create(0.85, 0.87, 0.9, 1);
   FRadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
@@ -281,7 +283,7 @@ begin
   for I := 0 to FView.ObjectCount - 1 do
   begin
     O := FView.Objects[I];
-    if (O.ObjectId <> CAD_SKETCH_OBJECT_ID) and (O.ObjectId <> CAD_SKETCH_PREVIEW_ID) then
+    if O.ObjectId < CAD_SKETCH_FIRST_ID then
       O.Visible := False;
   end;
   if AVisible then
@@ -329,6 +331,11 @@ procedure TCADMainForm.FinishClick(Sender: TObject);
 begin
   FinishSketch;
   Layout;
+end;
+
+procedure TCADMainForm.RelationClick(Sender: TObject; AConstraint: Integer);
+begin
+  FSketchPanel.SelectConstraint(AConstraint);
 end;
 
 procedure TCADMainForm.SketchStatus(Sender: TObject; const AText: string);

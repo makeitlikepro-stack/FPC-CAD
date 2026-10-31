@@ -46,6 +46,9 @@ type
     DOF: Integer;               { free params - rank (-1 when not diagnosed) }
     Redundant: array of Integer;   { constraint indices implied by earlier ones }
     Conflicting: array of Integer; { constraint indices that do not hold }
+    { Per param: True when the constraints fix it (fixed params too).
+      Empty when not diagnosed. Drives the defined / under-defined colours. }
+    Determined: array of Boolean;
     Milliseconds: QWord;
   end;
 
@@ -342,6 +345,19 @@ begin
       RedRow[I] := True;
   end;
   AResult.DOF := W.N - Rank;
+
+  { A free param is determined when its unit vector lies in the row space
+    of J: the squared norm of its projection on the orthonormal basis is 1. }
+  SetLength(AResult.Determined, Length(W.X));
+  for J := 0 to High(W.X) do
+    AResult.Determined[J] := W.ColOfParam[J] < 0;
+  for J := 0 to W.N - 1 do
+  begin
+    D := 0;
+    for Q := 0 to Rank - 1 do
+      D := D + Sqr(Basis[Q][J]);
+    AResult.Determined[W.ParamOfCol[J]] := D > 1 - 1e-6;
+  end;
 
   { Redundant = a row of the constraint lies in the span of earlier rows.
     Conflicting = a row does not hold (only when the solve failed). }

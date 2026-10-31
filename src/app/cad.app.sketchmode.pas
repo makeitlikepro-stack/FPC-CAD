@@ -697,7 +697,7 @@ var
 begin
   K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
   if K <> chkEntity then
-    FLineEditMessage := 'Trim / Extend: click the body of a straight line'
+    FLineEditMessage := 'Trim: click a line, arc or circle | Extend: click a line'
   else if (FLineEditMode = lemExtend) and
           (FSketch.Entities[Index].Kind <> sekLine) then
     FLineEditMessage := 'Extend currently supports straight lines only'

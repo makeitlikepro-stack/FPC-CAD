@@ -54,6 +54,8 @@ type
     FLineEditMessage: string;
     FContourSeeds: TCADContourSeeds;      { selected region interior points }
     FContourCount: Integer;              { last resolved selections }
+    FLastFillRevision: Cardinal;
+    FLastFillContours: string;           { no expensive OCCT rebuild on hover }
     FOnSmartDimension: TNotifyEvent;
     FOnContextMenu: TCADViewPointEvent;
     { sketch undo: texts of the sketch after each change }
@@ -201,6 +203,8 @@ begin
   FSmartDim := False;
   SetLength(FContourSeeds,0);
   FContourCount:=0;
+  FLastFillRevision:=High(Cardinal);
+  FLastFillContours:='';
   FEditor.Resolve;                         { states and DOF of a loaded sketch }
   SetLength(FUndo, 1);
   FUndo[0] := CADSketchToText(FSketch);
@@ -245,6 +249,7 @@ begin
   FEditor := TCADSketchEditor.Create(FSketch);
   FEditor.SetTool(Tool);
   FEditor.Resolve;
+  FLastFillRevision:=High(Cardinal);
   RefreshSketch;
   RefreshPreview;
   FRestoring := True;
@@ -389,7 +394,11 @@ var
   O: TViewport3DObject;
   Err: string;
   Behind: Double;
+  ContoursNow: string;
 begin
+  ContoursNow:=CADContoursToText(FContourSeeds);
+  if (FSketch<>nil) and (FLastFillRevision=FSketch.Revision) and
+     (FLastFillContours=ContoursNow) then Exit;
   if FView.Materials.Find(FillMaterial) = nil then
   begin
     M := TRenderMaterial.Create(FillMaterial, msFlat);
@@ -419,6 +428,8 @@ begin
   O.EdgeColor := Viewport3DRGBA(SelectedFillColor[0],
     SelectedFillColor[1],SelectedFillColor[2],1.0);
   CADBuildSelectedContourFill(FSketch,FContourSeeds,O.Mesh,Behind*0.5);
+  FLastFillRevision:=FSketch.Revision;
+  FLastFillContours:=ContoursNow;
 end;
 
 procedure TCADSketchMode.RefreshDimensions;

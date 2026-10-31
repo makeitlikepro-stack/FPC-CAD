@@ -166,3 +166,10 @@
 - Code: `CAD.App.Chrome` (ribbon / left tab switching per mode, view buttons, corner, status fields), `CAD.App.FeatureTree` (Part1, planes, origin, features; consumed features under their user; double click edits a sketch / extrude's sketch). Controller: no window layout code any more (anchors); overlay follows the view; menu commands (`Run`); Discard sketch; F = zoom fit. Sketch toolbar = ribbon Sketch page (buttons enabled only in a sketch).
 - Theme: `assets/styles/cad-light.css` from `tools/theme/build_theme.py` (IDE template + Light palette + CAD rules), loaded instead of the engine demo sheet.
 - Static: interface sections PASS; design ids used by code all present (61), all design handlers exist. NOT RUN: build, GUI.
+
+## 2026-10-31 — SolidWorks-style sketch graphics (Candidate)
+- `src/sketch/cad.sketch.dimgraphic.pas` (pure): drafting dimensions in screen-constant sizes (offset 30 px, arrows 10 px): aligned length / distance on the side away from the sketch centre, horizontal X above / vertical Y right of the points, radius leader at 45 deg (arc: its middle) with one arrow, diameter across with two arrows, point-line distance; angles keep the text marker. Text place = chip place.
+- `CAD.View.SketchDraw.CADBuildDimensionMesh`; sketch mode: dimension layer (id 900031, drafting blue), rebuilt on sketch change and on zoom (chip timer); `DimensionTextPos`; `WorldPerPixel` public.
+- `src/app/cad.app.sketchfill.pas`: closed regions filled light blue (id 900030, flat material `cad-sketch-fill`) from the same OCCT planar faces as the Sketch feature, a hair behind the plane; nothing when there is no closed region or no OCCT.
+- Dimension values: drafting text ('R5', diameter sign, degree sign; X / Y show the number), chips restyled (`.cad-dim-chip`, `.cad-relation-glyph` in the theme), centred on the text place.
+- Tests: `TestDimGraphic` (segments per kind, sides, text places, angle not drawn, chip text); chip text expectations for X / Y updated. NOT RUN here.

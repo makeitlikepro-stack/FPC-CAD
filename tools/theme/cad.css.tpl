@@ -27,3 +27,8 @@
 .ui-tab-page { background-color: {{surface}}; border-color: {{line}}; border-width: 0px; border-radius: 0px; }
 // ---- form background
 .ui-form { background-color: {{chrome}}; color: {{text}}; }
+// ---- sketch: dimension values and relation glyphs over the view
+.cad-dim-chip { background-color: #E8EDF4E0; color: #1F4E9C; border-width: 0px; border-radius: 3px; font-size: 13px; font-weight: 600; }
+.cad-dim-chip:hover { background-color: {{selection}}; color: #0D3B85; }
+.cad-relation-glyph { background-color: #E8F5E9; color: #2E7D32; border-color: #7CB97F; border-width: 1px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+.cad-relation-glyph:hover { background-color: #D5EED8; }

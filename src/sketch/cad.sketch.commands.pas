@@ -52,8 +52,8 @@ function CADDimensionShown(const C: TCADSketchConstraint): Double;
 function CADCommandName(ACommand: TCADSketchCommand): string;
 { The fixed point at (0, 0); made when the sketch has none. }
 function CADOriginPoint(S: TCADSketch): Integer;
-{ Short text for a dimension chip in the view: '60', 'R 5', 'D 10',
-  'A 90', 'X 20', 'Y 15'. }
+{ Short text for a dimension in the view, drafting style: '60', 'R5',
+  diameter sign + '10', '90' + degree sign; distance X / Y: the number. }
 function CADDimensionChipText(S: TCADSketch; AIndex: Integer): string;
 { Where the chip of a dimension sits (sketch mm). }
 function CADDimensionAnchor(S: TCADSketch; AIndex: Integer; out U, V: Double): Boolean;
@@ -230,11 +230,12 @@ begin
   C := S.Constraints[AIndex];
   V := FormatFloat('0.##', CADDimensionShown(C));
   case C.Kind of
-    sckRadius: Result := 'R ' + V;
-    sckDiameter: Result := 'D ' + V;
-    sckAngle: Result := 'A ' + V;
-    sckDistanceX: Result := 'X ' + V;
-    sckDistanceY: Result := 'Y ' + V;
+    { drafting style: R5, diameter sign + 10 (UTF-8), 90 + degree sign;
+      horizontal / vertical distances show the plain number (the drawn
+      dimension line tells the direction) }
+    sckRadius: Result := 'R' + V;
+    sckDiameter: Result := #$C3#$98 + V;
+    sckAngle: Result := V + #$C2#$B0;
   else
     Result := V;
   end;

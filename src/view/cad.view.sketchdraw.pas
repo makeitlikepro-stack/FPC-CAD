@@ -17,7 +17,7 @@ interface
 
 uses
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Commands,
-  CAD.Sketch.Status,
+  CAD.Sketch.Status, CAD.Sketch.DimGraphic,
   OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData;
 
 { Pixel (AX, AY: top-left origin) of a AWidth x AHeight viewport -> sketch
@@ -47,6 +47,10 @@ procedure CADBuildSketchLayers(Ed: TCADSketchEditor; APointSize: Double;
   cross of AOriginSize mm. }
 procedure CADBuildEditorMesh(Ed: TCADSketchEditor; AMarkerSize, AOriginSize: Double;
   AMesh: TV3DMeshData);
+{ Drafting dimensions of every active dimension (CAD.Sketch.DimGraphic):
+  extension lines, dimension lines and arrows; AMMPerPixel = current zoom.
+  AMesh is cleared and filled. }
+procedure CADBuildDimensionMesh(S: TCADSketch; AMMPerPixel: Double; AMesh: TV3DMeshData);
 
 implementation
 
@@ -354,6 +358,22 @@ begin
     AMesh.AddPolylineEdge([P3(S, X - H, Y - H), P3(S, X + H, Y - H), P3(S, X + H, Y + H),
       P3(S, X - H, Y + H)], True, 3);
   end;
+  AddBoundsVertices(AMesh);
+end;
+
+procedure CADBuildDimensionMesh(S: TCADSketch; AMMPerPixel: Double; AMesh: TV3DMeshData);
+var
+  I, K: Integer;
+  G: TCADDimGraphic;
+begin
+  AMesh.Clear;
+  if S = nil then
+    Exit;
+  for I := 0 to S.ConstraintCount - 1 do
+    if CADDimensionGraphic(S, I, AMMPerPixel, G) then
+      for K := 0 to High(G.Segments) do
+        AMesh.AddPolylineEdge([P3(S, G.Segments[K].X1, G.Segments[K].Y1),
+          P3(S, G.Segments[K].X2, G.Segments[K].Y2)], False, Cardinal(I + 1));
   AddBoundsVertices(AMesh);
 end;
 

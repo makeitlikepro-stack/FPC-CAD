@@ -151,6 +151,7 @@ begin
           SetLength(FChips, N + 1);
           SetLength(FChipConstraint, N + 1);
           FChips[N] := FUI.CreateButton(FParent, 60, ChipH);
+          FChips[N].StyleClass := 'cad-dim-chip';           { assets/styles: drafting text }
           FChips[N].OnClick := @ChipClick;
         end;
         FChips[N].Text := UTF8String(CADDimensionChipText(S, I));
@@ -176,6 +177,7 @@ begin
           SetLength(FGlyphs, N + 1);
           SetLength(FGlyphConstraint, N + 1);
           FGlyphs[N] := FUI.CreateButton(FParent, 26, GlyphH);
+          FGlyphs[N].StyleClass := 'cad-relation-glyph';
           FGlyphs[N].OnClick := @GlyphClick;
         end;
         FGlyphs[N].Text := UTF8String(CADRelationGlyph(S, I));
@@ -242,11 +244,13 @@ var
   U, V, X, Y, W: Double;
 begin
   FCameraKey := CameraKey;
+  { drafting dimension lines follow the zoom; the chips sit on their text }
+  FMode.RefreshDimensions;
   PlaceGlyphs;
   for I := 0 to FChipCount - 1 do
   begin
     if (FChipConstraint[I] <> FEditConstraint) and       { the edit box takes its place }
-       CADDimensionAnchor(FMode.Sketch, FChipConstraint[I], U, V) and
+       FMode.DimensionTextPos(FChipConstraint[I], U, V) and
        FMode.SketchToScreen(U, V, X, Y) and (X >= 0) and (Y >= 0) and
        (X < FView.Width) and (Y < FView.Height) then
     begin
@@ -254,17 +258,17 @@ begin
       FChips[I].Width := W;
       FChips[I].Height := ChipH;
       FChips[I].Left := FView.Left + X - 0.5 * W;
-      FChips[I].Top := FView.Top + Y - ChipH - 4;          { just above the anchor }
+      FChips[I].Top := FView.Top + Y - 0.5 * ChipH;        { centred on the text place }
       FChips[I].Visible := True;
     end
     else
       FChips[I].Visible := False;
   end;
-  if FEdit.Visible and (FEditConstraint >= 0) and CADDimensionAnchor(FMode.Sketch, FEditConstraint, U, V) and
+  if FEdit.Visible and (FEditConstraint >= 0) and FMode.DimensionTextPos(FEditConstraint, U, V) and
      FMode.SketchToScreen(U, V, X, Y) then
   begin
     FEdit.Left := FView.Left + X - 0.5 * EditW;
-    FEdit.Top := FView.Top + Y - ChipH - 6;
+    FEdit.Top := FView.Top + Y - 0.5 * ChipH - 2;
   end;
 end;
 

@@ -13,13 +13,14 @@ program sketch_tests;
   8. Constraint commands: picking, selection, each button, redundant and
      conflicting constraints taken back, dimensions edited, labels.
   9. Typed values while drawing: prompts, parsing, line / rectangle /
-     circle / arcs at exact sizes with their dimensions. }
+     circle / arcs at exact sizes with their dimensions.
+ 10. Drafting dimension graphics: sides, segments, text places. }
 
 uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Constraints, CAD.Sketch.Solver,
   CAD.Sketch.Profile, CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.Sketch.Status,
-  CAD.Sketch.TypedInput;
+  CAD.Sketch.TypedInput, CAD.Sketch.DimGraphic;
 
 var
   Checks, Failures: Integer;
@@ -858,10 +859,10 @@ begin
     L0 := S.AddLineXY(0, 60, 20, 60);
     Check(CADApplyCommand(S, Sel([P0], []), sccDistX, C, Err) and (S.Constraints[C].Kind = sckDistanceX),
       'dist X of one point: from the origin (' + Err + ')');
-    Check(CADDimensionChipText(S, C) = 'X 30', 'chip text X 30: ' + CADDimensionChipText(S, C));
+    Check(CADDimensionChipText(S, C) = '30', 'chip text 30: ' + CADDimensionChipText(S, C));
     Check(CADDimensionAnchor(S, C, X1, Idx_Y) and Near(X1, 15) and Near(Idx_Y, 40), 'X chip halfway at the point height');
     Check(CADSetDimension(S, C, 12, Err) and Near(S.PointX(P0), 12) and Near(S.PointY(P0), 40), 'set X 12');
-    Check(CADApplyCommand(S, Sel([P0], []), sccDistY, C, Err) and (CADDimensionChipText(S, C) = 'Y 40'), 'dist Y 40');
+    Check(CADApplyCommand(S, Sel([P0], []), sccDistY, C, Err) and (CADDimensionChipText(S, C) = '40'), 'dist Y 40');
     Check(CADFindDimension(S, L0) = -1, 'no dimension on the line yet');
     Check(CADApplyCommand(S, Sel([], [L0]), sccDimension, C, Err) and (CADFindDimension(S, L0) = C) and
       (CADDimensionChipText(S, C) = '20'), 'line dimension found, chip 20');
@@ -1017,6 +1018,46 @@ begin
   end;
 end;
 
+procedure TestDimGraphic;
+var
+  S: TCADSketch;
+  P0, P1, P2, P3, B, R, Ci, Cr, Dx, A2, L2: Integer;
+  G: TCADDimGraphic;
+begin
+  S := TCADSketch.Create;
+  try
+    P0 := S.AddPoint(0, 0);
+    P1 := S.AddPoint(100, 0);
+    P2 := S.AddPoint(100, 60);
+    P3 := S.AddPoint(0, 60);
+    B := S.AddLine(P0, P1);
+    R := S.AddLine(P1, P2);
+    S.AddLine(P2, P3);
+    L2 := S.AddLine(P3, P0);
+    Ci := S.AddCircle(S.AddPoint(50, 30), 10);
+    Check(CADDimensionGraphic(S, S.Length(B, 100), 0.1, G) and (Length(G.Segments) = 9),
+      Format('dim: bottom length has 2 extension lines, a line, 2 arrows (%d segments)', [Length(G.Segments)]));
+    Check(Near(G.TextX, 50) and (G.TextY < -3), Format('dim: bottom text below the line (%.2f, %.2f)', [G.TextX, G.TextY]));
+    Check(CADDimensionGraphic(S, S.Length(R, 60), 0.1, G) and (G.TextX > 103),
+      'dim: right side length goes to the right');
+    Cr := S.Radius(Ci, 10);
+    Check(CADDimensionGraphic(S, Cr, 0.1, G) and (Length(G.Segments) = 4) and
+      (G.TextX > 50) and (G.TextY > 30) and (Hypot(G.TextX - 50, G.TextY - 30) > 10),
+      'dim: radius leader out at 45 deg with one arrow, text outside the circle');
+    S.RemoveConstraint(Cr);
+    Check(CADDimensionGraphic(S, S.Diameter(Ci, 20), 0.1, G) and (Length(G.Segments) = 8),
+      'dim: diameter line with two arrows and a leader');
+    Dx := S.DistanceX(P0, P1, 100);
+    Check(CADDimensionGraphic(S, Dx, 0.1, G) and Near(G.TextX, 50) and (G.TextY > 3),
+      'dim: distance X above the points');
+    A2 := S.Angle(B, L2, Pi / 2);
+    Check(not CADDimensionGraphic(S, A2, 0.1, G), 'dim: angle keeps the text marker');
+    Check(CADDimensionChipText(S, Dx) = '100', 'dim: distance X shows the number');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -1032,6 +1073,7 @@ begin
   TestCommands;
   TestStatus;
   TestTypedInput;
+  TestDimGraphic;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

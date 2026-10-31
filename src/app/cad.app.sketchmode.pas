@@ -20,11 +20,14 @@ uses
   OpenGL.UI.Viewport3D, OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData,
   OpenGL.Render.Viewport3DPass,
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
-  CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.View.SketchDraw;
+  CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.Sketch.DimGraphic, CAD.View.SketchDraw,
+  OpenGL.Render.Material, CAD.App.SketchFill;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
   CAD_SKETCH_LAYER_ID = 900010;        { + Ord(TCADSketchLayer) }
+  CAD_SKETCH_FILL_ID = 900030;         { closed regions, light fill }
+  CAD_SKETCH_DIM_ID = 900031;          { drafting dimensions }
   { every sketch-mode object id is at or above this }
   CAD_SKETCH_FIRST_ID = 900000;
 
@@ -50,9 +53,9 @@ type
     procedure MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
     procedure PointerDrag(Sender: TObject; APhase: TViewport3DDragPhase; AX, AY: Integer;
       var AHandled: Boolean);
-    function WorldPerPixel: Double;
     function ToSketch(X, Y: Integer; out U, V: Double): Boolean;
-    function ObjectMesh(AId: Cardinal): TV3DMeshData;
+    function ObjectMesh(AId: Cardinal; const AMaterial: string = ''): TV3DMeshData;
+    procedure RefreshFill;
     procedure RefreshSketch;
     procedure RefreshPreview;
     procedure Changed;
@@ -95,6 +98,13 @@ type
     property OnEntityDoubleClick: TCADEntityEvent read FOnEntityDoubleClick write FOnEntityDoubleClick;
     { Pixel of a sketch point in the viewport (top-left origin). }
     function SketchToScreen(U, V: Double; out AX, AY: Double): Boolean;
+    { Sketch mm per screen pixel at the current zoom. }
+    function WorldPerPixel: Double;
+    { Drafting dimensions for the current zoom (the chips call it when the
+      camera or the sketch changed). }
+    procedure RefreshDimensions;
+    { Centre of the value text of dimension AConstraint (sketch mm). }
+    function DimensionTextPos(AConstraint: Integer; out U, V: Double): Boolean;
   end;
 
 implementation
@@ -118,13 +128,13 @@ begin
   inherited Destroy;
 end;
 
-function TCADSketchMode.ObjectMesh(AId: Cardinal): TV3DMeshData;
+function TCADSketchMode.ObjectMesh(AId: Cardinal; const AMaterial: string): TV3DMeshData;
 var
   O: TViewport3DObject;
 begin
   O := FView.FindObject(AId);
   if O = nil then
-    O := FView.AddObject(TV3DMeshData.Create, '', AId);
+    O := FView.AddObject(TV3DMeshData.Create, AMaterial, AId);
   O.Visible := FActive;
   Result := O.Mesh;
 end;
@@ -235,6 +245,12 @@ begin
   O := FView.FindObject(CAD_SKETCH_PREVIEW_ID);
   if O <> nil then
     O.Visible := False;
+  O := FView.FindObject(CAD_SKETCH_FILL_ID);
+  if O <> nil then
+    O.Visible := False;
+  O := FView.FindObject(CAD_SKETCH_DIM_ID);
+  if O <> nil then
+    O.Visible := False;
   FView.Invalidate3D;
   Changed;
 end;
@@ -299,7 +315,68 @@ begin
     O.EdgeColor := Viewport3DRGBA(LayerColor[L][0], LayerColor[L][1], LayerColor[L][2], 1.0);
   end;
   CADBuildSketchLayers(FEditor, PointPixels * WorldPerPixel, Meshes);
+  RefreshFill;
+  RefreshDimensions;
   FView.Invalidate3D;
+end;
+
+const
+  FillMaterial = 'cad-sketch-fill';
+  FillColor: array[0..2] of Single = (0.82, 0.89, 0.97);      { light blue }
+  DimColor: array[0..2] of Single = (0.12, 0.31, 0.61);       { drafting blue }
+
+{ Closed regions in a light colour, a hair behind the plane (the sketch lines
+  stay on top); flat material so it is one even colour facing the camera. }
+procedure TCADSketchMode.RefreshFill;
+var
+  M: TRenderMaterial;
+  O: TViewport3DObject;
+  Err: string;
+  Behind: Double;
+begin
+  if FView.Materials.Find(FillMaterial) = nil then
+  begin
+    M := TRenderMaterial.Create(FillMaterial, msFlat);
+    M.BaseColor := MaterialColor(FillColor[0], FillColor[1], FillColor[2], 1.0);
+    if not FView.Materials.Register(M, Err) then
+      M.Free;
+  end;
+  ObjectMesh(CAD_SKETCH_FILL_ID, FillMaterial);
+  O := FView.FindObject(CAD_SKETCH_FILL_ID);
+  O.CullBackFaces := False;
+  O.UseEdgeColor := True;
+  O.EdgeColor := Viewport3DRGBA(FillColor[0], FillColor[1], FillColor[2], 1.0);
+  Behind := Max(1e-3, 2 * WorldPerPixel * 0.05);
+  CADBuildSketchFill(FSketch, O.Mesh, Behind);
+end;
+
+procedure TCADSketchMode.RefreshDimensions;
+var
+  O: TViewport3DObject;
+begin
+  if not FActive or (FSketch = nil) then
+    Exit;
+  ObjectMesh(CAD_SKETCH_DIM_ID);
+  O := FView.FindObject(CAD_SKETCH_DIM_ID);
+  O.UseEdgeColor := True;
+  O.EdgeColor := Viewport3DRGBA(DimColor[0], DimColor[1], DimColor[2], 1.0);
+  CADBuildDimensionMesh(FSketch, WorldPerPixel, O.Mesh);
+  FView.Invalidate3D;
+end;
+
+function TCADSketchMode.DimensionTextPos(AConstraint: Integer; out U, V: Double): Boolean;
+var
+  G: TCADDimGraphic;
+begin
+  if (FSketch = nil) or (AConstraint < 0) then
+    Exit(False);
+  if CADDimensionGraphic(FSketch, AConstraint, WorldPerPixel, G) then
+  begin
+    U := G.TextX;
+    V := G.TextY;
+    Exit(True);
+  end;
+  Result := CADDimensionAnchor(FSketch, AConstraint, U, V);
 end;
 
 procedure TCADSketchMode.RefreshPreview;

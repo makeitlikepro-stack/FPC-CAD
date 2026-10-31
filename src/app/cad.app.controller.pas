@@ -343,7 +343,23 @@ procedure TCADAppController.SmartDimension(Sender: TObject);
 var
   C: Integer;
   Err: string;
+  Sel: TCADSketchSelection;
 begin
+  if not FSketchMode.Active then
+    Exit;
+  Sel := FSketchMode.Editor.Selection;
+  { An already dimensioned line/circle/arc should open its size edit box,
+    rather than try to create a redundant constraint. }
+  if (Length(Sel.Points) = 0) and (Length(Sel.Entities) = 1) then
+  begin
+    C := CADFindDimension(FSketchMode.Sketch, Sel.Entities[0]);
+    if C >= 0 then
+    begin
+      FSketchMode.ClearSelection;
+      FSketchDims.EditDimension(C);
+      Exit;
+    end;
+  end;
   Err := FSketchMode.ApplyCommand(sccDimension, C);
   if (Err = '') and (C >= 0) then
   begin

@@ -6,7 +6,7 @@
 --source: a checkout of https://github.com/tabler/tabler-icons (icons/outline
 and LICENSE are read). tools/icons/cad_icons.json maps icon keys to Tabler
 names. Output (replaces the folder): assets/icons/
-  png/<size>/<key>.png for sizes 20 and 24, stroke colour baked in
+  png/<size>/<key>.png for sizes 20, 24 and 32, stroke colour baked in
   LICENSE (Tabler MIT text), SOURCE.txt (commit)
 Raster: librsvg + cairo through ctypes (the engine's SVG backend).
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "assets" / "icons"
 MAP = Path(__file__).with_name("cad_icons.json")
-SIZES = (20, 24)
+SIZES = (20, 24, 32)       # 32: big ribbon buttons
 COLOR = "#2B2F36"        # dark grey strokes on light buttons
 STROKE = "1.75"
 
@@ -53,7 +53,9 @@ def rasterize(svg: bytes, size: int, out: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True)
-    src = Path(ap.parse_args().source)
+    ap.add_argument("--commit", default="", help="Tabler commit the files came from (default: HEAD of --source)")
+    args = ap.parse_args()
+    src = Path(args.source)
     icons = json.loads(MAP.read_text())["icons"]
     if OUT.exists():
         shutil.rmtree(OUT)
@@ -66,8 +68,8 @@ def main() -> None:
         for size in SIZES:
             rasterize(svg.encode(), size, OUT / "png" / str(size) / f"{key}.png")
     shutil.copy(src / "LICENSE", OUT / "LICENSE")
-    commit = subprocess.run(["git", "-C", str(src), "rev-parse", "HEAD"],
-                            capture_output=True, text=True).stdout.strip()
+    commit = args.commit or subprocess.run(["git", "-C", str(src), "rev-parse", "HEAD"],
+                                           capture_output=True, text=True).stdout.strip()
     (OUT / "SOURCE.txt").write_text(f"Tabler Icons (MIT) https://github.com/tabler/tabler-icons commit {commit}\n")
     print(f"{len(icons)} icons x {len(SIZES)} sizes -> {OUT}")
 

@@ -29,7 +29,7 @@ uses
   CAD.Core.Values, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
-  CAD.App.SketchToolbar, CAD.App.DesignLookup;
+  CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue;
 
 type
   { The widgets of app/MainForm.fvform the application uses. }
@@ -60,6 +60,7 @@ type
     FSketchPanel: TCADSketchPanel;
     FSketchDims: TCADSketchDims;
     FSketchToolbar: TCADSketchToolbar;
+    FTyped: TCADTypedValueBox;            { typed values while drawing }
     FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
     FLastSketch: TCADId;
     FSketchCount: Integer;
@@ -143,6 +144,7 @@ end;
 
 destructor TCADAppController.Destroy;
 begin
+  FreeAndNil(FTyped);
   FreeAndNil(FSketchToolbar);
   FreeAndNil(FSketchDims);
   FreeAndNil(FSketchPanel);
@@ -209,6 +211,8 @@ begin
   FSketchDims := TCADSketchDims.Create(UI, FOverlay, W.View, FSketchMode);
   FSketchDims.OnStatus := @SketchStatus;
   FSketchDims.OnConstraintClick := @RelationClick;
+  FTyped := TCADTypedValueBox.Create(UI, FLookup, FSketchMode, W.View);
+  FTyped.OnStatus := @SketchStatus;
   Layout;
   Err := LoadOCCT;
   FDoc := TCADDocument.Create;
@@ -261,6 +265,7 @@ procedure TCADAppController.ModeChanged;
 begin
   FSketchToolbar.UpdateVisible;
   FSketchPanel.UpdateEnabled;
+  FTyped.Hide;
 end;
 
 procedure TCADAppController.Rebuild(AFit: Boolean);
@@ -379,6 +384,9 @@ begin
     Exit;
   if (FHost.UI <> nil) and (FHost.UI.FocusedWidget is TUIEdit) then
     Exit;
+  { a digit starts a typed value (its character goes into the box) }
+  if FTyped.KeyStarts(Key, Shift) then
+    Exit;
   Handled := True;
   if ssCtrl in Shift then
     case Key of
@@ -473,6 +481,8 @@ begin
     FSketchDims.Refresh;
   if FSketchToolbar <> nil then
     FSketchToolbar.Refresh;
+  if FTyped <> nil then
+    FTyped.HideIfUnfocused;
   if FSketchMode.Active then
     W.Status.Text := FSketchMode.StatusText
   else

@@ -11,12 +11,15 @@ program sketch_tests;
   6. Profiles: loops, faces, holes, islands, orientation, areas, errors.
   7. Editor tools: snaps, automatic constraints, previews, cancel, drag.
   8. Constraint commands: picking, selection, each button, redundant and
-     conflicting constraints taken back, dimensions edited, labels. }
+     conflicting constraints taken back, dimensions edited, labels.
+  9. Typed values while drawing: prompts, parsing, line / rectangle /
+     circle / arcs at exact sizes with their dimensions. }
 
 uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Constraints, CAD.Sketch.Solver,
-  CAD.Sketch.Profile, CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.Sketch.Status;
+  CAD.Sketch.Profile, CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.Sketch.Status,
+  CAD.Sketch.TypedInput;
 
 var
   Checks, Failures: Integer;
@@ -917,6 +920,103 @@ begin
   end;
 end;
 
+procedure TestTypedInput;
+var
+  S: TCADSketch;
+  Ed: TCADSketchEditor;
+  V: TCADTypedValues;
+  Err: string;
+  N, L: Integer;
+  X, Y: Double;
+begin
+  Check(CADParseTypedValues(' 12.5, -3 ', V) and (Length(V) = 2) and Near(V[0], 12.5) and Near(V[1], -3),
+    'typed: parse "12.5, -3"');
+  Check(CADParseTypedValues('4;5 6', V) and (Length(V) = 3), 'typed: ; and spaces separate');
+  Check(not CADParseTypedValues('abc', V) and not CADParseTypedValues('  ', V), 'typed: not a number / empty');
+  S := TCADSketch.Create;
+  Ed := TCADSketchEditor.Create(S);
+  try
+    Ed.SnapTolerance := 0.5;
+    Check(CADTypedPrompt(Ed) = '', 'typed: Select takes no numbers');
+    Check(not CADApplyTyped(Ed, '1, 2', Err) and (Err <> ''), 'typed: Select refuses');
+
+    { line: start at (10, 5) typed, then 20 along the cursor, then 10 at 90 deg }
+    Ed.SetTool(sktLine);
+    Check(CADTypedPrompt(Ed) = 'x, y', 'typed: line start prompt');
+    Check(CADApplyTyped(Ed, '10, 5', Err), 'typed: line start at 10, 5 (' + Err + ')');
+    Check((Ed.ChainLast >= 0) and Near(S.PointX(Ed.ChainLast), 10) and Near(S.PointY(Ed.ChainLast), 5),
+      'typed: chain starts at (10, 5)');
+    Check(CADTypedPrompt(Ed) = 'length, angle', 'typed: line prompt');
+    Ed.Move(40, 5.2);                              { cursor to the right }
+    N := S.EntityCount;
+    Check(CADApplyTyped(Ed, '20', Err) and (S.EntityCount = N + 1), 'typed: line of 20 (' + Err + ')');
+    L := S.EntityCount - 1;
+    Check(Near(Hypot(S.PointX(S.Entities[L].P2) - 10, S.PointY(S.Entities[L].P2) - 5), 20, 1e-6),
+      'typed: line length 20');
+    Check(CountKind(S, sckLength) = 1, 'typed: the length is a dimension');
+    Check(CADApplyTyped(Ed, '10, 90', Err), 'typed: line 10 at 90 deg (' + Err + ')');
+    L := S.EntityCount - 1;
+    Check(Near(S.PointY(S.Entities[L].P2) - S.PointY(S.Entities[L].P1), 10, 1e-6) and
+      (CountKind(S, sckVertical) >= 1), 'typed: 90 deg line goes up 10 and is vertical');
+    Check(not CADApplyTyped(Ed, '-4', Err), 'typed: negative length refused');
+    Ed.Cancel;
+
+    { rectangle 30 x 12 towards the cursor (left, down) }
+    Ed.SetTool(sktRectangle);
+    Ed.Click(100, 100);
+    Check(CADTypedPrompt(Ed) = 'width, height', 'typed: rectangle prompt');
+    Check(not CADApplyTyped(Ed, '30', Err) and (Err = 'type width, height'), 'typed: rectangle needs two numbers');
+    Ed.Move(80, 90);
+    N := S.EntityCount;
+    Check(CADApplyTyped(Ed, '30, 12', Err) and (S.EntityCount = N + 4), 'typed: rectangle (' + Err + ')');
+    Check(Near(S.PointX(S.Entities[N].P2), 70, 1e-6) and Near(S.PointY(S.Entities[N + 1].P2), 88, 1e-6),
+      'typed: rectangle corner at (70, 88)');
+    Check(CountKind(S, sckLength) = 4, 'typed: width and height are dimensions');
+
+    { circle r 7 }
+    Ed.SetTool(sktCircle);
+    Ed.Click(-50, 0);
+    Check(CADTypedPrompt(Ed) = 'radius', 'typed: circle prompt');
+    Ed.Move(-40, 0);
+    Check(CADApplyTyped(Ed, '7', Err) and Near(S.EntityRadius(S.EntityCount - 1), 7, 1e-6),
+      'typed: circle radius 7 (' + Err + ')');
+    Check(CountKind(S, sckRadius) = 1, 'typed: radius dimension');
+
+    { centre arc: radius 5 to the right, sweep 90 -> end straight up }
+    Ed.SetTool(sktArc);
+    Ed.Click(-50, 50);
+    Ed.Move(-40, 50);
+    Check(CADApplyTyped(Ed, '5', Err) and (Ed.ClickCount = 2), 'typed: arc radius step');
+    Check(CADTypedPrompt(Ed) = 'sweep angle', 'typed: arc sweep prompt');
+    N := S.EntityCount;
+    Check(CADApplyTyped(Ed, '90', Err) and (S.EntityCount = N + 1), 'typed: arc sweep 90 (' + Err + ')');
+    X := S.PointX(S.Entities[S.EntityCount - 1].P2);
+    Y := S.PointY(S.Entities[S.EntityCount - 1].P2);
+    Check(Near(X, -50, 1e-6) and Near(Y, 55, 1e-6), Format('typed: arc ends at (-50, 55), got (%.4f, %.4f)', [X, Y]));
+
+    { 3-point arc: chord 10 at 0 deg, radius 13 bulging to the cursor (up) }
+    Ed.SetTool(sktArc3);
+    Ed.Click(0, -50);
+    Check(CADApplyTyped(Ed, '10, 0', Err) and (Ed.ClickCount = 2), 'typed: arc3 chord');
+    Check(CADTypedPrompt(Ed) = 'radius', 'typed: arc3 radius prompt');
+    Ed.Move(5, -45);
+    Check(not CADApplyTyped(Ed, '4', Err), 'typed: radius below half the chord refused');
+    N := S.EntityCount;
+    Check(CADApplyTyped(Ed, '13', Err) and (S.EntityCount = N + 1) and
+      Near(S.EntityRadius(S.EntityCount - 1), 13, 1e-6), 'typed: arc3 radius 13 (' + Err + ')');
+    Check(Ed.LastSolve.Status = cssSolved, 'typed: everything solved');
+
+    { point tool }
+    Ed.SetTool(sktPoint);
+    N := S.PointCount;
+    Check(CADApplyTyped(Ed, '3, 4', Err) and (S.PointCount = N + 1) and
+      Near(S.PointX(N), 3) and Near(S.PointY(N), 4), 'typed: point at (3, 4)');
+  finally
+    Ed.Free;
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -931,6 +1031,7 @@ begin
   TestEditorDrag;
   TestCommands;
   TestStatus;
+  TestTypedInput;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

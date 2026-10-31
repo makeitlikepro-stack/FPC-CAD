@@ -20,7 +20,7 @@ uses
   OpenGL.UI.Viewport3D, OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData,
   OpenGL.Render.Viewport3DPass,
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
-  CAD.Sketch.Text, CAD.View.SketchDraw;
+  CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.View.SketchDraw;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
@@ -82,6 +82,10 @@ type
     function ApplyCommandOn(AEntity: Integer; ACommand: TCADSketchCommand;
       out AConstraint: Integer): string;
     function RemoveConstraint(AConstraint: Integer): string;
+    { Typed values while drawing (CAD.Sketch.TypedInput): what the numbers
+      mean now ('' = none), and applying them; '' = done, else the message. }
+    function TypedPrompt: string;
+    function TypeValues(const AText: string): string;
     property Active: Boolean read FActive;
     property Sketch: TCADSketch read FSketch;
     property Editor: TCADSketchEditor read FEditor;
@@ -466,6 +470,28 @@ begin
   if not FActive then
     Exit('no sketch');
   FEditor.SetDimension(AConstraint, AValue, Result);
+  RefreshSketch;
+  RefreshPreview;
+  Changed;
+end;
+
+function TCADSketchMode.TypedPrompt: string;
+begin
+  Result := '';
+  if FActive and (FEditor <> nil) then
+    Result := CADTypedPrompt(FEditor);
+end;
+
+function TCADSketchMode.TypeValues(const AText: string): string;
+begin
+  Result := '';
+  if not FActive then
+    Exit('no sketch');
+  if not CADApplyTyped(FEditor, AText, Result) then
+  begin
+    RefreshPreview;
+    Exit;
+  end;
   RefreshSketch;
   RefreshPreview;
   Changed;

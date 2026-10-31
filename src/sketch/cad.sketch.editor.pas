@@ -80,6 +80,8 @@ type
     function CommitArc3: Boolean;
     procedure Solve;
     function GetPreview(AIndex: Integer): TCADSketchPreview;
+    { The tool's step with FSnap as the click; True when the sketch changed. }
+    function ClickSnap: Boolean;
   public
     constructor Create(ASketch: TCADSketch);
     procedure SetTool(ATool: TCADSketchTool);
@@ -87,6 +89,17 @@ type
     procedure Move(X, Y: Double);
     { Left click at (X, Y). True when the sketch changed. }
     function Click(X, Y: Double): Boolean;
+    { A click exactly at (X, Y), no snapping (typed values,
+      CAD.Sketch.TypedInput). True when the sketch changed. }
+    function ClickExact(X, Y: Double): Boolean;
+    { Clicks of the shape in progress (rectangle, circle, arcs). }
+    function ClickCount: Integer;
+    procedure ClickPos(AIndex: Integer; out X, Y: Double);
+    { Line tool: point the next line starts at; -1 = no chain. }
+    property ChainLast: Integer read FChainLast;
+    { Last cursor position (sketch mm). }
+    property CursorX: Double read FCursorX;
+    property CursorY: Double read FCursorY;
     { Esc / right click: drop the shape being drawn, end a line chain. }
     procedure Cancel;
     function Prompt: string;
@@ -719,6 +732,31 @@ begin
 end;
 
 function TCADSketchEditor.Click(X, Y: Double): Boolean;
+begin
+  Move(X, Y);
+  Result := ClickSnap;
+end;
+
+function TCADSketchEditor.ClickExact(X, Y: Double): Boolean;
+begin
+  FCursorX := X;
+  FCursorY := Y;
+  FSnap := NoSnap(X, Y);
+  Result := ClickSnap;
+end;
+
+function TCADSketchEditor.ClickCount: Integer;
+begin
+  Result := FClickCount;
+end;
+
+procedure TCADSketchEditor.ClickPos(AIndex: Integer; out X, Y: Double);
+begin
+  X := FClicks[AIndex].X;
+  Y := FClicks[AIndex].Y;
+end;
+
+function TCADSketchEditor.ClickSnap: Boolean;
 var
   P: Integer;
   Rev0: Cardinal;
@@ -726,7 +764,6 @@ var
 begin
   Rev0 := FSketch.Revision;
   Committed := False;
-  Move(X, Y);
   case FTool of
     sktPoint:
       if FSnap.Kind <> snkPoint then             { no second point on a point }

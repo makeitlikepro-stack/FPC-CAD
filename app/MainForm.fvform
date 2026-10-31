@@ -32,6 +32,7 @@
       <Button id="FixButton" top="40" hint="Fix" left="410" text="" width="34" height="34" iconFile="../assets/icons/png/24/fix.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
       <Panel id="ActiveToolMark" top="33" left="58" width="26" height="3" borderRadius="1" backgroundColor="#0078D6"/>
     </Panel>
+    <Edit id="DrawValueEdit" top="120" left="300" width="170" height="28" placeholder="length, angle, Enter"/>
     <Panel id="SidePanel" top="0" left="872" width="328" height="734" backgroundColor="#292B30">
       <Label id="TitleLabel" top="10" left="12" text="Plate with 6 holes" width="236" height="26"/>
       <Label id="RadiusLabel" top="44" left="12" text="Hole radius: 4.00 mm" width="236" height="24"/>

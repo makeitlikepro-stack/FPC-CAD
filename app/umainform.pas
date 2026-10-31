@@ -51,6 +51,7 @@ type
     SymmetricButton: TUIButton;
     FixButton: TUIButton;
     ActiveToolMark: TUIPanel;
+    DrawValueEdit: TUIEdit;
     SidePanel: TUIPanel;
     TitleLabel: TUILabel;
     RadiusLabel: TUILabel;

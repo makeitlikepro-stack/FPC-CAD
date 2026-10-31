@@ -226,7 +226,8 @@ var
   I: Integer;
 begin
   for I := 0 to S.PointCount - 1 do
-    if S.Fixed[S.Points[I].XParam] and (S.PointX(I) = 0) and (S.PointY(I) = 0) then
+    if S.Points[I].Active and S.Fixed[S.Points[I].XParam] and
+       (S.PointX(I) = 0) and (S.PointY(I) = 0) then
       Exit(I);
   Result := S.AddPoint(0, 0);
   S.FixPoint(Result);

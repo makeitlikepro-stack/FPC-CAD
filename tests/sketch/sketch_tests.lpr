@@ -136,7 +136,10 @@ begin
     Check(Near(S.PointX(C2), 50) and Near(S.PointY(C2), 0), 'slot: centres 50 apart');
     Check(Near(S.EntityRadius(ArcR), 10) and Near(S.PointY(A1), -10) and Near(S.PointY(B2), 10),
       'slot: both radii 10, lines at y = -10 and +10');
-    Check(Near(S.PointX(A1), 0) and Near(S.PointX(B1), 50), 'slot: tangent points above the centres');
+    { A tangent point is ill-conditioned along the line: |A1 - C1| = r with
+      A1.y = -r gives x = sqrt(2 r dy), so a 1e-10 residual moves x by ~5e-5. }
+    Check(Near(S.PointX(A1), 0, 1e-3) and Near(S.PointX(B1), 50, 1e-3),
+      Format('slot: tangent points above the centres (x %.2e, %.6f)', [S.PointX(A1), S.PointX(B1)]));
   finally
     S.Free;
   end;

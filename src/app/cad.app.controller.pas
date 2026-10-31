@@ -31,7 +31,8 @@ uses
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
-  CAD.App.FeatureTree, CAD.App.Chrome, CAD.App.SketchContext;
+  CAD.App.FeatureTree, CAD.App.Chrome, CAD.App.SketchContext,
+  CAD.Sketch.ExtrudeOptions;
 
 type
   { Menu commands (the ribbon buttons are bound directly). }
@@ -72,6 +73,25 @@ type
     FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
     FLastSketch: TCADId;
     FSketchCount: Integer;
+    FEditExtrude: TCADId;               { linked Extrude being edited, if any }
+    FExtrudePanel: TUIPanel;
+    FExtrudePreviewButton, FExtrudeReverseButton, FExtrudeSymmetricButton: TUIButton;
+    FExtrudeConfirmButton, FExtrudeCancelButton: TUIButton;
+    FExtrudeDepthEdit: TUIEdit;
+    FExtrudeDepthSlider: TUISlider;
+    FExtrudeStatus: TUILabel;
+    FExtrudeSaved, FExtrudeDraft: TCADExtrudeOptions;
+    FUpdatingExtrudeControls: Boolean;
+    procedure ExtrudePreviewClick(Sender: TObject);
+    procedure ExtrudeDepthKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure ExtrudeDepthSliderChange(Sender: TObject);
+    procedure ExtrudeReverseClick(Sender: TObject);
+    procedure ExtrudeSymmetricClick(Sender: TObject);
+    procedure ExtrudeConfirmClick(Sender: TObject);
+    procedure ExtrudeCancelClick(Sender: TObject);
+    procedure UpdateExtrudeControls;
+    procedure RefreshExtrudeDraft;
+    function ReadExtrudeDepth: Boolean;
     procedure NewSketch(Sender: TObject);
     procedure FinishClick(Sender: TObject);
     procedure EditSketchClick(Sender: TObject);
@@ -156,6 +176,9 @@ begin
   W.Sync := L('SyncLabel');
   W.Status := L('StatusLabel');
   FEditSketch := CADNoId;
+  FEditExtrude := CADNoId;
+  FExtrudeSaved := CADDefaultExtrudeOptions;
+  FExtrudeDraft := FExtrudeSaved;
   FLastSketch := CADNoId;
 end;
 
@@ -222,6 +245,33 @@ begin
   FOverlay.RenderOrder := FOverlayOrder;
   FSketchMode := TCADSketchMode.Create(W.View);
   FSketchMode.OnChanged := @SketchChanged;
+  FExtrudePanel := TUIPanel(CADDesignWidget(FLookup,
+    'ExtrudeOptionsPanel', TUIPanel));
+  FExtrudePreviewButton := TUIButton(CADDesignWidget(FLookup,
+    'ExtrudePreviewButton', TUIButton));
+  FExtrudeDepthEdit := TUIEdit(CADDesignWidget(FLookup,
+    'ExtrudeDepthEdit', TUIEdit));
+  FExtrudeDepthSlider := TUISlider(CADDesignWidget(FLookup,
+    'ExtrudeDepthSlider', TUISlider));
+  FExtrudeReverseButton := TUIButton(CADDesignWidget(FLookup,
+    'ExtrudeReverseButton', TUIButton));
+  FExtrudeSymmetricButton := TUIButton(CADDesignWidget(FLookup,
+    'ExtrudeSymmetricButton', TUIButton));
+  FExtrudeConfirmButton := TUIButton(CADDesignWidget(FLookup,
+    'ExtrudeConfirmButton', TUIButton));
+  FExtrudeCancelButton := TUIButton(CADDesignWidget(FLookup,
+    'ExtrudeCancelButton', TUIButton));
+  FExtrudeStatus := TUILabel(CADDesignWidget(FLookup,
+    'ExtrudePreviewStatus', TUILabel));
+  FExtrudePreviewButton.OnClick := @ExtrudePreviewClick;
+  FExtrudeDepthEdit.OnKeyDown := @ExtrudeDepthKeyDown;
+  FExtrudeDepthSlider.OnChange := @ExtrudeDepthSliderChange;
+  FExtrudeReverseButton.OnClick := @ExtrudeReverseClick;
+  FExtrudeSymmetricButton.OnClick := @ExtrudeSymmetricClick;
+  FExtrudeConfirmButton.OnClick := @ExtrudeConfirmClick;
+  FExtrudeCancelButton.OnClick := @ExtrudeCancelClick;
+  FExtrudePanel.Visible := False;
+  FExtrudePreviewButton.Visible := False;
   FSketchPanel := TCADSketchPanel.Create(UI, FLookup, FSketchMode);
   FSketchPanel.OnNewSketch := @NewSketch;
   FSketchPanel.OnEditSketch := @EditSketchClick;
@@ -305,6 +355,8 @@ begin
   FChrome.SetDof(DofText);
   FSketchToolbar.UpdateVisible;
   FSketchPanel.UpdateEnabled;
+  FExtrudePreviewButton.Visible := FSketchMode.Active;
+  if not FSketchMode.Active then FExtrudePanel.Visible := False;
   FTyped.Hide;
 end;
 
@@ -434,6 +486,120 @@ begin
   W.View.Invalidate3D;
 end;
 
+{ Draft controls do not mutate the CAD document. Only Accept Extrude or
+  Exit Sketch commits the validated values to the feature graph. }
+procedure TCADAppController.UpdateExtrudeControls;
+begin
+  if FExtrudeDepthEdit = nil then Exit;
+  FUpdatingExtrudeControls := True;
+  try
+    FExtrudeDepthEdit.Text := FloatToStr(FExtrudeDraft.Depth);
+    FExtrudeDepthSlider.Value := Max(1, Min(200, FExtrudeDraft.Depth));
+    if FExtrudeDraft.Reversed then
+      FExtrudeReverseButton.Text := 'Reverse: On'
+    else
+      FExtrudeReverseButton.Text := 'Reverse: Off';
+    if FExtrudeDraft.Symmetric then
+      FExtrudeSymmetricButton.Text := 'Symmetric: On'
+    else
+      FExtrudeSymmetricButton.Text := 'Symmetric: Off';
+  finally
+    FUpdatingExtrudeControls := False;
+  end;
+end;
+
+function TCADAppController.ReadExtrudeDepth: Boolean;
+var
+  Depth: Double;
+begin
+  Result := CADParseExtrudeDepth(FExtrudeDepthEdit.Text, Depth);
+  if Result then
+    FExtrudeDraft.Depth := Depth
+  else
+  begin
+    FExtrudeStatus.Text := 'Enter a positive depth (mm)';
+    W.Status.Text := 'Extrude: depth must be positive and finite';
+  end;
+end;
+
+procedure TCADAppController.RefreshExtrudeDraft;
+var
+  Err: string;
+begin
+  if (FExtrudePanel = nil) or not FExtrudePanel.Visible or
+     (FSketchMode = nil) or not FSketchMode.Active then Exit;
+  if not CADValidateExtrudeOptions(FExtrudeDraft, Err) then
+  begin
+    FExtrudeStatus.Text := Err;
+    Exit;
+  end;
+  FSketchMode.SetExtrudePreview(True, FExtrudeDraft);
+  if FSketchMode.ExtrudePreviewError <> '' then
+    FExtrudeStatus.Text := FSketchMode.ExtrudePreviewError
+  else
+    FExtrudeStatus.Text := Format('OCCT preview | %.3f mm', [FExtrudeDraft.Depth]);
+end;
+
+procedure TCADAppController.ExtrudePreviewClick(Sender: TObject);
+begin
+  if (FSketchMode = nil) or not FSketchMode.Active then Exit;
+  FExtrudeDraft := FExtrudeSaved;
+  FExtrudePanel.Visible := True;
+  FSketchMode.SetTool(sktSelect); { contour picking is available in Select }
+  UpdateExtrudeControls;
+  RefreshExtrudeDraft;
+end;
+
+procedure TCADAppController.ExtrudeDepthKeyDown(Sender: TObject;
+  var Key: Word; Shift: TShiftState);
+begin
+  if Key <> VK_RETURN then Exit;
+  Key := 0;
+  if not ReadExtrudeDepth then Exit;
+  UpdateExtrudeControls;
+  RefreshExtrudeDraft;
+end;
+
+procedure TCADAppController.ExtrudeDepthSliderChange(Sender: TObject);
+begin
+  if FUpdatingExtrudeControls or not FExtrudePanel.Visible then Exit;
+  FExtrudeDraft.Depth := FExtrudeDepthSlider.Value;
+  UpdateExtrudeControls;
+  RefreshExtrudeDraft;
+end;
+
+procedure TCADAppController.ExtrudeReverseClick(Sender: TObject);
+begin
+  if not FExtrudePanel.Visible then Exit;
+  FExtrudeDraft.Reversed := not FExtrudeDraft.Reversed;
+  UpdateExtrudeControls;
+  RefreshExtrudeDraft;
+end;
+
+procedure TCADAppController.ExtrudeSymmetricClick(Sender: TObject);
+begin
+  if not FExtrudePanel.Visible then Exit;
+  FExtrudeDraft.Symmetric := not FExtrudeDraft.Symmetric;
+  UpdateExtrudeControls;
+  RefreshExtrudeDraft;
+end;
+
+procedure TCADAppController.ExtrudeConfirmClick(Sender: TObject);
+begin
+  if not FExtrudePanel.Visible or not ReadExtrudeDepth then Exit;
+  RefreshExtrudeDraft;
+  if FSketchMode.ExtrudePreviewError <> '' then Exit;
+  FinishClick(Sender);
+end;
+
+procedure TCADAppController.ExtrudeCancelClick(Sender: TObject);
+begin
+  if not FExtrudePanel.Visible then Exit;
+  FExtrudePanel.Visible := False;
+  FExtrudeDraft := FExtrudeSaved;
+  FSketchMode.SetExtrudePreview(False, FExtrudeSaved);
+end;
+
 procedure TCADAppController.FinishSketch;
 var
   Sk, Ex: TCADId;
@@ -474,6 +640,9 @@ begin
     Exit;
   ShowDocumentObjects(False);
   FEditSketch := CADNoId;
+  FEditExtrude := CADNoId;
+  FExtrudeSaved := CADDefaultExtrudeOptions;
+  FExtrudeDraft := FExtrudeSaved;
   FSketchMode.Enter([0, 0, 0], [1, 0, 0], [0, 0, 1]);
   ModeChanged;
 end;
@@ -587,8 +756,12 @@ begin
   if (FDoc = nil) or FSketchMode.Active then
     Exit;
   F := FDoc.Find(AId);
+  FEditExtrude := CADNoId;
   if (F is TCADExtrudeFeature) and (Length(F.Inputs) > 0) then
+  begin
+    FEditExtrude := F.Id;
     F := FDoc.Find(F.Inputs[0]);
+  end;
   if F is TCADSketchFeature then
     OpenSketchOf(F.Id)
   else if F <> nil then
@@ -616,6 +789,15 @@ begin
   FEditSketch := Id;
   FSketchMode.EnterSketch(S);
   FSketchMode.LoadContours(FDoc.Find(Id).GetParamValue('contours').S);
+  FExtrudeSaved := CADDefaultExtrudeOptions;
+  if CADIdValid(FEditExtrude) and
+     (FDoc.Find(FEditExtrude) is TCADExtrudeFeature) then
+  begin
+    FExtrudeSaved.Depth := FDoc.Find(FEditExtrude).GetParamValue('length').F;
+    FExtrudeSaved.Symmetric := FDoc.Find(FEditExtrude).GetParamValue('symmetric').B;
+    FExtrudeSaved.Reversed := FDoc.Find(FEditExtrude).GetParamValue('reversed').B;
+  end;
+  FExtrudeDraft := FExtrudeSaved;
   ModeChanged;
 end;
 
@@ -626,6 +808,7 @@ begin
     Exit;
   FSketchMode.Leave;
   FEditSketch := CADNoId;
+  FEditExtrude := CADNoId;
   ShowDocumentObjects(True);
   ModeChanged;
   W.Status.Text := 'Sketch changes discarded';

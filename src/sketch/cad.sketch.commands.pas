@@ -143,6 +143,7 @@ begin
   Best := ATol;
   for I := 0 to S.PointCount - 1 do
   begin
+    if not S.Points[I].Active then Continue;
     D := Hypot(S.PointX(I) - X, S.PointY(I) - Y);
     if D <= Best then
     begin
@@ -155,6 +156,7 @@ begin
     Exit;
   for I := 0 to S.EntityCount - 1 do
   begin
+    if not S.Entities[I].Active then Continue;
     D := EntityDistance(S, I, X, Y);
     if D <= Best then
     begin

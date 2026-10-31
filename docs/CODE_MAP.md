@@ -15,5 +15,5 @@ Format: `path` | unit | lines | C: classes [| R: routines with --routines]
 `src/core/cad.core.resultcache.pas` | CAD.Core.ResultCache | 239 | C: TCADCacheStats TCADResultCache
 `src/core/cad.core.values.pas` | CAD.Core.Values | 121 | C: TCADValue TCADParam
 `src/core/cad.core.workerpool.pas` | CAD.Core.WorkerPool | 167 | C: TCADWorkerPool TCADWorkerThread
-`src/occt/cad.occt.library.pas` | CAD.OCCT.Library | 285 | C: TOCCTLibrary
+`src/occt/cad.occt.bridge.pas` | CAD.OCCT.Bridge | 285 | C: TOCCTLibrary
 `src/occt/cad.occt.options.pas` | CAD.OCCT.Options | 86 | C: TOCCTBridgeOptions

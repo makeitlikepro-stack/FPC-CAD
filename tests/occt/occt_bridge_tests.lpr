@@ -10,7 +10,7 @@ program occt_bridge_tests;
 
 uses
   {$ifdef unix}cthreads,{$endif}
-  SysUtils, Math, CAD.Config.Performance, CAD.OCCT.Options, CAD.OCCT.Library;
+  SysUtils, Math, CAD.Config.Performance, CAD.OCCT.Options, CAD.OCCT.Bridge;
 
 var
   Checks, Failures: Integer;

@@ -1,4 +1,4 @@
-unit CAD.OCCT.Library;
+unit CAD.OCCT.Bridge;
 {$mode objfpc}{$H+}
 
 { ROLE:      loads libocct_bridge (external/occt_bridge) and exposes its C

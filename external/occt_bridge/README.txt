@@ -3,7 +3,7 @@ OCCT C ABI bridge (FPC-CAD)
 
 Moved from the UI engine (engine main 5982eef, external/occt_bridge) on
 2026-10-31: OCCT belongs to the CAD project. Pascal side: src/occt
-(CAD.OCCT.Library = the only unit with the C names, CAD.OCCT.Options).
+(CAD.OCCT.Bridge = the only unit with the C names, CAD.OCCT.Options).
 
 Speed options (since FPC-CAD stage 3)
 -------------------------------------

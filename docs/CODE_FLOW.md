@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `src/config/` | settings records only (performance knobs) | RTL |
 | `src/core/` | the model and the recompute machinery | RTL, `src/config` |
-| `src/occt/` | OCCT adapter: `CAD.OCCT.Library` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
+| `src/occt/` | OCCT adapter: `CAD.OCCT.Bridge` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
 | `src/app/` | (stage 4) UI on the engine, viewport, GPU compute jobs | everything |
 
@@ -72,7 +72,7 @@ TCADHistory.Execute(TCADAddFeatureCommand)
 
 ```
 TCADPerformanceOptions (src/config)
-  -> TOCCTLibrary.ApplyOptions                    cad.occt.library
+  -> TOCCTLibrary.ApplyOptions                    cad.occt.bridge
        -> OCCTOptionsFromPerformance              cad.occt.options (88-byte C record)
        -> occt_bridge_set_options                 occt_bridge.cpp (size/version check, mutex copy,
                                                   OSD_ThreadPool size)

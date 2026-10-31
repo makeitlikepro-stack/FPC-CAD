@@ -6,8 +6,8 @@ Read this first in a new session, then `docs/ENGINEERING_LOG.md` (last entries),
 ## Repos and heads
 | Repo | main | dev |
 | --- | --- | --- |
-| makeitlikepro-stack/FPC-CAD | 5074505 (old, needs user final acceptance) | 6bb739b |
-| makeitlikepro-stack/FPC-OpenGL-UI-Engine | caa157a (Viewport3D, OCCT removed) | 7eb13fb |
+| makeitlikepro-stack/FPC-CAD | 5074505 (old, needs user final acceptance) | fad413b (stage 4 steps 1-3) |
+| makeitlikepro-stack/FPC-OpenGL-UI-Engine | caa157a (Viewport3D, OCCT removed; FPC-CAD pin) | 7eb13fb (parked: `claude/edge-depth-bias` 4ec6764) |
 | FPC-Visual-IDE | cb7d74d (Viewport3D in palette) | 660a8bc |
 
 User paths: FPC-CAD at `/home/mehdi/Documents/lazarus projects/FPC-CAD` (latest run;
@@ -33,14 +33,22 @@ System OCCT 7.6.3 (bridge also checked against 7.8.1 headers).
   8x6 holes: 529 ms -> 306 ms. Commands:
   `bash scripts/test_core.sh` and `bash scripts/test_occt.sh`.
 
+- Stage 4 steps 1-3: `src/view` (MeshConvert: OCCT mesh -> TV3DMeshData, edge
+  polylines joined, smooth normals; Sync: shown results -> viewport objects,
+  id = slot + 1; ViewportTarget), `src/app` + `app/fpc_cad.lpi` (plate with 6
+  holes, radius slider, pick shows OCCT face/edge index, timings).
+  `bash scripts/test_view.sh`: view mesh 36/36, view sync 17/17 PASS; GUI runs
+  (`bash scripts/build_app.sh && ./fpc_cad`). Engine widgets: place with
+  Left/Top (X/Y are centre offsets, Y up).
+
 ## Open
 1. Core test result after step 3 not reported yet (`bash scripts/test_core.sh`).
 2. Parallel chains give no gain (306 vs 307 ms): OCCT booleans already use all
    cores (RunParallel). Next measure: RunParallel off + parallel chains.
-3. Stage 4: FPC-CAD viewport on engine `TUIViewport3D` (OCCT mesh -> TV3DMeshData),
-   GPU compute jobs with CPU fallback.
-4. Engine viewport draw artifacts on the user's GPU; `cad_edge` shader frustum
-   width bug (needs approval).
+3. Stage 4 step 4: GPU compute jobs with CPU fallback.
+4. Viewport3D edge breaks on the user's GPU (silhouettes/grazing): edge depth
+   bias tried (engine `claude/edge-depth-bias`, Mesa PASS) - did not fix it on
+   the user GPU; parked by the user, not merged. `cad_edge` frustum width bug.
 5. Later: sketches, Revolve, Fillet, STEP.
 6. User cleanup on GitHub: delete merged `claude/*` branches (proxy returns 403).
    Undecided: IDE `claude/code-map` branch.

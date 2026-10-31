@@ -18,7 +18,8 @@ interface
 uses
   SysUtils, CAD.Core.Values, CAD.Core.Feature, CAD.Core.FeatureRegistry,
   CAD.OCCT.Bridge, CAD.Features.OCCTBase,
-  CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Solver, CAD.Sketch.Profile;
+  CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Solver, CAD.Sketch.Profile,
+  CAD.Sketch.Regions, CAD.Sketch.ContourSelection;
 
 type
   TCADLongIntArray = array of LongInt;
@@ -53,6 +54,9 @@ end;
 procedure TCADSketchFeature.DefineParams;
 begin
   AddParam('geometry', CADText(''));
+  { ALL means every region for backwards compatibility. A v1 list stores
+    the user-picked interior points and survives face-index reordering. }
+  AddParam('contours', CADText('ALL'));
 end;
 
 procedure CADProfileArrays(S: TCADSketch; const P: TCADSketchProfile;
@@ -122,6 +126,8 @@ var
   LoopSizes, FaceLoops: TCADLongIntArray;
   I: Integer;
   List: string;
+  Seeds: TCADContourSeeds;
+  Indices: TCADRegionIndices;
 begin
   AResult := nil;
   S := TCADSketch.Create;
@@ -136,11 +142,23 @@ begin
       AError := Format('Sketch: %s (constraints:%s)', [CADSolveStatusText(R.Status), List]);
       Exit(False);
     end;
-    if not CADBuildProfile(S, P) then
+    if not CADBuildRegions(S, P) then
     begin
-      AError := 'Sketch: ' + P.Error;
+      AError := 'Sketch regions: ' + P.Error;
       Exit(False);
     end;
+    if not CADContoursFromText(GetParamValue('contours').S, Seeds) then
+    begin
+      AError := 'Sketch: invalid selected contours data';
+      Exit(False);
+    end;
+    Indices := CADContourIndices(P, Seeds);
+    if Length(Indices)=0 then
+    begin
+      AError := 'Sketch: no selected contour remains after geometry changes';
+      Exit(False);
+    end;
+    P := CADRegionProfileSubset(P, Indices);
     CADProfileArrays(S, P, Plane, Edges, LoopSizes, FaceLoops);
     Result := WrapShape(OCCT.MakePlanarFaces(Plane, Edges, LoopSizes, FaceLoops),
       'Sketch', AResult, AError);

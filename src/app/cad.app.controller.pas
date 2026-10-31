@@ -444,6 +444,7 @@ begin
   begin
     { an edited sketch: its feature gets the new text; the extrude follows }
     FDoc.SetParam(FEditSketch, 'geometry', CADSketchValue(FSketchMode.Sketch));
+    FDoc.SetParam(FEditSketch, 'contours', CADText(FSketchMode.ContoursText));
     FLastSketch := FEditSketch;
     FEditSketch := CADNoId;
   end
@@ -453,6 +454,7 @@ begin
     F := TCADSketchFeature.Create;
     F.Name := Format('Sketch %d', [FSketchCount]);
     F.SetParamValue('geometry', CADSketchValue(FSketchMode.Sketch));
+    F.SetParamValue('contours', CADText(FSketchMode.ContoursText));
     Sk := FDoc.AttachFeature(F);
     FLastSketch := Sk;
     F := TCADExtrudeFeature.Create;
@@ -613,6 +615,7 @@ begin
   ShowDocumentObjects(False);
   FEditSketch := Id;
   FSketchMode.EnterSketch(S);
+  FSketchMode.LoadContours(FDoc.Find(Id).GetParamValue('contours').S);
   ModeChanged;
 end;
 

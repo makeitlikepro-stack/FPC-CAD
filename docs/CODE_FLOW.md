@@ -7,11 +7,11 @@
 | `src/config/` | settings records only (performance knobs) | RTL |
 | `src/core/` | the model and the recompute machinery | RTL, `src/config` |
 | `src/occt/` | OCCT adapter: `CAD.OCCT.Bridge` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
-| `src/sketch/` | 2D sketch: `CAD.Sketch.Model` (numbers, entities, constraints, plane), `CAD.Sketch.Constraints` (residuals), `CAD.Sketch.Solver` (LM, DOF, redundant/conflicting), `CAD.Sketch.Profile` (loops, faces, holes), `CAD.Sketch.Text` (sketch <-> text parameter) | RTL only |
+| `src/sketch/` | 2D sketch: `CAD.Sketch.Model` (numbers, entities, constraints, plane), `CAD.Sketch.Constraints` (residuals), `CAD.Sketch.Solver` (LM, DOF, redundant/conflicting), `CAD.Sketch.Profile` (loops, faces, holes), `CAD.Sketch.Text` (sketch <-> text parameter), `CAD.Sketch.Editor` (drawing tools, snaps, automatic constraints; no GUI) | RTL only |
 | `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`, `Sketch`, `Extrude`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
-| `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`), `CAD.View.Sync` (shown results -> viewport objects), `CAD.View.ViewportTarget` (sync target on `TUIViewport3D`) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
-| `src/app/` | application: `CAD.App.MainForm` (host, viewport, panel), `CAD.App.DemoScene` (plate + 6 holes); `app/fpc_cad.lpi` builds `./fpc_cad` | everything |
+| `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`), `CAD.View.Sync` (shown results -> viewport objects), `CAD.View.ViewportTarget` (sync target on `TUIViewport3D`), `CAD.View.SketchDraw` (pixel -> sketch ray, camera square to the plane, stroke meshes) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
+| `src/app/` | application: `CAD.App.MainForm` (host, viewport, panel), `CAD.App.DemoScene` (plate + 6 holes), `CAD.App.SketchMode` (viewport mouse -> editor, sketch objects); `app/fpc_cad.lpi` builds `./fpc_cad` | everything |
 
 No unit in `src/core` uses LCL, OpenGL or OCCT.
 

@@ -22,7 +22,8 @@ uses
   OpenGL.Render.Picking3D,
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
-  CAD.App.DemoScene;
+  CAD.Core.Values, CAD.Sketch.Editor, CAD.Features.Sketch, CAD.Features.Extrude,
+  CAD.App.DemoScene, CAD.App.SketchMode;
 
 type
   TCADMainForm = class(TForm)
@@ -39,7 +40,15 @@ type
     FTitle, FRadiusLabel, FStatus: TUILabel;
     FLines: array[0..5] of TUILabel;   { 0..1 pick, 2..5 timing (labels are one line) }
     FRadius: TUISlider;
+    FSketchLabel: TUILabel;
+    FSketchButtons: array[0..8] of TUIButton;
+    FSketchMode: TCADSketchMode;
+    FSketchCount: Integer;
     procedure HostSetupUI(Sender: TObject);
+    procedure SketchClick(Sender: TObject);
+    procedure SketchChanged(Sender: TObject);
+    procedure FinishSketch;
+    procedure ShowDocumentObjects(AVisible: Boolean);
     procedure HostResize(Sender: TObject);
     procedure RadiusChanged(Sender: TObject);
     procedure PickChanged(Sender: TObject);
@@ -59,6 +68,8 @@ var
 implementation
 
 const
+  SketchButtonText: array[0..8] of string = ('New sketch (XY)', 'Line', 'Rect', 'Circle',
+    'Arc', 'Point', 'Cancel', 'Normal view', 'Finish + Extrude 10');
   PanelWidth = 260;
   StatusHeight = 26;
   StartRadius = 4.0;
@@ -84,6 +95,7 @@ end;
 
 destructor TCADMainForm.Destroy;
 begin
+  FreeAndNil(FSketchMode);
   { Sync and target point at the viewport; the document's cache frees OCCT
     shapes, so it goes before the bridge. Widgets belong to the host. }
   FreeAndNil(FSync);
@@ -138,6 +150,17 @@ begin
   FRadius.OnChange := @RadiusChanged;
   for I := 0 to High(FLines) do
     FLines[I] := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
+  FSketchLabel := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
+  FSketchLabel.Text := 'Sketch';
+  for I := 0 to High(FSketchButtons) do
+  begin
+    FSketchButtons[I] := UI.CreateButton(FPanel, 70, 30);
+    FSketchButtons[I].Text := SketchButtonText[I];
+    FSketchButtons[I].Tag := I;
+    FSketchButtons[I].OnClick := @SketchClick;
+  end;
+  FSketchMode := TCADSketchMode.Create(FView);
+  FSketchMode.OnChanged := @SketchChanged;
   FStatus := UI.CreateLabel(FHost.Root, 100, StatusHeight);
   FStatus.TextColor := tColor4.Create(0.85, 0.87, 0.9, 1);
   FRadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
@@ -201,6 +224,18 @@ begin
     Place(FLines[I], 12, Y, PanelWidth - 24, 24);
     Inc(Y, 24);
   end;
+  { sketch: one wide button, 3 x 2 tools, then 2 + 1 wide }
+  Inc(Y, 16);
+  Place(FSketchLabel, 12, Y, PanelWidth - 24, 24);
+  Inc(Y, 28);
+  Place(FSketchButtons[0], 12, Y, PanelWidth - 24, 30);
+  Inc(Y, 36);
+  for I := 1 to 6 do
+    Place(FSketchButtons[I], 12 + ((I - 1) mod 3) * 80, Y + ((I - 1) div 3) * 36, 74, 30);
+  Inc(Y, 72);
+  Place(FSketchButtons[7], 12, Y, PanelWidth - 24, 30);
+  Inc(Y, 36);
+  Place(FSketchButtons[8], 12, Y, PanelWidth - 24, 30);
 end;
 
 procedure TCADMainForm.HostResize(Sender: TObject);
@@ -232,6 +267,81 @@ begin
     FStatus.Text := 'Error: ' + Err;
   if AFit then
     FView.FitAll;
+end;
+
+{ Feature objects (not the sketch-mode ones) on or off. Off keeps the sketch
+  readable; on goes through the sync again (it knows which are shown). }
+procedure TCADMainForm.ShowDocumentObjects(AVisible: Boolean);
+var
+  I: Integer;
+  O: TViewport3DObject;
+begin
+  for I := 0 to FView.ObjectCount - 1 do
+  begin
+    O := FView.Objects[I];
+    if (O.ObjectId <> CAD_SKETCH_OBJECT_ID) and (O.ObjectId <> CAD_SKETCH_PREVIEW_ID) then
+      O.Visible := False;
+  end;
+  if AVisible then
+  begin
+    FSync.Reset;
+    FSync.Sync;
+  end;
+  FView.Invalidate3D;
+end;
+
+procedure TCADMainForm.FinishSketch;
+var
+  Sk, Ex: TCADId;
+  F: TCADFeature;
+  Err: string;
+begin
+  if (FSketchMode.Sketch <> nil) and (FSketchMode.Sketch.EntityCount > 0) then
+  begin
+    Inc(FSketchCount);
+    F := TCADSketchFeature.Create;
+    F.Name := Format('Sketch %d', [FSketchCount]);
+    F.SetParamValue('geometry', CADSketchValue(FSketchMode.Sketch));
+    Sk := FDoc.AttachFeature(F);
+    F := TCADExtrudeFeature.Create;
+    F.Name := Format('Extrude %d', [FSketchCount]);
+    F.SetParamValue('length', CADFloat(10));
+    Ex := FDoc.AttachFeature(F);
+    FDoc.TryLink(Ex, Sk, Err);
+  end;
+  FSketchMode.Leave;
+  ShowDocumentObjects(True);
+  Rebuild(True);
+end;
+
+procedure TCADMainForm.SketchClick(Sender: TObject);
+begin
+  if FDoc = nil then
+    Exit;
+  case TUIWidget(Sender).Tag of
+    0:
+      begin
+        ShowDocumentObjects(False);
+        FSketchMode.Enter([0, 0, 0], [1, 0, 0], [0, 0, 1]);
+      end;
+    1: FSketchMode.SetTool(sktLine);
+    2: FSketchMode.SetTool(sktRectangle);
+    3: FSketchMode.SetTool(sktCircle);
+    4: FSketchMode.SetTool(sktArc);
+    5: FSketchMode.SetTool(sktPoint);
+    6: FSketchMode.Cancel;
+    7: FSketchMode.NormalView;
+    8: if FSketchMode.Active then
+         FinishSketch;
+  end;
+end;
+
+procedure TCADMainForm.SketchChanged(Sender: TObject);
+begin
+  if FSketchMode.Active then
+    FStatus.Text := FSketchMode.StatusText
+  else
+    FStatus.Text := 'left drag: orbit, middle/right: pan, wheel: zoom, click: select';
 end;
 
 procedure TCADMainForm.RadiusChanged(Sender: TObject);

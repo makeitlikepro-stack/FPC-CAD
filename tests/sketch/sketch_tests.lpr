@@ -8,12 +8,13 @@ program sketch_tests;
   3. Every constraint kind on a small case with a known answer.
   4. Minimum-norm move: dragging a corner moves only what it must.
   5. Plane mapping, errors, speed (INFO).
-  6. Profiles: loops, faces, holes, islands, orientation, areas, errors. }
+  6. Profiles: loops, faces, holes, islands, orientation, areas, errors.
+  7. Editor tools: snaps, automatic constraints, previews, cancel. }
 
 uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Constraints, CAD.Sketch.Solver,
-  CAD.Sketch.Profile;
+  CAD.Sketch.Profile, CAD.Sketch.Editor;
 
 var
   Checks, Failures: Integer;
@@ -578,6 +579,121 @@ begin
   end;
 end;
 
+{ ------------------------------------------------------------ editor }
+
+function CountKind(S: TCADSketch; AKind: TCADSketchConstraintKind): Integer;
+var
+  I: Integer;
+begin
+  Result := 0;
+  for I := 0 to S.ConstraintCount - 1 do
+    if S.Constraints[I].Active and (S.Constraints[I].Kind = AKind) then
+      Inc(Result);
+end;
+
+procedure TestEditor;
+var
+  S: TCADSketch;
+  Ed: TCADSketchEditor;
+  P: TCADSketchProfile;
+  Ents, I, Mid: Integer;
+  Pv: TCADSketchPreview;
+begin
+  S := TCADSketch.Create;
+  Ed := TCADSketchEditor.Create(S);
+  try
+    Ed.SnapTolerance := 0.5;
+    Check(Ed.Prompt <> '', 'editor: prompt');
+
+    { closed line chain: origin, horizontal, vertical, horizontal, back to the start }
+    Ed.SetTool(sktLine);
+    Ed.Move(0.2, 0.1);
+    Check(Ed.Snap.Kind = snkOrigin, 'line: snaps to the origin');
+    Check(Ed.Click(0.2, 0.1), 'line: first click makes the origin point');
+    Check((S.PointCount = 1) and S.Fixed[S.Points[0].XParam] and Ed.Busy, 'line: origin is a fixed point, chain open');
+    Ed.Move(20, 0.3);
+    Check((Ed.Snap.Kind = snkHorizontal) and (Ed.Snap.Y = 0), 'line: horizontal snap');
+    Check((Ed.PreviewCount = 1) and (Ed.Previews[0].Kind = cpkLine) and (Ed.Previews[0].X2 = 20),
+      'line: rubber band preview');
+    Ed.Click(20, 0.3);
+    Ed.Click(20.2, 15);
+    Ed.Click(0.3, 15.2);
+    Check(Ed.Click(0.1, 0.2), 'line: closing click');
+    Check(not Ed.Busy and (S.EntityCount = 4) and (S.PointCount = 4), 'line: chain closed on its first point');
+    Check((CountKind(S, sckHorizontal) = 2) and (CountKind(S, sckVertical) = 1), 'line: automatic H, V, H');
+    Check(Near(S.PointY(1), 0) and Near(S.PointX(2), 20) and Near(S.PointY(3), 15), 'line: snapped coordinates');
+    Check(CADBuildProfile(S, P) and Near(P.Faces[0].Area, 15 * (20 + 19.7) / 2),
+      'line: closed chain is a face (' + P.Error + ')');
+    Check((Ed.LastSolve.Status = cssSolved) and (Ed.LastSolve.DOF = 3), Format('line: solved, DOF 3, got %d', [Ed.LastSolve.DOF]));
+
+    { midpoint snap and a vertical line, ended with Cancel }
+    Ed.Move(10, 0.1);
+    Check(Ed.Snap.Kind = snkMidpoint, 'midpoint: snap on the bottom line');
+    Ed.Click(10, 0.1);
+    Ed.Click(10.2, 8);
+    Ed.Cancel;
+    Check(not Ed.Busy and (CountKind(S, sckMidpoint) = 1) and (CountKind(S, sckVertical) = 2),
+      'midpoint: Midpoint + vertical line, chain ended by Cancel');
+    Mid := S.PointCount - 2;
+    Check(Near(S.PointX(Mid), 10) and Near(S.PointY(Mid), 0), 'midpoint: the point sits at (10, 0)');
+
+    { zero-length line is ignored }
+    Ents := S.EntityCount;
+    Ed.Click(40, 40);
+    Ed.Click(40, 40);
+    Check(S.EntityCount = Ents, 'line: zero-length click ignored');
+    Ed.Cancel;
+
+    { rectangle }
+    Ed.SetTool(sktRectangle);
+    Ents := S.EntityCount;
+    Ed.Click(30, 30);
+    Ed.Move(50, 40);
+    Check(Ed.PreviewCount = 4, 'rectangle: 4 preview lines');
+    Check(Ed.Click(50, 40) and (S.EntityCount = Ents + 4), 'rectangle: 4 lines');
+    Check((CountKind(S, sckHorizontal) = 4) and (CountKind(S, sckVertical) = 4), 'rectangle: H, V, H, V');
+
+    { cancel half way }
+    Ents := S.EntityCount;
+    Ed.Click(60, 60);
+    Check(Ed.Busy, 'rectangle: one corner pending');
+    Ed.Cancel;
+    Ed.Click(70, 70);
+    Check((S.EntityCount = Ents) and Ed.Busy, 'cancel: the next click starts again');
+    Ed.Cancel;
+
+    { circle }
+    Ed.SetTool(sktCircle);
+    Ed.Click(70, 5);
+    Ed.Move(75, 5);
+    Pv := Ed.Previews[0];
+    Check((Ed.PreviewCount = 1) and (Pv.Kind = cpkCircle) and Near(Pv.R, 5), 'circle: preview radius 5');
+    Check(Ed.Click(75, 5), 'circle: made');
+    Check(Near(S.EntityRadius(S.EntityCount - 1), 5), 'circle: radius 5');
+
+    { arc: centre, start, end projected onto the radius }
+    Ed.SetTool(sktArc);
+    Ed.Click(100, 0);
+    Ed.Click(110, 0);
+    Ed.Move(100, 20);
+    Check((Ed.PreviewCount = 1) and (Ed.Previews[0].Kind = cpkArc) and Near(Ed.Previews[0].Y2, 10),
+      'arc: preview end on the radius');
+    Check(Ed.Click(100, 20), 'arc: made');
+    I := S.EntityCount - 1;
+    Check((S.Entities[I].Kind = sekArc) and Near(S.EntityRadius(I), 10) and
+      Near(S.PointY(S.Entities[I].P2), 10), 'arc: radius 10, end at (100, 10)');
+
+    { point tool }
+    Ed.SetTool(sktPoint);
+    Ents := S.PointCount;
+    Check(not Ed.Click(110, 0.1) and (S.PointCount = Ents), 'point: none on an existing point');
+    Check(Ed.Click(200, 200) and (S.PointCount = Ents + 1), 'point: new point');
+  finally
+    Ed.Free;
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -588,6 +704,7 @@ begin
   TestPlaneAndErrors;
   TestSpeed;
   TestProfiles;
+  TestEditor;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

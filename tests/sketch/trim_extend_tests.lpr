@@ -739,6 +739,159 @@ begin
   end;
 end;
 
+
+{ A freshly cut intersection must be PARAMETRICALLY attached, not merely
+  drawn with the same coordinates as the boundary. }
+procedure TestTrimPointOnLineFollowsBoundary;
+var
+  S: TCADSketch;
+  Line, Boundary, Boundary2, NewEndpoint, I: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+  Found: Boolean;
+  R: TCADSketchSolveResult;
+  E: TCADSketchEntity;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(-10, 0, 10, 0);
+    Boundary := S.AddLineXY(-3, -5, -3, 5);
+    Boundary2 := S.AddLineXY(3, -5, 3, 5);
+    Check(CADPlanSketchTrim(S, Line, 0, 0, Plan, Err) and
+      CADApplySketchTrim(S, Plan, Err),
+      'trim binding: cut a middle segment between two lines (' + Err + ')');
+    E := S.Entities[S.EntityCount - 2];
+    NewEndpoint := E.P2;
+    Found := False;
+    for I := 0 to S.ConstraintCount - 1 do
+      if S.Constraints[I].Active and
+         (S.Constraints[I].Kind = sckPointOnLine) and
+         (S.Constraints[I].A = NewEndpoint) and
+         (S.Constraints[I].B = Boundary) then Found := True;
+    Check(Found, 'trim binding: new point is constrained OnLine to its boundary');
+    E := S.Entities[Boundary];
+    S.MovePoint(E.P1, -2, -5);
+    S.MovePoint(E.P2, -2, 5);
+    S.FixPoint(E.P1);
+    S.FixPoint(E.P2);
+    R := CADSolveSketch(S);
+    Check((R.Status = cssSolved) and Near(S.PointX(NewEndpoint), -2),
+      'trim binding: cut endpoint follows the moved vertical boundary');
+    Check(S.Entities[Boundary2].Active,
+      'trim binding: moving first boundary does not remove second boundary');
+  finally
+    S.Free;
+  end;
+end;
+
+{ If a cut meets an existing boundary endpoint, it should use the SAME
+  point ID. That is a stronger relation than two coincident points. }
+procedure TestTrimAtArcEndpointAndEntityPicking;
+var
+  S: TCADSketch;
+  Line, Arc, Index, NewLine: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+  E: TCADSketchEntity;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(-10, 0, 10, 0);
+    Arc := S.AddArc(S.AddPoint(0, 5),
+      S.AddPoint(5, 0), S.AddPoint(0, 10));
+    Check(CADSketchHit(S, 5, 0, 0.5, Index) = chkPoint,
+      'trim picking: normal selection prefers a sketch point');
+    Check(CADSketchEntityHit(S, 5, 0, 0.5) = Line,
+      'trim picking: Trim picks the line at the arc endpoint instead');
+    Check(CADPlanSketchTrim(S, Line, 8, 0, Plan, Err) and
+      Near(Plan.FromT, 0.75) and Near(Plan.ToT, 1),
+      'trim endpoint: arc start on line acts as a valid crossing');
+    Check(CADApplySketchTrim(S, Plan, Err),
+      'trim endpoint: line tail can be removed at arc start (' + Err + ')');
+    NewLine := S.EntityCount - 1;
+    Check(S.Entities[NewLine].P2 = S.Entities[Arc].P1,
+      'trim endpoint: the trimmed line and arc SHARE an exact point ID');
+    E := S.Entities[Arc];
+    S.MovePoint(E.P1, 4, 0);
+    Check(Near(S.PointX(S.Entities[NewLine].P2), 4),
+      'trim endpoint: moving arc start moves the connected line endpoint');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestCircleConnectionAndNearTangentCrossings;
+var
+  S: TCADSketch;
+  Target, Boundary, Arc, Center, I: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+  N: Integer;
+  R: TCADSketchSolveResult;
+  E: TCADSketchEntity;
+begin
+  S := TCADSketch.Create;
+  try
+    Target := S.AddCircle(S.AddPoint(0, 0), 5);
+    Center := S.AddPoint(9.8, 0);
+    Boundary := S.AddCircle(Center, 5);
+    Check(CADPlanSketchTrim(S, Target, 5, 0, Plan, Err) and
+      (Plan.FromT < 0) and (Plan.ToT > 0),
+      'trim tangency: close but DISTINCT circle crossings detected');
+    Check(CADApplySketchTrim(S, Plan, Err),
+      'trim tangency: narrow circular cap can be cut (' + Err + ')');
+    Arc := S.EntityCount - 1;
+    E := S.Entities[Arc];
+    N := 0;
+    for I := 0 to S.ConstraintCount - 1 do
+      if S.Constraints[I].Active and
+         (S.Constraints[I].Kind = sckPointOnCircle) and
+         (S.Constraints[I].B = Boundary) and
+         ((S.Constraints[I].A = E.P1) or
+          (S.Constraints[I].A = E.P2)) then Inc(N);
+    Check(N = 2, 'trim binding: both remaining arc endpoints lie on second circle');
+    S.MovePoint(Center, 9.6, 0);
+    S.FixPoint(Center);
+    R := CADSolveSketch(S);
+    Check(R.Status = cssSolved,
+      'trim binding: circle trim remains solvable when other circle moves');
+    Check((Abs(Hypot(S.PointX(E.P1) - S.PointX(Center),
+             S.PointY(E.P1) - S.PointY(Center)) - S.EntityRadius(Boundary)) < 1e-5) and
+          (Abs(Hypot(S.PointX(E.P2) - S.PointX(Center),
+             S.PointY(E.P2) - S.PointY(Center)) - S.EntityRadius(Boundary)) < 1e-5),
+      'trim binding: both arc endpoints remain ON the displaced circle');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestTrueTangencyOnLineBoundary;
+var
+  S: TCADSketch;
+  Line, Circle, EndLine: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(-10, 5, 10, 5);
+    Circle := S.AddCircle(S.AddPoint(0, 0), 5);
+    Check(CADPlanSketchTrim(S, Line, 5, 5, Plan, Err) and
+      Near(Plan.FromT, 0.5) and Near(Plan.ToT, 1),
+      'trim tangency: one tangent contact divides a LINE at x=0');
+    Check(CADApplySketchTrim(S, Plan, Err),
+      'trim tangency: line can be cut at a single tangent touch');
+    EndLine := S.EntityCount - 1;
+    Check((S.Entities[EndLine].Kind = sekLine) and
+      (S.Entities[EndLine].Active) and
+      Near(S.PointX(S.Entities[EndLine].P2), 0) and
+      (S.Entities[Circle].Active),
+      'trim tangency: cut line retains segment ending on the circle');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -763,6 +916,10 @@ begin
   TestInvisibleCurveIsNotBoundary;
   TestArcMiddleSegment;
   TestWholeCircleAndArcDeletion;
+  TestTrimPointOnLineFollowsBoundary;
+  TestTrimAtArcEndpointAndEntityPicking;
+  TestCircleConnectionAndNearTangentCrossings;
+  TestTrueTangencyOnLineBoundary;
   if Failures = 0 then
     WriteLn(Format('PASS  trim/extend planning: %d checks', [Checks]))
   else

@@ -689,14 +689,15 @@ end;
 { One click plans a safe line edit and applies it transactionally. }
 procedure TCADSketchMode.LineEditClick(U, V: Double);
 var
-  K: TCADHitKind;
   Index: Integer;
   Plan: TCADLineEditPlan;
   TrimPlan: TCADTrimPlan;
   Err: string;
 begin
-  K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
-  if K <> chkEntity then
+  { Trim/Extend are entity operations. The normal hit tester prefers a
+    vertex, preventing cuts close to an arc endpoint on another entity. }
+  Index := CADSketchEntityHit(FSketch, U, V, FEditor.SnapTolerance);
+  if Index < 0 then
     FLineEditMessage := 'Trim: click a line, arc or circle | Extend: click a line'
   else if (FLineEditMode = lemExtend) and
           (FSketch.Entities[Index].Kind <> sekLine) then

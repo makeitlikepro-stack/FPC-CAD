@@ -6,7 +6,7 @@ unit CAD.App.SketchToolbar;
              undo / redo, view; a second row with the relations. Icon
              buttons (Tabler, assets/icons) with a hint that names the
              shortcut; the active tool is underlined.
-  CALLED BY: CAD.App.MainForm (create, layout, refresh).
+  CALLED BY: CAD.App.Controller (create, layout, refresh).
   CALLS:     CAD.App.SketchMode (tools, undo / redo, view), the panel
              (RunCommand: relation / dimension buttons), engine widgets.
   THREADS:   UI thread.

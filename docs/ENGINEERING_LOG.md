@@ -133,3 +133,13 @@
 - Sketch undo / redo in `TCADSketchMode`: the sketch text after every change that altered it (200 steps); undo / redo reload the text, keep the tool.
 - Panel: tools and relation buttons moved to the toolbar; outside a sketch only New / Edit sketch, inside: relation list, value edit, Delete, DOF line. `RunCommand`, `DeleteSelected` public; the list follows a replaced sketch object (undo).
 - NOT RUN here (GUI).
+
+## 2026-10-31 — IDE step 1: main window as an FPC Visual IDE form (Candidate)
+- User: FPC-CAD should open in our own FPC Visual IDE so the user can work on it too (earlier agreement). Done before the UX overhaul, so the new ribbon / panels can be designed in the IDE.
+- `app/MainForm.fvform` (IDE design, XML): root 1200 x 760, sizeable; `View` (Viewport3D, edges 1.2), `SidePanel` (title, radius label + slider, selected / hover, 4 timing labels), `StatusLabel`. Form events `formOnCreate`, `formOnKeyDown` (sets KeyPreview); slider `eventOnChange="RadiusSliderChange"`.
+- `app/umainform.pas`: `TMainForm = class(TUIForm)` in the IDE's form-unit shape (widget fields in the first section, handlers by name). Only wiring: `DesignLoaded` -> `TCADAppController.Create(Host, widgets).Start`; resize -> `Layout` (now and once more after TUIForm's queued root fit); `DesignFileName` falls back to `app/` (exe is in the repo root for the OCCT bridge).
+- `src/app/cad.app.controller.pas` (new; replaces `cad.app.mainform.pas`): everything the old form did except building widgets. Window edges are kept in code (the declarative design has no anchors / align yet); designed children keep their places (`ResizeWidgetKeepingChildren` on the side panel); the sketch panel starts under the lowest designed demo widget.
+- `app/fpc_cad.lpr`: `TMainForm`, FP exception mask (as the IDE template); `app/fpc_cad.lpi`: `umainform.pas` listed.
+- Still code-built: sketch toolbar, sketch panel, dimension chips (redesigned next).
+- Static: interface-section check PASS; fvform parses. NOT RUN: build, GUI, opening in the IDE.
+- Open: the declarative form has no Align / Anchors (Lazarus-style). Proposed as an engine + IDE feature so window edges move out of code.

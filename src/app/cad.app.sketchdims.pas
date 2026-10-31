@@ -5,7 +5,7 @@ unit CAD.App.SketchDims;
              shows its value in a small chip at its place in the view; a
              click on the chip (or a double click on a line / circle / arc)
              opens an edit box there; Enter sets the value, Esc closes.
-  CALLED BY: CAD.App.MainForm (create, refresh after sketch changes).
+  CALLED BY: CAD.App.Controller (create, refresh after sketch changes).
   CALLS:     CAD.App.SketchMode (projection, dimension commands),
              CAD.Sketch.Commands (chip text, anchor, find), engine widgets.
   THREADS:   UI thread (LCL timer).

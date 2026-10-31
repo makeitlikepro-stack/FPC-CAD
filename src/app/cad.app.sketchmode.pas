@@ -5,7 +5,7 @@ unit CAD.App.SketchMode;
              its editor, turns viewport mouse events into editor calls, and
              keeps two viewport objects (sketch strokes, preview + snap +
              origin) up to date.
-  CALLED BY: CAD.App.MainForm (enter, tool buttons, finish).
+  CALLED BY: CAD.App.Controller (enter, tool buttons, finish).
   CALLS:     CAD.Sketch.Editor / Model / Text, CAD.View.SketchDraw,
              engine TUIViewport3D (objects, camera, mouse events, OnPointerDrag:
              left drags move sketch points instead of orbiting).

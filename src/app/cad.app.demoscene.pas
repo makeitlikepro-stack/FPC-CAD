@@ -4,7 +4,7 @@ unit CAD.App.DemoScene;
 { ROLE:      builds the first viewport scene: a 60 x 40 x 10 plate with a
              3 x 2 grid of through holes (6 chained cuts), and changes the
              hole radius.
-  CALLED BY: CAD.App.MainForm.
+  CALLED BY: CAD.App.Controller.
   CALLS:     CAD.Core.Document, CAD.Features.Box / Cylinder / BooleanOp.
   THREADS:   UI thread (no recompute here; the caller recomputes).
   SPEED:     SetHoleRadius only marks the 6 cylinders; the cache keeps the

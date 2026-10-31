@@ -11,9 +11,25 @@
 | `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`, `Sketch`, `Extrude`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
 | `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`), `CAD.View.Sync` (shown results -> viewport objects), `CAD.View.ViewportTarget` (sync target on `TUIViewport3D`), `CAD.View.SketchDraw` (pixel -> sketch ray, camera square to the plane, stroke meshes) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
-| `src/app/` | application: `CAD.App.MainForm` (host, viewport, panel), `CAD.App.DemoScene` (plate + 6 holes), `CAD.App.SketchMode` (viewport mouse -> editor, sketch objects), `CAD.App.SketchPanel` (sketch tools, constraint buttons, list, dimension edit), `CAD.App.SketchDims` (dimension chips and relation glyphs in the view, in-place edit), `CAD.App.SketchToolbar` (icon toolbar over the view, shortcuts via the main form); `app/fpc_cad.lpi` builds `./fpc_cad` | everything |
+| `src/app/` | application: `CAD.App.Controller` (the app behind the designed main window: OCCT, document, sync, sketch UI, shortcuts, window-edge layout), `CAD.App.DemoScene` (plate + 6 holes), `CAD.App.SketchMode` (viewport mouse -> editor, sketch objects), `CAD.App.SketchPanel` (sketch tools, constraint buttons, list, dimension edit), `CAD.App.SketchDims` (dimension chips and relation glyphs in the view, in-place edit), `CAD.App.SketchToolbar` (icon toolbar over the view, shortcuts via the main form); `app/fpc_cad.lpi` builds `./fpc_cad`; `app/MainForm.fvform` + `app/umainform.pas` = main window designed in FPC Visual IDE | everything |
 
 No unit in `src/core` uses LCL, OpenGL or OCCT.
+
+## Working in FPC Visual IDE
+
+- Open Project: `app/fpc_cad.lpi`. The main window opens in the designer
+  (`app/MainForm.fvform`); its unit is `app/umainform.pas` (`TMainForm =
+  class(TUIForm)`, one field per widget, handlers by name).
+- The form unit only wires: `DesignLoaded` hands the widgets to
+  `TCADAppController` (`src/app/cad.app.controller.pas`), which does the work.
+  A new widget: add it in the designer, then use its field in the controller.
+- No anchors in the design yet: the controller keeps the window edges
+  (view fills the left, `SidePanel` keeps its designed width, `StatusLabel`
+  at the bottom). Everything inside a panel stays where it was designed.
+- The exe is built into the repo root (OCCT bridge next to it); the form
+  finds its design in `app/` (`TMainForm.DesignFileName`).
+- Still built in code (next to redesign): sketch toolbar, sketch panel,
+  dimension chips.
 
 ## Unit header
 

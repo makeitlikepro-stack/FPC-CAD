@@ -5,7 +5,7 @@ unit CAD.App.SketchPanel;
 { ROLE:      the sketch part of the side panel: tool buttons, constraint
              buttons (on the selection), the constraint list, the dimension
              edit (Set) and Delete, and the DOF line.
-  CALLED BY: CAD.App.MainForm (create, layout, new sketch / finish events).
+  CALLED BY: CAD.App.Controller (create, layout, new sketch / finish events).
   CALLS:     CAD.App.SketchMode (tools, commands, dimensions), engine widgets.
   THREADS:   UI thread.
   SPEED:     the list is rebuilt only when the sketch revision changed. }

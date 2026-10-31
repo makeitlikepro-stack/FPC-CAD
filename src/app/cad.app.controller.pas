@@ -1,47 +1,56 @@
-unit CAD.App.MainForm;
+unit CAD.App.Controller;
 {$mode objfpc}{$H+}
 {$codepage utf8}
 
-{ ROLE:      FPC-CAD main window (stage 4 step 3): engine host, 3D viewport
-             fed by the document, a side panel with the hole radius slider,
-             selection and timing lines.
-  CALLED BY: app/fpc_cad.lpr.
+{ ROLE:      the FPC-CAD application behind the designed main window: OCCT,
+             document, viewport sync, the demo plate, sketch mode with its
+             panel, toolbar and dimension chips, keyboard shortcuts, and the
+             window-edge layout (the design has no anchors yet).
+  CALLED BY: UMainForm (app/umainform.pas): Create + Start after GPU setup,
+             Layout on resize, KeyDown, RadiusChanged.
   CALLS:     OCCT bridge (load + options), CAD.Core.Document (Recompute),
              CAD.View.Sync + CAD.View.ViewportTarget + MeshConvert (filler),
-             CAD.App.DemoScene, engine widgets and TUIViewport3D.
+             CAD.App.DemoScene, CAD.App.Sketch* (code-built sketch UI).
   THREADS:   UI thread; Recompute uses the worker pool inside and returns
              before Sync runs.
   SPEED:     a slider change = SetParam x6 + Recompute + Sync; only the cut
-             chain end is meshed and converted (see the timing line). }
+             chain end is meshed and converted (see the timing lines). }
 
 interface
 
 uses
-  Classes, SysUtils, Math, Forms, Controls,
+  Classes, SysUtils, Math, LCLType,
   OpenGL.Types, OpenGL.ECS.Widgets, OpenGL.UI.Host, OpenGL.UI.Viewport3D,
   OpenGL.Render.Picking3D,
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
-  CAD.Features.Sketch, CAD.Features.Extrude,
+  CAD.Sketch.Commands, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
-  CAD.App.SketchToolbar, CAD.Sketch.Commands, LCLType;
+  CAD.App.SketchToolbar;
 
 type
-  TCADMainForm = class(TForm)
+  { The widgets of app/MainForm.fvform the application uses. }
+  TCADAppWidgets = record
+    Root: TUIWidget;
+    View: TUIViewport3D;
+    SidePanel: TUIPanel;
+    Title, RadiusLabel: TUILabel;
+    Radius: TUISlider;
+    Selected, Hover, Recompute, Computed, Meshes, Sync: TUILabel;
+    Status: TUILabel;
+  end;
+
+  TCADAppController = class
   private
     FHost: TUIHostControl;
+    W: TCADAppWidgets;
     FOCCT: TOCCTLibrary;
     FDoc: TCADDocument;
     FTarget: TCADViewportTarget;
     FSync: TCADViewSync;
     FScene: TCADDemoScene;
     FSceneOk: Boolean;
-    FView: TUIViewport3D;
-    FPanel: TUIPanel;
-    FTitle, FRadiusLabel, FStatus: TUILabel;
-    FLines: array[0..5] of TUILabel;   { 0..1 pick, 2..5 timing (labels are one line) }
-    FRadius: TUISlider;
     FSketchMode: TCADSketchMode;
     FSketchPanel: TCADSketchPanel;
     FSketchDims: TCADSketchDims;
@@ -49,83 +58,82 @@ type
     FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
     FLastSketch: TCADId;
     FSketchCount: Integer;
-    procedure HostSetupUI(Sender: TObject);
     procedure NewSketch(Sender: TObject);
     procedure FinishClick(Sender: TObject);
     procedure EditSketchClick(Sender: TObject);
-    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     function SketchToEdit: TCADId;
     procedure SketchChanged(Sender: TObject);
     procedure SketchStatus(Sender: TObject; const AText: string);
     procedure RelationClick(Sender: TObject; AConstraint: Integer);
     procedure FinishSketch;
     procedure ShowDocumentObjects(AVisible: Boolean);
-    procedure HostResize(Sender: TObject);
-    procedure RadiusChanged(Sender: TObject);
     procedure PickChanged(Sender: TObject);
     function LoadOCCT: string;
-    procedure BuildUI;
-    procedure Layout;
     procedure Rebuild(AFit: Boolean);
     function Describe(const AId: TPick3DId): string;
+    procedure SetDemoVisible(AVisible: Boolean);
+    function DemoBottom: Double;
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create(AHost: TUIHostControl; const AWidgets: TCADAppWidgets);
     destructor Destroy; override;
+    { OCCT, document, demo scene, sketch UI; once, after GPU setup. }
+    procedure Start;
+    { Window edges: view fills the left, side panel keeps its designed width
+      on the right, status line at the bottom. Designed children keep their
+      designed places. }
+    procedure Layout;
+    { SolidWorks-like shortcuts while a sketch is open. }
+    procedure KeyDown(var Key: Word; Shift: TShiftState);
+    procedure RadiusChanged;
   end;
 
-var
-  CADMainForm: TCADMainForm;
+{ The engine demo style sheet when FPC_OPENGL_UI_ENGINE names the engine. }
+procedure CADUseEngineStyleSheet(AHost: TUIHostControl);
 
 implementation
 
 const
-  PanelWidth = 260;
-  StatusHeight = 26;
   StartRadius = 4.0;
+  NavigationHint = 'left drag: orbit, middle/right: pan, wheel: zoom, click: select';
 
-constructor TCADMainForm.Create(AOwner: TComponent);
+procedure CADUseEngineStyleSheet(AHost: TUIHostControl);
 var
   EngineDir: string;
 begin
-  inherited CreateNew(AOwner);
-  FEditSketch := CADNoId;
-  FLastSketch := CADNoId;
-  Caption := 'FPC-CAD';
-  Width := 1200;
-  Height := 760;
-  Position := poScreenCenter;
-  FHost := TUIHostControl.Create(Self);
   EngineDir := GetEnvironmentVariable('FPC_OPENGL_UI_ENGINE');
   if EngineDir <> '' then
-    FHost.StyleSheetFile := IncludeTrailingPathDelimiter(EngineDir) + 'demo/styles/ui.css';
-  FHost.Align := alClient;
-  FHost.OnSetupUI := @HostSetupUI;
-  FHost.OnResize := @HostResize;
-  KeyPreview := True;                    { sketch shortcuts reach the form first }
-  OnKeyDown := @FormKeyDown;
-  FHost.Parent := Self;
+    AHost.StyleSheetFile := IncludeTrailingPathDelimiter(EngineDir) + 'demo/styles/ui.css';
 end;
 
-destructor TCADMainForm.Destroy;
+constructor TCADAppController.Create(AHost: TUIHostControl; const AWidgets: TCADAppWidgets);
+begin
+  inherited Create;
+  FHost := AHost;
+  W := AWidgets;
+  FEditSketch := CADNoId;
+  FLastSketch := CADNoId;
+end;
+
+destructor TCADAppController.Destroy;
 begin
   FreeAndNil(FSketchToolbar);
   FreeAndNil(FSketchDims);
   FreeAndNil(FSketchPanel);
   FreeAndNil(FSketchMode);
   { Sync and target point at the viewport; the document's cache frees OCCT
-    shapes, so it goes before the bridge. Widgets belong to the host. }
+    shapes, so it goes before the bridge. Widgets belong to the form. }
   FreeAndNil(FSync);
   FreeAndNil(FTarget);
   FreeAndNil(FDoc);
-  inherited Destroy;
   if FOCCT <> nil then
   begin
     SetOCCT(nil);
     FreeAndNil(FOCCT);
   end;
+  inherited Destroy;
 end;
 
-function TCADMainForm.LoadOCCT: string;
+function TCADAppController.LoadOCCT: string;
 begin
   Result := '';
   FOCCT := TOCCTLibrary.Create;
@@ -142,58 +150,36 @@ begin
   end;
 end;
 
-procedure TCADMainForm.BuildUI;
+procedure TCADAppController.Start;
 var
   UI: TUIWidgetFactory;
-  I: Integer;
+  Err: string;
 begin
   UI := FHost.UI;
-  FView := CreateViewport3D(UI, FHost.Root, 100, 100);
-  FView.ShowEdges := True;
-  FView.EdgeWidthPx := 1.2;              { user: 2.8 px default looked too thick }
-  FView.OnSelectionChanged := @PickChanged;
-  FView.OnPreselectionChanged := @PickChanged;
-
-  FPanel := UI.CreatePanel(FHost.Root, 0, 0, PanelWidth, 100, 0,
-    tColor4.Create(0.16, 0.17, 0.19, 1));
-  FTitle := UI.CreateLabel(FPanel, PanelWidth - 24, 26);
-  FTitle.Text := 'Plate with 6 holes';
-  FRadiusLabel := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
-  FRadius := UI.CreateSlider(FPanel, PanelWidth - 24, 28);
-  FRadius.Minimum := CAD_DEMO_MIN_RADIUS;
-  FRadius.Maximum := CAD_DEMO_MAX_RADIUS;
-  FRadius.Step := 0.25;
-  FRadius.Value := StartRadius;
-  FRadius.OnChange := @RadiusChanged;
-  for I := 0 to High(FLines) do
-    FLines[I] := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
-  FSketchMode := TCADSketchMode.Create(FView);
+  W.View.OnSelectionChanged := @PickChanged;
+  W.View.OnPreselectionChanged := @PickChanged;
+  W.Radius.Minimum := CAD_DEMO_MIN_RADIUS;
+  W.Radius.Maximum := CAD_DEMO_MAX_RADIUS;
+  W.Radius.Step := 0.25;
+  W.Radius.Value := StartRadius;
+  W.RadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
+  { the sketch UI is still built in code (it is redesigned next) }
+  FSketchMode := TCADSketchMode.Create(W.View);
   FSketchMode.OnChanged := @SketchChanged;
-  FSketchPanel := TCADSketchPanel.Create(UI, FPanel, FSketchMode);
+  FSketchPanel := TCADSketchPanel.Create(UI, W.SidePanel, FSketchMode);
   FSketchPanel.OnNewSketch := @NewSketch;
   FSketchPanel.OnFinish := @FinishClick;
   FSketchPanel.OnEditSketch := @EditSketchClick;
   FSketchPanel.OnStatus := @SketchStatus;
-  FSketchToolbar := TCADSketchToolbar.Create(UI, FHost.Root, FSketchMode, FSketchPanel);
+  FSketchToolbar := TCADSketchToolbar.Create(UI, W.Root, FSketchMode, FSketchPanel);
   FSketchToolbar.OnFinish := @FinishClick;
-  FSketchDims := TCADSketchDims.Create(UI, FHost.Root, FView, FSketchMode);
+  FSketchDims := TCADSketchDims.Create(UI, W.Root, W.View, FSketchMode);
   FSketchDims.OnStatus := @SketchStatus;
   FSketchDims.OnConstraintClick := @RelationClick;
-  FStatus := UI.CreateLabel(FHost.Root, 100, StatusHeight);
-  FStatus.TextColor := tColor4.Create(0.85, 0.87, 0.9, 1);
-  FRadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
-  FLines[0].Text := 'Selected: -';
-end;
-
-procedure TCADMainForm.HostSetupUI(Sender: TObject);
-var
-  Err: string;
-begin
-  BuildUI;
   Layout;
   Err := LoadOCCT;
   FDoc := TCADDocument.Create;
-  FTarget := TCADViewportTarget.Create(FView);
+  FTarget := TCADViewportTarget.Create(W.View);
   FSync := TCADViewSync.Create(FDoc, FTarget, @CADFillMeshFromResult);
   if Err = '' then
   begin
@@ -202,70 +188,80 @@ begin
       Rebuild(True);
   end;
   if Err <> '' then
-    FStatus.Text := Err
+    W.Status.Text := Err
   else if FOCCT <> nil then
-    FStatus.Text := Format('OCCT %s | left drag: orbit, middle/right: pan, wheel: zoom, click: select',
-      [FOCCT.OcctVersion]);
+    W.Status.Text := Format('OCCT %s | %s', [FOCCT.OcctVersion, NavigationHint]);
 end;
 
 { Engine geometry: X/Y are the centre offset from the parent centre (Y up);
-  Left/Top are the top-left corner in the parent. A parent resize keeps the
-  centre offsets, so every child is placed again here, after its parent. }
-procedure TCADMainForm.Layout;
+  Left/Top are the top-left corner. A plain Width/Height change keeps the
+  centre offsets of the children, so a widget with designed children is
+  resized with ResizeWidgetKeepingChildren. }
+procedure TCADAppController.Layout;
 var
-  W, H, VW, VH, I, Y: Integer;
-  Demo: Boolean;
-
-  procedure Place(AWidget: TUIWidget; ALeft, ATop, AWidth, AHeight: Double);
-  begin
-    AWidget.Width := AWidth;
-    AWidget.Height := AHeight;
-    AWidget.Left := ALeft;
-    AWidget.Top := ATop;
-  end;
-
+  RW, RH, PW, SH, VW, VH: Double;
 begin
-  W := Max(1, FHost.Width);
-  H := Max(1, FHost.Height);
-  VW := Max(1, W - PanelWidth);
-  VH := Max(1, H - StatusHeight);
-  Place(FView, 0, 0, VW, VH);
-  Place(FPanel, VW, 0, Max(1, W - VW), VH);
-  Place(FStatus, 8, VH, Max(1, W - 16), StatusHeight);
+  if (FSketchPanel = nil) or (W.Root = nil) then
+    Exit;
+  RW := Max(1, W.Root.Width);
+  RH := Max(1, W.Root.Height);
+  PW := W.SidePanel.Width;
+  SH := W.Status.Height;
+  VW := Max(1, RW - PW);
+  VH := Max(1, RH - SH);
+  W.View.Width := VW;
+  W.View.Height := VH;
+  W.View.Left := 0;
+  W.View.Top := 0;
+  FHost.UI.ResizeWidgetKeepingChildren(W.SidePanel, PW, VH);
+  W.SidePanel.Left := VW;
+  W.SidePanel.Top := 0;
+  W.Status.Width := Max(1, RW - 2 * W.Status.Left);
+  W.Status.Top := VH;
   { the demo part gives its room to the sketch panel while sketching }
-  Demo := not FSketchMode.Active;
-  FTitle.Visible := Demo;
-  FRadiusLabel.Visible := Demo;
-  FRadius.Visible := Demo;
-  for I := 0 to High(FLines) do
-    FLines[I].Visible := Demo;
-  Y := 10;
-  if Demo then
-  begin
-    Place(FTitle, 12, 10, PanelWidth - 24, 26);
-    Place(FRadiusLabel, 12, 44, PanelWidth - 24, 24);
-    Place(FRadius, 12, 70, PanelWidth - 24, 28);
-    Y := 112;
-    for I := 0 to High(FLines) do
-    begin
-      if I = 2 then
-        Inc(Y, 16);
-      Place(FLines[I], 12, Y, PanelWidth - 24, 24);
-      Inc(Y, 24);
-    end;
-    Inc(Y, 16);
-  end;
-  FSketchPanel.Layout(12, Y, PanelWidth - 24);
+  SetDemoVisible(not FSketchMode.Active);
+  if FSketchMode.Active then
+    FSketchPanel.Layout(12, 10, PW - 24)
+  else
+    FSketchPanel.Layout(12, DemoBottom + 16, PW - 24);
   FSketchToolbar.Layout(0, 6, VW);
 end;
 
-procedure TCADMainForm.HostResize(Sender: TObject);
+procedure TCADAppController.SetDemoVisible(AVisible: Boolean);
 begin
-  if FHost.Ready and (FView <> nil) then
-    Layout;
+  W.Title.Visible := AVisible;
+  W.RadiusLabel.Visible := AVisible;
+  W.Radius.Visible := AVisible;
+  W.Selected.Visible := AVisible;
+  W.Hover.Visible := AVisible;
+  W.Recompute.Visible := AVisible;
+  W.Computed.Visible := AVisible;
+  W.Meshes.Visible := AVisible;
+  W.Sync.Visible := AVisible;
 end;
 
-procedure TCADMainForm.Rebuild(AFit: Boolean);
+{ Lowest bottom edge of the designed demo widgets (moved in the IDE = the
+  sketch panel follows). }
+function TCADAppController.DemoBottom: Double;
+var
+  Demo: array[0..8] of TUIWidget;
+  I: Integer;
+begin
+  Demo[0] := W.Title;
+  Demo[1] := W.RadiusLabel;
+  Demo[2] := W.Radius;
+  Demo[3] := W.Selected;
+  Demo[4] := W.Hover;
+  Demo[5] := W.Recompute;
+  Demo[6] := W.Computed;
+  Demo[7] := W.Meshes;
+  Demo[8] := W.Sync;
+  Result := 0;
+  for I := Low(Demo) to High(Demo) do
+    Result := Max(Result, Demo[I].Top + Demo[I].Height);
+end;
+
+procedure TCADAppController.Rebuild(AFit: Boolean);
 var
   R: TCADRecomputeReport;
   S: TCADViewSyncReport;
@@ -280,26 +276,26 @@ begin
     Err := F.Name + ': ' + F.LastError
   else if S.Failed > 0 then
     Err := FSync.LastError;
-  FLines[2].Text := Format('Recompute: %d ms', [R.Milliseconds]);
-  FLines[3].Text := Format('  computed %d, cache hits %d', [R.Computed, R.CacheHits]);
-  FLines[4].Text := Format('  meshes %d in %d ms', [R.Display.Prepared, R.Display.Milliseconds]);
-  FLines[5].Text := Format('Sync: %d ms (converted %d)', [S.Milliseconds, S.Updated]);
+  W.Recompute.Text := Format('Recompute: %d ms', [R.Milliseconds]);
+  W.Computed.Text := Format('  computed %d, cache hits %d', [R.Computed, R.CacheHits]);
+  W.Meshes.Text := Format('  meshes %d in %d ms', [R.Display.Prepared, R.Display.Milliseconds]);
+  W.Sync.Text := Format('Sync: %d ms (converted %d)', [S.Milliseconds, S.Updated]);
   if Err <> '' then
-    FStatus.Text := 'Error: ' + Err;
+    W.Status.Text := 'Error: ' + Err;
   if AFit then
-    FView.FitAll;
+    W.View.FitAll;
 end;
 
 { Feature objects (not the sketch-mode ones) on or off. Off keeps the sketch
   readable; on goes through the sync again (it knows which are shown). }
-procedure TCADMainForm.ShowDocumentObjects(AVisible: Boolean);
+procedure TCADAppController.ShowDocumentObjects(AVisible: Boolean);
 var
   I: Integer;
   O: TViewport3DObject;
 begin
-  for I := 0 to FView.ObjectCount - 1 do
+  for I := 0 to W.View.ObjectCount - 1 do
   begin
-    O := FView.Objects[I];
+    O := W.View.Objects[I];
     if O.ObjectId < CAD_SKETCH_FIRST_ID then
       O.Visible := False;
   end;
@@ -308,10 +304,10 @@ begin
     FSync.Reset;
     FSync.Sync;
   end;
-  FView.Invalidate3D;
+  W.View.Invalidate3D;
 end;
 
-procedure TCADMainForm.FinishSketch;
+procedure TCADAppController.FinishSketch;
 var
   Sk, Ex: TCADId;
   F: TCADFeature;
@@ -343,7 +339,7 @@ begin
   Rebuild(True);
 end;
 
-procedure TCADMainForm.NewSketch(Sender: TObject);
+procedure TCADAppController.NewSketch(Sender: TObject);
 begin
   if FDoc = nil then
     Exit;
@@ -355,14 +351,14 @@ end;
 
 { The sketch of the selected body (an Extrude's input, or a Sketch), else the
   last sketch made or edited. }
-function TCADMainForm.SketchToEdit: TCADId;
+function TCADAppController.SketchToEdit: TCADId;
 var
   F: TCADFeature;
 begin
   Result := CADNoId;
   F := nil;
-  if FView.Selection.ObjectId <> 0 then
-    F := FDoc.Find(TCADViewSync.FeatureOf(FView.Selection.ObjectId));
+  if W.View.Selection.ObjectId <> 0 then
+    F := FDoc.Find(TCADViewSync.FeatureOf(W.View.Selection.ObjectId));
   if (F is TCADExtrudeFeature) and (Length(F.Inputs) > 0) then
     F := FDoc.Find(F.Inputs[0]);
   if F is TCADSketchFeature then
@@ -372,9 +368,8 @@ begin
     Result := F.Id;
 end;
 
-{ SolidWorks-like shortcuts while a sketch is open; typing in an edit box
-  keeps its keys. }
-procedure TCADMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+{ Typing in an edit box keeps its keys. }
+procedure TCADAppController.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Handled: Boolean;
 begin
@@ -422,7 +417,7 @@ begin
     Key := 0;
 end;
 
-procedure TCADMainForm.EditSketchClick(Sender: TObject);
+procedure TCADAppController.EditSketchClick(Sender: TObject);
 var
   Id: TCADId;
   S: TCADSketch;
@@ -432,7 +427,7 @@ begin
   Id := SketchToEdit;
   if not CADIdValid(Id) then
   begin
-    FStatus.Text := 'Select a body made from a sketch first (click it), then Edit sketch';
+    W.Status.Text := 'Select a body made from a sketch first (click it), then Edit sketch';
     Exit;
   end;
   S := TCADSketch.Create;
@@ -442,7 +437,7 @@ begin
     on E: Exception do
     begin
       S.Free;
-      FStatus.Text := 'Cannot open the sketch: ' + E.Message;
+      W.Status.Text := 'Cannot open the sketch: ' + E.Message;
       Exit;
     end;
   end;
@@ -452,23 +447,23 @@ begin
   Layout;
 end;
 
-procedure TCADMainForm.FinishClick(Sender: TObject);
+procedure TCADAppController.FinishClick(Sender: TObject);
 begin
   FinishSketch;
   Layout;
 end;
 
-procedure TCADMainForm.RelationClick(Sender: TObject; AConstraint: Integer);
+procedure TCADAppController.RelationClick(Sender: TObject; AConstraint: Integer);
 begin
   FSketchPanel.SelectConstraint(AConstraint);
 end;
 
-procedure TCADMainForm.SketchStatus(Sender: TObject; const AText: string);
+procedure TCADAppController.SketchStatus(Sender: TObject; const AText: string);
 begin
-  FStatus.Text := AText;
+  W.Status.Text := AText;
 end;
 
-procedure TCADMainForm.SketchChanged(Sender: TObject);
+procedure TCADAppController.SketchChanged(Sender: TObject);
 begin
   if FSketchPanel <> nil then
     FSketchPanel.Refresh;
@@ -477,21 +472,21 @@ begin
   if FSketchToolbar <> nil then
     FSketchToolbar.Refresh;
   if FSketchMode.Active then
-    FStatus.Text := FSketchMode.StatusText
+    W.Status.Text := FSketchMode.StatusText
   else
-    FStatus.Text := 'left drag: orbit, middle/right: pan, wheel: zoom, click: select';
+    W.Status.Text := NavigationHint;
 end;
 
-procedure TCADMainForm.RadiusChanged(Sender: TObject);
+procedure TCADAppController.RadiusChanged;
 begin
-  FRadiusLabel.Text := Format('Hole radius: %.2f mm', [FRadius.Value]);
+  W.RadiusLabel.Text := Format('Hole radius: %.2f mm', [W.Radius.Value]);
   if not FSceneOk then
     Exit;
-  SetHoleRadius(FDoc, FScene, FRadius.Value);
+  SetHoleRadius(FDoc, FScene, W.Radius.Value);
   Rebuild(False);
 end;
 
-function TCADMainForm.Describe(const AId: TPick3DId): string;
+function TCADAppController.Describe(const AId: TPick3DId): string;
 const
   KindName: array[TPick3DKind] of string = ('none', 'body', 'face', 'edge', 'vertex');
 var
@@ -508,12 +503,12 @@ begin
     Result := Format('%s, %s %d', [Result, KindName[AId.Kind], AId.Element]);
 end;
 
-procedure TCADMainForm.PickChanged(Sender: TObject);
+procedure TCADAppController.PickChanged(Sender: TObject);
 begin
-  if FView.LastError <> '' then
-    FStatus.Text := 'GL error: ' + FView.LastError;
-  FLines[0].Text := 'Selected: ' + Describe(FView.Selection);
-  FLines[1].Text := 'Hover: ' + Describe(FView.Preselection);
+  if W.View.LastError <> '' then
+    W.Status.Text := 'GL error: ' + W.View.LastError;
+  W.Selected.Text := 'Selected: ' + Describe(W.View.Selection);
+  W.Hover.Text := 'Hover: ' + Describe(W.View.Preselection);
 end;
 
 end.

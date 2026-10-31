@@ -5,7 +5,9 @@ unit CAD.App.Controller;
 { ROLE:      the FPC-CAD application behind the designed main window: OCCT,
              document, viewport sync, the demo plate, sketch mode with its
              panel, toolbar and dimension chips, keyboard shortcuts, and the
-             window-edge layout (the design has no anchors yet).
+             window-edge layout (the design has no anchors yet). Every widget
+             is designed in FPC Visual IDE (app/MainForm.fvform) and found by
+             id; only the dimension chips are made here (one per dimension).
   CALLED BY: UMainForm (app/umainform.pas): Create + Start after GPU setup,
              Layout on resize, KeyDown, RadiusChanged.
   CALLS:     OCCT bridge (load + options), CAD.Core.Document (Recompute),
@@ -27,7 +29,7 @@ uses
   CAD.Core.Values, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
-  CAD.App.SketchToolbar;
+  CAD.App.SketchToolbar, CAD.App.DesignLookup;
 
 type
   { The widgets of app/MainForm.fvform the application uses. }
@@ -35,19 +37,19 @@ type
     Root: TUIWidget;
     View: TUIViewport3D;
     SidePanel: TUIPanel;
-    Title, RadiusLabel: TUILabel;
+    RadiusLabel: TUILabel;
     Radius: TUISlider;
     Selected, Hover, Recompute, Computed, Meshes, Sync: TUILabel;
     Status: TUILabel;
-    { first paint order above the design (TUIForm.Design.MaxDocumentRenderOrder + 1) }
-    OverlayOrder: Integer;
   end;
 
   TCADAppController = class
   private
     FHost: TUIHostControl;
+    FLookup: TCADWidgetLookup;
     W: TCADAppWidgets;
-    FOverlay: TUIPanel;                   { over the view: sketch toolbar and chips }
+    FOverlayOrder: Integer;
+    FOverlay: TUIPanel;                   { over the view: dimension chips }
     FOCCT: TOCCTLibrary;
     FDoc: TCADDocument;
     FTarget: TCADViewportTarget;
@@ -74,16 +76,18 @@ type
     function LoadOCCT: string;
     procedure Rebuild(AFit: Boolean);
     function Describe(const AId: TPick3DId): string;
-    procedure SetDemoVisible(AVisible: Boolean);
-    function DemoBottom: Double;
+    procedure ModeChanged;
   public
-    constructor Create(AHost: TUIHostControl; const AWidgets: TCADAppWidgets);
+    { ARoot: the design's root; ALookup: TUIForm.Widget; AOverlayOrder: first
+      paint order above the design (Design.MaxDocumentRenderOrder + 1). }
+    constructor Create(AHost: TUIHostControl; ARoot: TUIWidget;
+      ALookup: TCADWidgetLookup; AOverlayOrder: Integer);
     destructor Destroy; override;
     { OCCT, document, demo scene, sketch UI; once, after GPU setup. }
     procedure Start;
     { Window edges: view fills the left, side panel keeps its designed width
-      on the right, status line at the bottom. Designed children keep their
-      designed places. }
+      on the right, status line at the bottom. Everything inside keeps its
+      designed place. }
     procedure Layout;
     { SolidWorks-like shortcuts while a sketch is open. }
     procedure KeyDown(var Key: Word; Shift: TShiftState);
@@ -108,11 +112,31 @@ begin
     AHost.StyleSheetFile := IncludeTrailingPathDelimiter(EngineDir) + 'demo/styles/ui.css';
 end;
 
-constructor TCADAppController.Create(AHost: TUIHostControl; const AWidgets: TCADAppWidgets);
+constructor TCADAppController.Create(AHost: TUIHostControl; ARoot: TUIWidget;
+  ALookup: TCADWidgetLookup; AOverlayOrder: Integer);
+
+  function L(const AId: string): TUILabel;
+  begin
+    Result := TUILabel(CADDesignWidget(ALookup, AId, TUILabel));
+  end;
+
 begin
   inherited Create;
   FHost := AHost;
-  W := AWidgets;
+  FLookup := ALookup;
+  FOverlayOrder := AOverlayOrder;
+  W.Root := ARoot;
+  W.View := TUIViewport3D(CADDesignWidget(ALookup, 'View', TUIViewport3D));
+  W.SidePanel := TUIPanel(CADDesignWidget(ALookup, 'SidePanel', TUIPanel));
+  W.RadiusLabel := L('RadiusLabel');
+  W.Radius := TUISlider(CADDesignWidget(ALookup, 'RadiusSlider', TUISlider));
+  W.Selected := L('SelectedLabel');
+  W.Hover := L('HoverLabel');
+  W.Recompute := L('RecomputeLabel');
+  W.Computed := L('ComputedLabel');
+  W.Meshes := L('MeshesLabel');
+  W.Sync := L('SyncLabel');
+  W.Status := L('StatusLabel');
   FEditSketch := CADNoId;
   FLastSketch := CADNoId;
 end;
@@ -166,22 +190,21 @@ begin
   W.Radius.Step := 0.25;
   W.Radius.Value := StartRadius;
   W.RadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
-  { The sketch UI is still built in code (it is redesigned next). The
+  { The dimension chips are made per dimension while sketching. The
     design's widgets get paint bands when the design loads, so a widget made
-    later would paint under the view: the toolbar and the chips live on a
-    see-through overlay (host root, not the design) painted after the design;
-    their own widgets get the overlay's order + 1 when they are made. }
+    later would paint under the view: the chips live on a see-through
+    overlay (host root, not the design) painted after the design; its own
+    widgets get the overlay's order + 1 when they are made. }
   FOverlay := UI.CreatePanel(FHost.Root, 0, 0, 100, 100, 0, tColor4.Create(0, 0, 0, 0));
   FOverlay.InputTransparent := True;
-  FOverlay.RenderOrder := W.OverlayOrder;
+  FOverlay.RenderOrder := FOverlayOrder;
   FSketchMode := TCADSketchMode.Create(W.View);
   FSketchMode.OnChanged := @SketchChanged;
-  FSketchPanel := TCADSketchPanel.Create(UI, W.SidePanel, FSketchMode);
+  FSketchPanel := TCADSketchPanel.Create(UI, FLookup, FSketchMode);
   FSketchPanel.OnNewSketch := @NewSketch;
-  FSketchPanel.OnFinish := @FinishClick;
   FSketchPanel.OnEditSketch := @EditSketchClick;
   FSketchPanel.OnStatus := @SketchStatus;
-  FSketchToolbar := TCADSketchToolbar.Create(UI, FOverlay, FSketchMode, FSketchPanel);
+  FSketchToolbar := TCADSketchToolbar.Create(FLookup, FSketchMode, FSketchPanel);
   FSketchToolbar.OnFinish := @FinishClick;
   FSketchDims := TCADSketchDims.Create(UI, FOverlay, W.View, FSketchMode);
   FSketchDims.OnStatus := @SketchStatus;
@@ -231,47 +254,13 @@ begin
   W.SidePanel.Top := 0;
   W.Status.Width := Max(1, RW - 2 * W.Status.Left);
   W.Status.Top := VH;
-  { the demo part gives its room to the sketch panel while sketching }
-  SetDemoVisible(not FSketchMode.Active);
-  if FSketchMode.Active then
-    FSketchPanel.Layout(12, 10, PW - 24)
-  else
-    FSketchPanel.Layout(12, DemoBottom + 16, PW - 24);
-  FSketchToolbar.Layout(0, 6, VW);
 end;
 
-procedure TCADAppController.SetDemoVisible(AVisible: Boolean);
+{ Sketch opened or closed: toolbar shown / hidden, panel parts enabled. }
+procedure TCADAppController.ModeChanged;
 begin
-  W.Title.Visible := AVisible;
-  W.RadiusLabel.Visible := AVisible;
-  W.Radius.Visible := AVisible;
-  W.Selected.Visible := AVisible;
-  W.Hover.Visible := AVisible;
-  W.Recompute.Visible := AVisible;
-  W.Computed.Visible := AVisible;
-  W.Meshes.Visible := AVisible;
-  W.Sync.Visible := AVisible;
-end;
-
-{ Lowest bottom edge of the designed demo widgets (moved in the IDE = the
-  sketch panel follows). }
-function TCADAppController.DemoBottom: Double;
-var
-  Demo: array[0..8] of TUIWidget;
-  I: Integer;
-begin
-  Demo[0] := W.Title;
-  Demo[1] := W.RadiusLabel;
-  Demo[2] := W.Radius;
-  Demo[3] := W.Selected;
-  Demo[4] := W.Hover;
-  Demo[5] := W.Recompute;
-  Demo[6] := W.Computed;
-  Demo[7] := W.Meshes;
-  Demo[8] := W.Sync;
-  Result := 0;
-  for I := Low(Demo) to High(Demo) do
-    Result := Max(Result, Demo[I].Top + Demo[I].Height);
+  FSketchToolbar.UpdateVisible;
+  FSketchPanel.UpdateEnabled;
 end;
 
 procedure TCADAppController.Rebuild(AFit: Boolean);
@@ -359,7 +348,7 @@ begin
   ShowDocumentObjects(False);
   FEditSketch := CADNoId;
   FSketchMode.Enter([0, 0, 0], [1, 0, 0], [0, 0, 1]);
-  Layout;
+  ModeChanged;
 end;
 
 { The sketch of the selected body (an Extrude's input, or a Sketch), else the
@@ -457,13 +446,13 @@ begin
   ShowDocumentObjects(False);
   FEditSketch := Id;
   FSketchMode.EnterSketch(S);
-  Layout;
+  ModeChanged;
 end;
 
 procedure TCADAppController.FinishClick(Sender: TObject);
 begin
   FinishSketch;
-  Layout;
+  ModeChanged;
 end;
 
 procedure TCADAppController.RelationClick(Sender: TObject; AConstraint: Integer);

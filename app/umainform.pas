@@ -22,6 +22,35 @@ uses
 type
   TMainForm = class(TUIForm)
     View: TUIViewport3D;
+    SketchToolbar: TUIPanel;
+    FinishButton: TUIButton;
+    SelectButton: TUIButton;
+    LineButton: TUIButton;
+    RectButton: TUIButton;
+    CircleButton: TUIButton;
+    ArcButton: TUIButton;
+    Arc3Button: TUIButton;
+    PointButton: TUIButton;
+    DimensionButton: TUIButton;
+    DistXButton: TUIButton;
+    DistYButton: TUIButton;
+    UndoButton: TUIButton;
+    RedoButton: TUIButton;
+    NormalViewButton: TUIButton;
+    CancelButton: TUIButton;
+    HorizontalButton: TUIButton;
+    VerticalButton: TUIButton;
+    CoincidentButton: TUIButton;
+    ParallelButton: TUIButton;
+    PerpendicularButton: TUIButton;
+    EqualButton: TUIButton;
+    TangentButton: TUIButton;
+    ConcentricButton: TUIButton;
+    MidpointButton: TUIButton;
+    OnObjectButton: TUIButton;
+    SymmetricButton: TUIButton;
+    FixButton: TUIButton;
+    ActiveToolMark: TUIPanel;
     SidePanel: TUIPanel;
     TitleLabel: TUILabel;
     RadiusLabel: TUILabel;
@@ -32,6 +61,15 @@ type
     ComputedLabel: TUILabel;
     MeshesLabel: TUILabel;
     SyncLabel: TUILabel;
+    SketchGroup: TUIGroupBox;
+    NewSketchButton: TUIButton;
+    EditSketchButton: TUIButton;
+    RelationsLabel: TUILabel;
+    ConstraintList: TUIListBox;
+    ValueEdit: TUIEdit;
+    SetButton: TUIButton;
+    DeleteButton: TUIButton;
+    DofLabel: TUILabel;
     StatusLabel: TUILabel;
     procedure FormCreate(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
@@ -65,26 +103,12 @@ begin
   CADUseEngineStyleSheet(Host);
 end;
 
-{ After GPU setup: the widgets of the design exist and are bound. }
+{ After GPU setup: the widgets of the design exist and are bound; the
+  controller finds the ones it uses by id. }
 procedure TMainForm.DesignLoaded;
-var
-  W: TCADAppWidgets;
 begin
-  W.Root := Design.Root;
-  W.View := View;
-  W.SidePanel := SidePanel;
-  W.Title := TitleLabel;
-  W.RadiusLabel := RadiusLabel;
-  W.Radius := RadiusSlider;
-  W.Selected := SelectedLabel;
-  W.Hover := HoverLabel;
-  W.Recompute := RecomputeLabel;
-  W.Computed := ComputedLabel;
-  W.Meshes := MeshesLabel;
-  W.Sync := SyncLabel;
-  W.Status := StatusLabel;
-  W.OverlayOrder := Design.MaxDocumentRenderOrder + 1;
-  FApp := TCADAppController.Create(Host, W);
+  FApp := TCADAppController.Create(Host, Design.Root, @Widget,
+    Design.MaxDocumentRenderOrder + 1);
   FApp.Start;
 end;
 

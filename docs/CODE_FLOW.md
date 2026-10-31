@@ -20,16 +20,23 @@ No unit in `src/core` uses LCL, OpenGL or OCCT.
 - Open Project: `app/fpc_cad.lpi`. The main window opens in the designer
   (`app/MainForm.fvform`); its unit is `app/umainform.pas` (`TMainForm =
   class(TUIForm)`, one field per widget, handlers by name).
-- The form unit only wires: `DesignLoaded` hands the widgets to
-  `TCADAppController` (`src/app/cad.app.controller.pas`), which does the work.
-  A new widget: add it in the designer, then use its field in the controller.
+- Every widget of the window is in the design: viewport, sketch toolbar
+  (icon buttons with `iconFile`, `hint`; `ActiveToolMark`), side panel
+  (model lines, radius slider, `SketchGroup` with New / Edit sketch, relation
+  list, value edit, Set, Delete, DOF line), status line. Only the dimension
+  chips are made in code (one per dimension, on an overlay above the design).
+- The form unit only wires: `DesignLoaded` creates `TCADAppController`
+  (`src/app/cad.app.controller.pas`), which finds its widgets by id
+  (`CAD.App.DesignLookup`; a renamed or deleted widget gives a clear error
+  naming the id). Ids used by code: see `ActionId` / `RelationId` in
+  `CAD.App.SketchToolbar`, the constructor of `CAD.App.SketchPanel` and of
+  the controller.
+- Icons: `iconFile="../assets/icons/png/24/<key>.png"` (relative to `app/`).
 - No anchors in the design yet: the controller keeps the window edges
   (view fills the left, `SidePanel` keeps its designed width, `StatusLabel`
   at the bottom). Everything inside a panel stays where it was designed.
 - The exe is built into the repo root (OCCT bridge next to it); the form
   finds its design in `app/` (`TMainForm.DesignFileName`).
-- Still built in code (next to redesign): sketch toolbar, sketch panel,
-  dimension chips.
 
 ## Unit header
 

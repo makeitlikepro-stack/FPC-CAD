@@ -1,23 +1,25 @@
 unit CAD.App.SketchToolbar;
 {$mode objfpc}{$H+}
 
-{ ROLE:      SolidWorks-style sketch toolbar over the top of the viewport
-             while a sketch is open: Finish, drawing tools, dimensions,
-             undo / redo, view; a second row with the relations. Icon
-             buttons (Tabler, assets/icons) with a hint that names the
-             shortcut; the active tool is underlined.
-  CALLED BY: CAD.App.Controller (create, layout, refresh).
+{ ROLE:      SolidWorks-style sketch toolbar over the viewport while a sketch
+             is open. The toolbar is designed in FPC Visual IDE
+             (app/MainForm.fvform: panel SketchToolbar with its icon
+             buttons and the ActiveToolMark bar); this class binds the
+             buttons by id to the actions and moves the mark under the
+             active tool.
+  CALLED BY: CAD.App.Controller (create, show / hide, refresh, shortcuts).
   CALLS:     CAD.App.SketchMode (tools, undo / redo, view), the panel
-             (RunCommand: relation / dimension buttons), engine widgets.
+             (RunCommand: relation / dimension buttons).
   THREADS:   UI thread.
-  SPEED:     widgets are made once; Refresh only moves the underline. }
+  SPEED:     binding once; Refresh only moves the mark. }
 
 interface
 
 uses
-  Classes, SysUtils, Math,
-  OpenGL.Types, OpenGL.ECS.Widgets, OpenGL.UI.WidgetKit,
-  CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.App.SketchMode, CAD.App.SketchPanel;
+  Classes, SysUtils,
+  OpenGL.ECS.Widgets,
+  CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.App.SketchMode, CAD.App.SketchPanel,
+  CAD.App.DesignLookup;
 
 type
   TCADToolbarAction = (ctaFinish, ctaSelect, ctaLine, ctaRect, ctaCircle, ctaArc, ctaArc3,
@@ -28,134 +30,72 @@ type
     FMode: TCADSketchMode;
     FPanel: TCADSketchPanel;
     FBar: TUIPanel;
+    FMark: TUIPanel;
     FButtons: array[TCADToolbarAction] of TUIButton;
-    FRelations: array[TCADSketchCommand] of TUIButton;
-    FUnderline: TUIPanel;
     FOnFinish: TNotifyEvent;
     procedure ActionClick(Sender: TObject);
     procedure RelationClick(Sender: TObject);
-    function MakeButton(UI: TUIWidgetFactory; const AIcon, AHint: string; ATag: Integer): TUIButton;
   public
-    constructor Create(UI: TUIWidgetFactory; AParent: TUIWidget; AMode: TCADSketchMode;
+    constructor Create(ALookup: TCADWidgetLookup; AMode: TCADSketchMode;
       APanel: TCADSketchPanel);
-    { Places the bar over the top of the viewport area; hidden outside a sketch. }
-    procedure Layout(ALeft, ATop, AWidth: Double);
-    { Active tool underline. }
+    { Shown only while a sketch is open; the place is the designed one. }
+    procedure UpdateVisible;
+    { Active tool mark. }
     procedure Refresh;
     { The same as the button (keyboard shortcuts use it). }
     procedure Run(AAction: TCADToolbarAction);
     property OnFinish: TNotifyEvent read FOnFinish write FOnFinish;
   end;
 
-function CADIconFile(const AKey: string; ASize: Integer = 24): string;
-
 implementation
 
 const
-  BtnSize = 34;
-  Gap = 3;
-  GroupGap = 14;
   RelationBase = 100;                { tag offset of relation buttons }
 
-  ActionIcon: array[TCADToolbarAction] of string = ('finish', 'select', 'line', 'rect',
-    'circle', 'arc', 'arc3', 'point', 'dimension', 'dist-x', 'dist-y', 'undo', 'redo',
-    'normal-view', 'cancel');
-  ActionHint: array[TCADToolbarAction] of string = ('Finish sketch (Ctrl+Enter)',
-    'Select (S)', 'Line (L)', 'Rectangle (R)', 'Circle (C)', 'Centre arc (A)',
-    '3-point arc (T)', 'Point (P)', 'Dimension (D)', 'Horizontal distance (X)',
-    'Vertical distance (Y)', 'Undo (Ctrl+Z)', 'Redo (Ctrl+Y)', 'Normal to sketch (N)',
-    'Cancel (Esc)');
-  { a gap after these actions separates the groups }
-  GroupEnd: set of TCADToolbarAction = [ctaFinish, ctaPoint, ctaDistY, ctaRedo];
+  { widget ids in app/MainForm.fvform }
+  ActionId: array[TCADToolbarAction] of string = ('FinishButton', 'SelectButton',
+    'LineButton', 'RectButton', 'CircleButton', 'ArcButton', 'Arc3Button', 'PointButton',
+    'DimensionButton', 'DistXButton', 'DistYButton', 'UndoButton', 'RedoButton',
+    'NormalViewButton', 'CancelButton');
+  RelationId: array[TCADSketchCommand] of string = ('HorizontalButton', 'VerticalButton',
+    'CoincidentButton', 'ParallelButton', 'PerpendicularButton', 'EqualButton',
+    'TangentButton', 'ConcentricButton', 'MidpointButton', 'OnObjectButton',
+    'SymmetricButton', 'FixButton', '', '', '');   { dimensions are actions }
 
-  RelationIcon: array[TCADSketchCommand] of string = ('horizontal', 'vertical', 'coincident',
-    'parallel', 'perpendicular', 'equal', 'tangent', 'concentric', 'midpoint', 'on-object',
-    'symmetric', 'fix', 'dimension', 'dist-x', 'dist-y');
-  RelationHint: array[TCADSketchCommand] of string = ('Horizontal (H)', 'Vertical (V)',
-    'Coincident', 'Parallel', 'Perpendicular', 'Equal', 'Tangent', 'Concentric', 'Midpoint',
-    'On object', 'Symmetric', 'Fix', 'Dimension (D)', 'Horizontal distance (X)',
-    'Vertical distance (Y)');
-  { relations shown in the second row (the dimensions are in the first) }
-  RowRelations: set of TCADSketchCommand = [sccHorizontal, sccVertical, sccCoincident,
-    sccParallel, sccPerpendicular, sccEqual, sccTangent, sccConcentric, sccMidpoint,
-    sccOnObject, sccSymmetric, sccFix];
-
-function CADIconFile(const AKey: string; ASize: Integer): string;
-begin
-  Result := ExtractFilePath(ParamStr(0)) + 'assets' + PathDelim + 'icons' + PathDelim + 'png' +
-    PathDelim + IntToStr(ASize) + PathDelim + AKey + '.png';
-end;
-
-function TCADSketchToolbar.MakeButton(UI: TUIWidgetFactory; const AIcon, AHint: string;
-  ATag: Integer): TUIButton;
-var
-  Img: TUIImage;
-begin
-  Result := UI.CreateButton(FBar, BtnSize, BtnSize);
-  Result.Text := '';
-  Result.Tag := ATag;
-  Result.Hint := UTF8String(AHint);
-  Img := UI.CreateImage(Result, 24, 24);
-  if FileExists(CADIconFile(AIcon)) then
-    Img.LoadPNG(CADIconFile(AIcon));
-  Img.InputTransparent := True;
-  Img.SetBounds((BtnSize - 24) / 2, (BtnSize - 24) / 2, 24, 24);
-end;
-
-constructor TCADSketchToolbar.Create(UI: TUIWidgetFactory; AParent: TUIWidget;
-  AMode: TCADSketchMode; APanel: TCADSketchPanel);
+constructor TCADSketchToolbar.Create(ALookup: TCADWidgetLookup; AMode: TCADSketchMode;
+  APanel: TCADSketchPanel);
 var
   A: TCADToolbarAction;
   C: TCADSketchCommand;
+  B: TUIButton;
 begin
   inherited Create;
   FMode := AMode;
   FPanel := APanel;
-  FBar := UI.CreatePanel(AParent, 0, 0, 100, 2 * BtnSize + 3 * Gap, 6,
-    tColor4.Create(0.93, 0.94, 0.96, 0.96));
+  FBar := TUIPanel(CADDesignWidget(ALookup, 'SketchToolbar', TUIPanel));
+  FMark := TUIPanel(CADDesignWidget(ALookup, 'ActiveToolMark', TUIPanel));
+  FMark.InputTransparent := True;
   for A := Low(TCADToolbarAction) to High(TCADToolbarAction) do
   begin
-    FButtons[A] := MakeButton(UI, ActionIcon[A], ActionHint[A], Ord(A));
+    FButtons[A] := TUIButton(CADDesignWidget(ALookup, ActionId[A], TUIButton));
+    FButtons[A].Tag := Ord(A);
     FButtons[A].OnClick := @ActionClick;
   end;
   for C := Low(TCADSketchCommand) to High(TCADSketchCommand) do
-    if C in RowRelations then
+    if RelationId[C] <> '' then
     begin
-      FRelations[C] := MakeButton(UI, RelationIcon[C], RelationHint[C], RelationBase + Ord(C));
-      FRelations[C].OnClick := @RelationClick;
+      B := TUIButton(CADDesignWidget(ALookup, RelationId[C], TUIButton));
+      B.Tag := RelationBase + Ord(C);
+      B.OnClick := @RelationClick;
     end;
-  FUnderline := UI.CreatePanel(FBar, 0, 0, BtnSize - 8, 3, 1, tColor4.Create(0.0, 0.47, 0.84, 1));
-  FUnderline.InputTransparent := True;
+  UpdateVisible;
 end;
 
-procedure TCADSketchToolbar.Layout(ALeft, ATop, AWidth: Double);
-var
-  A: TCADToolbarAction;
-  C: TCADSketchCommand;
-  X, W: Double;
+procedure TCADSketchToolbar.UpdateVisible;
 begin
   FBar.Visible := FMode.Active;
-  if not FMode.Active then
-    Exit;
-  X := Gap;
-  for A := Low(TCADToolbarAction) to High(TCADToolbarAction) do
-  begin
-    FButtons[A].SetBounds(X, Gap, BtnSize, BtnSize);
-    X := X + BtnSize + Gap;
-    if A in GroupEnd then
-      X := X + GroupGap;
-  end;
-  W := X;
-  X := Gap;
-  for C := Low(TCADSketchCommand) to High(TCADSketchCommand) do
-    if FRelations[C] <> nil then
-    begin
-      FRelations[C].SetBounds(X, 2 * Gap + BtnSize, BtnSize, BtnSize);
-      X := X + BtnSize + Gap;
-    end;
-  W := Min(Max(W, X), AWidth);
-  FBar.SetBounds(ALeft + Max(0, (AWidth - W) / 2), ATop, W, 2 * BtnSize + 3 * Gap);
-  Refresh;
+  if FMode.Active then
+    Refresh;
 end;
 
 procedure TCADSketchToolbar.Refresh;
@@ -175,8 +115,10 @@ begin
   else
     A := ctaPoint;
   end;
+  { the mark keeps its designed size; it sits on the bottom edge of the tool }
   B := FButtons[A];
-  FUnderline.SetBounds(B.Left + 4, B.Top + BtnSize - 4, BtnSize - 8, 3);
+  FMark.Left := B.Left + (B.Width - FMark.Width) / 2;
+  FMark.Top := B.Top + B.Height - FMark.Height - 1;
 end;
 
 procedure TCADSketchToolbar.Run(AAction: TCADToolbarAction);

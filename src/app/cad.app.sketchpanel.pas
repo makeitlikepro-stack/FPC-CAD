@@ -2,11 +2,14 @@ unit CAD.App.SketchPanel;
 {$mode objfpc}{$H+}
 {$codepage utf8}
 
-{ ROLE:      the sketch part of the side panel: tool buttons, constraint
-             buttons (on the selection), the constraint list, the dimension
-             edit (Set) and Delete, and the DOF line.
-  CALLED BY: CAD.App.Controller (create, layout, new sketch / finish events).
-  CALLS:     CAD.App.SketchMode (tools, commands, dimensions), engine widgets.
+{ ROLE:      the Sketch group of the side panel, designed in FPC Visual IDE
+             (app/MainForm.fvform: SketchGroup): New / Edit sketch, the
+             relation list, the dimension edit (Set), Delete and the DOF
+             line. Binds the designed widgets by id; enables the sketch part
+             only while a sketch is open. Relation and dimension commands
+             come from the toolbar and the keys (RunCommand).
+  CALLED BY: CAD.App.Controller (create, enable, new sketch / finish events).
+  CALLS:     CAD.App.SketchMode (commands, dimensions), CAD.App.DesignLookup.
   THREADS:   UI thread.
   SPEED:     the list is rebuilt only when the sketch revision changed. }
 
@@ -16,7 +19,7 @@ uses
   Classes, SysUtils, Math, LCLType,
   OpenGL.ECS.Widgets,
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
-  CAD.App.SketchMode;
+  CAD.App.SketchMode, CAD.App.DesignLookup;
 
 type
   TCADStatusEvent = procedure(Sender: TObject; const AText: string) of object;
@@ -26,9 +29,8 @@ type
     FUI: TUIWidgetFactory;
     FMode: TCADSketchMode;
     FSelRevision: string;               { selection text last loaded into the edit }
-    FToolLabel, FConsLabel, FInfo: TUILabel;
-    FTools: array[0..11] of TUIButton;
-    FCommands: array[TCADSketchCommand] of TUIButton;
+    FInfo: TUILabel;
+    FNewSketch, FEditSketch: TUIButton;
     FList: TUIListBox;
     FValue: TUIEdit;
     FSet, FDelete: TUIButton;
@@ -37,8 +39,8 @@ type
     FListSketch: TObject;               { the list belongs to this sketch object }
     FOnNewSketch, FOnFinish, FOnEditSketch: TNotifyEvent;
     FOnStatus: TCADStatusEvent;
-    procedure ToolClick(Sender: TObject);
-    procedure CommandClick(Sender: TObject);
+    procedure NewSketchClick(Sender: TObject);
+    procedure EditSketchClick(Sender: TObject);
     procedure ListChange(Sender: TObject);
     procedure SetClick(Sender: TObject);
     procedure DeleteClick(Sender: TObject);
@@ -50,10 +52,10 @@ type
     function SelectedConstraint: Integer;
     procedure RebuildList;
   public
-    constructor Create(UI: TUIWidgetFactory; AParent: TUIWidget; AMode: TCADSketchMode);
-    { Places everything from (ALeft, ATop) in AWidth; returns the bottom.
-      The constraint part is shown only while a sketch is open. }
-    function Layout(ALeft, ATop, AWidth: Double): Double;
+    constructor Create(UI: TUIWidgetFactory; ALookup: TCADWidgetLookup;
+      AMode: TCADSketchMode);
+    { New / Edit sketch outside a sketch, the relation part inside one. }
+    procedure UpdateEnabled;
     { After any sketch change: list, DOF line. }
     procedure Refresh;
     { Relation / dimension on the selection (toolbar, keys); a new dimension
@@ -73,117 +75,57 @@ type
 implementation
 
 const
-  ToolText: array[0..11] of string = ('New sketch', 'Select', 'Line', 'Rect',
-    'Circle', 'Arc', 'Arc 3pt', 'Point', 'Cancel', 'Normal view', 'Finish sketch', 'Edit sketch');
-  CommandText: array[TCADSketchCommand] of string = ('Horiz', 'Vert', 'Coinc', 'Parallel',
-    'Perp', 'Equal', 'Tangent', 'Concentric', 'Midpoint', 'On obj', 'Symm', 'Fix', 'Dimension',
-    'Dist X', 'Dist Y');
-  RowH = 30;
-  Gap = 6;
-  ListRows = 5;
   ListItemH = 24;
 
 var
   FS: TFormatSettings;
 
-constructor TCADSketchPanel.Create(UI: TUIWidgetFactory; AParent: TUIWidget; AMode: TCADSketchMode);
-var
-  I: Integer;
-  C: TCADSketchCommand;
+constructor TCADSketchPanel.Create(UI: TUIWidgetFactory; ALookup: TCADWidgetLookup;
+  AMode: TCADSketchMode);
 begin
   inherited Create;
   FUI := UI;
   FMode := AMode;
-  FToolLabel := UI.CreateLabel(AParent, 100, 24);
-  FToolLabel.Text := 'Sketch';
-  for I := 0 to High(FTools) do
-  begin
-    FTools[I] := UI.CreateButton(AParent, 70, RowH);
-    FTools[I].Text := ToolText[I];
-    FTools[I].Tag := I;
-    FTools[I].OnClick := @ToolClick;
-  end;
-  FConsLabel := UI.CreateLabel(AParent, 100, 24);
-  FConsLabel.Text := 'Constraints (Select tool, Shift adds)';
-  for C := Low(TCADSketchCommand) to High(TCADSketchCommand) do
-  begin
-    FCommands[C] := UI.CreateButton(AParent, 70, RowH);
-    FCommands[C].Text := CommandText[C];
-    FCommands[C].Tag := Ord(C);
-    FCommands[C].OnClick := @CommandClick;
-  end;
-  FList := UI.CreateListBox(AParent, 100, ListRows * ListItemH);
+  FNewSketch := TUIButton(CADDesignWidget(ALookup, 'NewSketchButton', TUIButton));
+  FEditSketch := TUIButton(CADDesignWidget(ALookup, 'EditSketchButton', TUIButton));
+  FList := TUIListBox(CADDesignWidget(ALookup, 'ConstraintList', TUIListBox));
+  FValue := TUIEdit(CADDesignWidget(ALookup, 'ValueEdit', TUIEdit));
+  FSet := TUIButton(CADDesignWidget(ALookup, 'SetButton', TUIButton));
+  FDelete := TUIButton(CADDesignWidget(ALookup, 'DeleteButton', TUIButton));
+  FInfo := TUILabel(CADDesignWidget(ALookup, 'DofLabel', TUILabel));
+  FNewSketch.OnClick := @NewSketchClick;
+  FEditSketch.OnClick := @EditSketchClick;
+  { the designed height decides the rows; the wheel scrolls the rest }
   FList.ItemHeight := ListItemH;
-  FList.MaxVisibleItems := ListRows;        { fixed height, wheel scrolls }
+  FList.MaxVisibleItems := Max(1, Trunc(FList.Height / ListItemH));
   FList.OnChange := @ListChange;
-  FValue := UI.CreateEdit(AParent, 100, RowH);
-  FValue.Placeholder := 'value, Enter = set';
   FValue.OnKeyDown := @ValueKeyDown;
-  FSet := UI.CreateButton(AParent, 60, RowH);
-  FSet.Text := 'Set';
   FSet.OnClick := @SetClick;
-  FDelete := UI.CreateButton(AParent, 60, RowH);
-  FDelete.Text := 'Delete';
   FDelete.OnClick := @DeleteClick;
-  FInfo := UI.CreateLabel(AParent, 100, 24);
   FListRevision := High(Cardinal);
+  UpdateEnabled;
 end;
 
-procedure Place(W: TUIWidget; L, T, AW, AH: Double);
-begin
-  W.Width := AW;
-  W.Height := AH;
-  W.Left := L;
-  W.Top := T;
-end;
-
-function TCADSketchPanel.Layout(ALeft, ATop, AWidth: Double): Double;
+procedure TCADSketchPanel.UpdateEnabled;
 var
-  Y: Double;
-  I: Integer;
-  C: TCADSketchCommand;
-  Show: Boolean;
+  Sketching: Boolean;
 begin
-  { Tools, dimensions and relations are on the sketch toolbar; the panel
-    keeps New / Edit sketch outside a sketch, and the relation list, value
-    edit and DOF line inside one. The old buttons stay hidden. }
-  Show := FMode.Active;
-  for I := 1 to 10 do
-    FTools[I].Visible := False;
-  for C := Low(TCADSketchCommand) to High(TCADSketchCommand) do
-    FCommands[C].Visible := False;
-  FTools[0].Visible := not Show;
-  FTools[11].Visible := not Show;
-  Y := ATop;
-  Place(FToolLabel, ALeft, Y, AWidth, 24);
-  Y := Y + 26;
-  if not Show then
+  Sketching := FMode.Active;
+  FNewSketch.Enabled := not Sketching;
+  FEditSketch.Enabled := not Sketching;
+  FList.Enabled := Sketching;
+  FValue.Enabled := Sketching;
+  FSet.Enabled := Sketching;
+  FDelete.Enabled := Sketching;
+  if not Sketching then
   begin
-    FToolLabel.Text := 'Sketch';
-    Place(FTools[0], ALeft, Y, (AWidth - Gap) / 2, RowH);
-    Place(FTools[11], ALeft + (AWidth + Gap) / 2, Y, (AWidth - Gap) / 2, RowH);
-    Y := Y + RowH + Gap;
-  end
-  else
-    FToolLabel.Text := 'Relations and dimensions';
-  FConsLabel.Visible := False;
-  FList.Visible := Show;
-  FValue.Visible := Show;
-  FSet.Visible := Show;
-  FDelete.Visible := Show;
-  FInfo.Visible := Show;
-  if not Show then
-    Exit(Y);
-  FList.Width := AWidth;                    { height: rows x item height (list) }
-  FList.Left := ALeft;
-  FList.Top := Y;
-  Y := Y + ListRows * ListItemH + Gap;
-  Place(FValue, ALeft, Y, AWidth - 2 * (60 + Gap), RowH);
-  Place(FSet, ALeft + AWidth - 2 * 60 - Gap, Y, 60, RowH);
-  Place(FDelete, ALeft + AWidth - 60, Y, 60, RowH);
-  Y := Y + RowH + Gap;
-  Place(FInfo, ALeft, Y, AWidth, 24);
-  Result := Y + 26;
+    FList.ClearItems;
+    SetLength(FListMap, 0);
+    FListRevision := High(Cardinal);
+    FListSketch := nil;
+    FValue.Text := '';
+    FInfo.Text := 'No sketch open';
+  end;
 end;
 
 procedure TCADSketchPanel.Status(const AText: string);
@@ -192,27 +134,16 @@ begin
     FOnStatus(Self, AText);
 end;
 
-procedure TCADSketchPanel.ToolClick(Sender: TObject);
+procedure TCADSketchPanel.NewSketchClick(Sender: TObject);
 begin
-  case TUIWidget(Sender).Tag of
-    0: if Assigned(FOnNewSketch) then FOnNewSketch(Self);
-    1: FMode.SetTool(sktSelect);
-    2: FMode.SetTool(sktLine);
-    3: FMode.SetTool(sktRectangle);
-    4: FMode.SetTool(sktCircle);
-    5: FMode.SetTool(sktArc);
-    6: FMode.SetTool(sktArc3);
-    7: FMode.SetTool(sktPoint);
-    8: FMode.Cancel;
-    9: FMode.NormalView;
-    10: if FMode.Active and Assigned(FOnFinish) then FOnFinish(Self);
-    11: if Assigned(FOnEditSketch) then FOnEditSketch(Self);
-  end;
+  if Assigned(FOnNewSketch) then
+    FOnNewSketch(Self);
 end;
 
-procedure TCADSketchPanel.CommandClick(Sender: TObject);
+procedure TCADSketchPanel.EditSketchClick(Sender: TObject);
 begin
-  RunCommand(TCADSketchCommand(TUIWidget(Sender).Tag));
+  if Assigned(FOnEditSketch) then
+    FOnEditSketch(Self);
 end;
 
 procedure TCADSketchPanel.RunCommand(ACommand: TCADSketchCommand);

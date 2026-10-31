@@ -41,6 +41,13 @@ System OCCT 7.6.3 (bridge also checked against 7.8.1 headers).
   (`bash scripts/build_app.sh && ./fpc_cad`). Engine widgets: place with
   Left/Top (X/Y are centre offsets, Y up).
 
+- Stage 5 steps 1-3 (sketcher): `src/sketch` (model, 25 constraint kinds,
+  LM minimum-norm solver with DOF/redundant/conflict, profiles with holes,
+  text format), `Sketch` + `Extrude` features, bridge planar faces / extrude /
+  area. Tests: `bash scripts/test_sketch.sh` 75/75, `bash scripts/test_occt.sh`
+  (bridge 19, features 26, sketch 20) PASS. FPC may evaluate call arguments
+  right to left: never rely on nested AddPoint order.
+
 ## Open
 1. (done) Core tests after step 3: 80/80 PASS.
 2. Parallel chains give no gain (306 vs 307 ms): OCCT booleans already use all
@@ -49,6 +56,7 @@ System OCCT 7.6.3 (bridge also checked against 7.8.1 headers).
 4. Viewport3D edge breaks on the user's GPU (silhouettes/grazing): edge depth
    bias tried (engine `claude/edge-depth-bias`, Mesa PASS) - did not fix it on
    the user GPU; parked by the user, not merged. `cad_edge` frustum width bug.
-5. Later: sketches, Revolve, Fillet, STEP.
+5. Next: interactive sketch editor in the app (stage 5 step 4); later
+   Revolve, Fillet, STEP; sketch on a model face.
 6. User cleanup on GitHub: delete merged `claude/*` branches (proxy returns 403).
    Undecided: IDE `claude/code-map` branch.

@@ -621,7 +621,7 @@ begin
   if FSmartDim then
     SmartClick(U, V)
   else if (FEditor.Tool = sktSelect) and
-          (CADSketchEntityHit(FSketch,U,V,FEditor.SnapTolerance)<0) and
+          (CADSketchHit(FSketch,U,V,FEditor.SnapTolerance,Index)=chkNone) and
           SelectContourAt(U,V,ssShift in Shift) then
   begin
     RefreshSketch;

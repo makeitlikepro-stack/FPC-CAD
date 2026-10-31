@@ -143,7 +143,13 @@ begin
       { a selection that fits: dimension it now; else the Smart Dimension tool }
       if (Length(FMode.Editor.Selection.Points) + Length(FMode.Editor.Selection.Entities) > 0) and
          not FMode.SmartDimension then
-        FPanel.RunCommand(sccDimension)
+      begin
+        { Same in-place value editor as picking a dimension in the view. }
+        if Assigned(FMode.OnSmartDimension) then
+          FMode.OnSmartDimension(Self)
+        else
+          FPanel.RunCommand(sccDimension);
+      end
       else
         FMode.SetSmartDimension(True);
     ctaDistX: FPanel.RunCommand(sccDistX);

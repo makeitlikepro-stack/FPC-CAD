@@ -23,7 +23,8 @@ uses
   CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.Sketch.DimGraphic, CAD.View.SketchDraw,
   OpenGL.Render.Material, CAD.App.SketchFill, CAD.Sketch.TrimExtend,
   CAD.Sketch.CurveTrim, CAD.Sketch.Profile, CAD.Sketch.Regions,
-  CAD.Sketch.ContourSelection;
+  CAD.Sketch.ContourSelection, CAD.Sketch.ExtrudeOptions,
+  CAD.App.ExtrudePreview;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
@@ -31,6 +32,7 @@ const
   CAD_SKETCH_FILL_ID = 900030;         { closed regions, light fill }
   CAD_SKETCH_DIM_ID = 900031;          { drafting dimensions }
   CAD_SKETCH_SELECTED_ID = 900032;     { selected contour fill overlay }
+  CAD_SKETCH_EXTRUDE_ID = 900033;      { OCCT solid preview in Sketch mode }
   { every sketch-mode object id is at or above this }
   CAD_SKETCH_FIRST_ID = 900000;
 
@@ -56,6 +58,12 @@ type
     FContourCount: Integer;              { last resolved selections }
     FLastFillRevision: Cardinal;
     FLastFillContours: string;           { no expensive OCCT rebuild on hover }
+    FExtrudePreviewActive: Boolean;
+    FExtrudeOptions: TCADExtrudeOptions;
+    FExtrudePreviewError: string;
+    FLastExtrudeRevision: Cardinal;
+    FLastExtrudeContours: string;
+    FLastExtrudeOptions: TCADExtrudeOptions;
     FOnSmartDimension: TNotifyEvent;
     FOnContextMenu: TCADViewPointEvent;
     { sketch undo: texts of the sketch after each change }
@@ -75,6 +83,7 @@ type
     function ToSketch(X, Y: Integer; out U, V: Double): Boolean;
     function ObjectMesh(AId: Cardinal; const AMaterial: string = ''): TV3DMeshData;
     procedure RefreshFill;
+    procedure RefreshExtrudePreview;
     procedure RefreshSketch;
     procedure RefreshPreview;
     procedure Changed;
@@ -126,6 +135,12 @@ type
     function ContoursText: string;
     procedure LoadContours(const AText:string);
     procedure ClearContours;
+    { Draft depth/direction and show an actual OCCT solid while editing.
+      Disabling preview removes only the temporary viewport object. }
+    procedure SetExtrudePreview(AEnabled: Boolean;
+      const AOptions: TCADExtrudeOptions);
+    property ExtrudePreviewActive: Boolean read FExtrudePreviewActive;
+    property ExtrudePreviewError: string read FExtrudePreviewError;
     property ContourCount:Integer read FContourCount;
     property LineEditActive: Boolean read FLineEditActive;
     property LineEditMode: TCADLineEditMode read FLineEditMode;
@@ -205,6 +220,11 @@ begin
   FContourCount:=0;
   FLastFillRevision:=High(Cardinal);
   FLastFillContours:='';
+  FExtrudePreviewActive:=False;
+  FExtrudeOptions:=CADDefaultExtrudeOptions;
+  FExtrudePreviewError:='';
+  FLastExtrudeRevision:=High(Cardinal);
+  FLastExtrudeContours:='';
   FEditor.Resolve;                         { states and DOF of a loaded sketch }
   SetLength(FUndo, 1);
   FUndo[0] := CADSketchToText(FSketch);
@@ -250,6 +270,7 @@ begin
   FEditor.SetTool(Tool);
   FEditor.Resolve;
   FLastFillRevision:=High(Cardinal);
+  FLastExtrudeRevision:=High(Cardinal);
   RefreshSketch;
   RefreshPreview;
   FRestoring := True;
@@ -285,6 +306,8 @@ begin
   FSmartDim := False;
   FLineEditActive := False;
   FLineEditMessage := '';
+  FExtrudePreviewActive:=False;
+  FExtrudePreviewError:='';
   FView.OnMouseDown := nil;
   FView.OnMouseUp := nil;
   FView.OnMouseMove := nil;
@@ -305,6 +328,9 @@ begin
   if O <> nil then
     O.Visible := False;
   O := FView.FindObject(CAD_SKETCH_SELECTED_ID);
+  if O <> nil then
+    O.Visible := False;
+  O := FView.FindObject(CAD_SKETCH_EXTRUDE_ID);
   if O <> nil then
     O.Visible := False;
   FView.Invalidate3D;
@@ -375,6 +401,7 @@ begin
   end;
   CADBuildSketchLayers(FEditor, PointPixels * WorldPerPixel, Meshes);
   RefreshFill;
+  RefreshExtrudePreview;
   RefreshDimensions;
   FView.Invalidate3D;
 end;
@@ -430,6 +457,80 @@ begin
   CADBuildSelectedContourFill(FSketch,FContourSeeds,O.Mesh,Behind*0.5);
   FLastFillRevision:=FSketch.Revision;
   FLastFillContours:=ContoursNow;
+end;
+
+const
+  ExtrudePreviewMaterial = 'cad-extrude-live-preview';
+  ExtrudePreviewColor: array[0..2] of Single = (0.25, 0.66, 0.91);
+
+procedure TCADSketchMode.RefreshExtrudePreview;
+var
+  O: TViewport3DObject;
+  M: TRenderMaterial;
+  E: string;
+  ContoursNow: string;
+begin
+  O := FView.FindObject(CAD_SKETCH_EXTRUDE_ID);
+  if not FActive or not FExtrudePreviewActive or (FSketch = nil) then
+  begin
+    if O <> nil then
+      O.Visible := False;
+    Exit;
+  end;
+
+  ContoursNow := CADContoursToText(FContourSeeds);
+  if (O <> nil) and (FLastExtrudeRevision = FSketch.Revision) and
+     (FLastExtrudeContours = ContoursNow) and
+     (FLastExtrudeOptions.Depth = FExtrudeOptions.Depth) and
+     (FLastExtrudeOptions.Symmetric = FExtrudeOptions.Symmetric) and
+     (FLastExtrudeOptions.Reversed = FExtrudeOptions.Reversed) then
+  begin
+    O.Visible := True;
+    Exit;
+  end;
+
+  if FView.Materials.Find(ExtrudePreviewMaterial) = nil then
+  begin
+    M := TRenderMaterial.Create(ExtrudePreviewMaterial, msFlat);
+    M.BaseColor := MaterialColor(ExtrudePreviewColor[0],
+      ExtrudePreviewColor[1], ExtrudePreviewColor[2], 0.58);
+    if not FView.Materials.Register(M, E) then
+      M.Free;
+  end;
+  ObjectMesh(CAD_SKETCH_EXTRUDE_ID, ExtrudePreviewMaterial);
+  O := FView.FindObject(CAD_SKETCH_EXTRUDE_ID);
+  O.CullBackFaces := False;
+  O.UseEdgeColor := True;
+  O.EdgeColor := Viewport3DRGBA(0.12, 0.34, 0.58, 0.9);
+  if CADBuildExtrudePreview(FSketch, FContourSeeds, FExtrudeOptions,
+    O.Mesh, E) then
+    FExtrudePreviewError := ''
+  else
+    FExtrudePreviewError := E;
+  FLastExtrudeRevision := FSketch.Revision;
+  FLastExtrudeContours := ContoursNow;
+  FLastExtrudeOptions := FExtrudeOptions;
+  O.Visible := FExtrudePreviewError = '';
+  FView.Invalidate3D;
+end;
+
+procedure TCADSketchMode.SetExtrudePreview(AEnabled: Boolean;
+  const AOptions: TCADExtrudeOptions);
+var
+  E: string;
+begin
+  if not FActive then Exit;
+  if AEnabled and not CADValidateExtrudeOptions(AOptions, E) then
+  begin
+    FExtrudePreviewError := E;
+    Changed;
+    Exit;
+  end;
+  FExtrudePreviewActive := AEnabled;
+  FExtrudeOptions := AOptions;
+  FExtrudePreviewError := '';
+  RefreshExtrudePreview;
+  Changed;
 end;
 
 procedure TCADSketchMode.RefreshDimensions;

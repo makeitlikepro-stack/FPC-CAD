@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
 branch=claude/viewport-drag-hook
-commit=132b841a65bc13252972fa06d6827673899c948e
-checkpoint=2026-10-31 Candidate: main caa157a + TUIViewport3D.OnPointerDrag (sketch point drag); back to a main commit after acceptance
+commit=496d21eb0237c0229e74ac39dcaa38a2b64ba479
+checkpoint=2026-10-31 Candidate: main caa157a + TUIViewport3D.OnPointerDrag + per-object edge colour; back to a main commit after acceptance
 note=Engine source is not copied here. The build resolves this exact commit (scripts/test_view.sh: ENGINE_DIR).

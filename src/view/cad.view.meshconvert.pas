@@ -3,8 +3,8 @@ unit CAD.View.MeshConvert;
 
 { ROLE:      copies an OCCT display mesh (flat float/uint arrays from the
              bridge) into the engine viewport mesh TV3DMeshData.
-  CALLED BY: CAD.View.Sync (stage 4 step 2), tests/view.
-  CALLS:     CAD.OCCT.Bridge (only in CADRawMeshFromOCCT),
+  CALLED BY: CAD.View.Sync (as its mesh filler), tests/view.
+  CALLS:     CAD.OCCT.Bridge / ShapeResult (CADRawMeshFromOCCT, filler),
              OpenGL.Render.Viewport3DMeshData (engine, no GL).
   THREADS:   any thread; the target mesh must not be drawn while it is filled
              (the viewport uploads it on the UI thread when Revision changes).
@@ -18,7 +18,7 @@ unit CAD.View.MeshConvert;
 interface
 
 uses
-  SysUtils, Math, CAD.OCCT.Bridge,
+  SysUtils, Math, CAD.Core.Feature, CAD.OCCT.Bridge, CAD.OCCT.ShapeResult,
   OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData;
 
 type
@@ -53,6 +53,11 @@ function CADConvertRawMesh(const ARaw: TCADRawMesh; ATarget: TV3DMeshData;
 { Raw view on a bridge mesh handle. ASmooth: per-vertex surface normals
   (curved faces shade round); falls back to flat normals when missing. }
 function CADRawMeshFromOCCT(AMesh: TOCCTMeshHandle; ASmooth: Boolean = True): TCADRawMesh;
+
+{ Mesh filler for CAD.View.Sync (TCADMeshFiller): an OCCT shape result with
+  its display mesh -> AMesh. False for other result types or no mesh. }
+function CADFillMeshFromResult(AResult: TCADResult; AMesh: TV3DMeshData;
+  out AError: string): Boolean;
 
 implementation
 
@@ -253,6 +258,26 @@ begin
   Result.FaceIds := OCCT.MeshFaceIds(AMesh);
   Result.EdgePositions := OCCT.MeshEdgePositions(AMesh);
   Result.EdgeIds := OCCT.MeshEdgeIds(AMesh);
+end;
+
+function CADFillMeshFromResult(AResult: TCADResult; AMesh: TV3DMeshData;
+  out AError: string): Boolean;
+var
+  Stats: TCADMeshConvertStats;
+begin
+  AMesh.Clear;
+  if not (AResult is TOCCTShapeResult) then
+  begin
+    AError := 'not an OCCT shape result';
+    Exit(False);
+  end;
+  if TOCCTShapeResult(AResult).Mesh = nil then
+  begin
+    AError := 'no display mesh';
+    Exit(False);
+  end;
+  Result := CADConvertRawMesh(CADRawMeshFromOCCT(TOCCTShapeResult(AResult).Mesh, True),
+    AMesh, Stats, AError);
 end;
 
 end.

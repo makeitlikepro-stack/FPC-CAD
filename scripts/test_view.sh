@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the OCCT bridge and runs the viewport mesh tests (OCCT mesh -> engine).
+# Builds the OCCT bridge and runs the view tests (mesh convert, viewport sync).
 #   ENGINE_DIR=/path/to/FPC-OpenGL-UI-Engine bash scripts/test_view.sh
 # ENGINE_DIR defaults to ../FPC-OpenGL-UI-Engine next to this repo. It should be
 # at the commit in engine/ENGINE_REF.txt (a different commit only warns).
@@ -20,13 +20,16 @@ else
   echo "INFO  bridge build failed: OCCT part will be skipped"
 fi
 OUT="${OUTDIR:-$(mktemp -d "${TMPDIR:-/tmp}/fpccad-view.XXXXXX")}"
-PROG=view_mesh_tests
-if ! "$FPC" -Mobjfpc -Sa -gl -O2 \
-    "-Fu$ROOT/src/core" "-Fu$ROOT/src/config" "-Fu$ROOT/src/occt" "-Fu$ROOT/src/view" \
-    "-Fu$ENGINE_DIR/src/rendering" "-Fu$ENGINE_DIR/src/ui" \
-    "-FU$OUT" "-FE$OUT" "$ROOT/tests/view/$PROG.lpr" > "$OUT/build-$PROG.log" 2>&1; then
-  echo "BUILD FAILED: $PROG (log: $OUT/build-$PROG.log)" >&2
-  grep -E "Error|Fatal" "$OUT/build-$PROG.log" | head -20 >&2
-  exit 2
-fi
-"$OUT/$PROG"
+RC=0
+for PROG in view_mesh_tests view_sync_tests; do
+  if ! "$FPC" -Mobjfpc -Sa -gl -O2 \
+      "-Fu$ROOT/src/core" "-Fu$ROOT/src/config" "-Fu$ROOT/src/occt" "-Fu$ROOT/src/view" \
+      "-Fu$ENGINE_DIR/src/rendering" "-Fu$ENGINE_DIR/src/ui" \
+      "-FU$OUT" "-FE$OUT" "$ROOT/tests/view/$PROG.lpr" > "$OUT/build-$PROG.log" 2>&1; then
+    echo "BUILD FAILED: $PROG (log: $OUT/build-$PROG.log)" >&2
+    grep -E "Error|Fatal" "$OUT/build-$PROG.log" | head -20 >&2
+    exit 2
+  fi
+  "$OUT/$PROG" || RC=$?
+done
+exit $RC

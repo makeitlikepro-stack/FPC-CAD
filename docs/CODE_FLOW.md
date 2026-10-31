@@ -9,7 +9,7 @@
 | `src/occt/` | OCCT adapter: `CAD.OCCT.Bridge` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
 | `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
-| `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
+| `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`), `CAD.View.Sync` (shown results -> viewport objects), `CAD.View.ViewportTarget` (sync target on `TUIViewport3D`) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
 | `src/app/` | (stage 4) UI on the engine, viewport, GPU compute jobs | everything |
 
 No unit in `src/core` uses LCL, OpenGL or OCCT.
@@ -113,4 +113,18 @@ TCADDocument.Recompute                            cad.core.document
               -> TCADResultCache.Remeasure        cache bytes include the new mesh
             failure -> Feature.DisplayError (model stays cfsClean)
   report: TCADRecomputeReport.Display (Shown, Prepared, Failed, ms)
+```
+
+## Trace 5: a result reaches the screen (stage 4)
+
+```
+TCADDocument.Recompute                       model levels + display pass (meshes shown results)
+TCADViewSync.Sync                            cad.view.sync (UI thread, after Recompute)
+  for each slot: shown and DisplayReady?
+    no  -> TCADViewTarget.SetObjectVisible(False)
+    same result pointer + key -> nothing (or just show again)
+    new -> CADFillMeshFromResult             cad.view.meshconvert (OCCT arrays -> TV3DMeshData)
+           TCADViewportTarget.MeshFor        cad.view.viewporttarget (FindObject / AddObject)
+  any change -> TUIViewport3D.Invalidate3D   GPU upload when the mesh Revision changed
+object id = slot + 1; pick Element = OCCT face/edge index (1-based)
 ```

@@ -7,6 +7,9 @@ unit CAD.Core.ResultCache;
              feature drops a result).
   CALLS:     CAD.Core.Feature (TCADResult), fgl map.
   THREADS:   every public method is thread-safe (one critical section).
+  BYTES:     each result's size is counted once (AccountedBytes) when it is
+             stored; when it grows later (mesh added by the display pass)
+             the document calls Remeasure, so the totals stay exact.
   SPEED:     lookup O(log n) in a sorted map. A result that went out of use
              (old parameter value) stays until the limit, so Undo/Redo and
              dragging back to a previous value cost no recompute at all. }
@@ -52,6 +55,9 @@ type
     function Store(AResult: TCADResult): TCADResult;
     { Use count - 1; may free unused results over the limit. nil is ignored. }
     procedure Release(AResult: TCADResult);
+    { The result's EstimatedBytes changed (display data added): update the
+      totals. Call only for a stored result. nil is ignored. }
+    procedure Remeasure(AResult: TCADResult);
     procedure Clear;
     function Stats: TCADCacheStats;
   end;
@@ -106,7 +112,7 @@ begin
     begin
       Result := FMap.Data[I];
       if Result.UseCount = 0 then
-        Dec(FUnusedBytes, Result.EstimatedBytes);
+        Dec(FUnusedBytes, Result.AccountedBytes);
       Result.UseCount := Result.UseCount + 1;
       Touch(Result);
       Inc(FHits);
@@ -131,14 +137,15 @@ begin
       if Result <> AResult then
         AResult.Free;
       if Result.UseCount = 0 then
-        Dec(FUnusedBytes, Result.EstimatedBytes);
+        Dec(FUnusedBytes, Result.AccountedBytes);
     end
     else
     begin
       Result := AResult;
       Result.UseCount := 0;
+      Result.AccountedBytes := Result.EstimatedBytes;   { counted once, here }
       FMap.Add(Result.Key, Result);
-      Inc(FBytes, Result.EstimatedBytes);
+      Inc(FBytes, Result.AccountedBytes);
     end;
     Result.UseCount := Result.UseCount + 1;
     Touch(Result);
@@ -157,10 +164,28 @@ begin
     begin
       AResult.UseCount := AResult.UseCount - 1;
       if AResult.UseCount = 0 then
-        Inc(FUnusedBytes, AResult.EstimatedBytes);
+        Inc(FUnusedBytes, AResult.AccountedBytes);
     end;
     Touch(AResult);
     TrimLocked;
+  finally
+    LeaveCriticalSection(FLock);
+  end;
+end;
+
+procedure TCADResultCache.Remeasure(AResult: TCADResult);
+var
+  Delta: Int64;
+begin
+  if AResult = nil then
+    Exit;
+  EnterCriticalSection(FLock);
+  try
+    Delta := AResult.EstimatedBytes - AResult.AccountedBytes;
+    AResult.AccountedBytes := AResult.AccountedBytes + Delta;
+    Inc(FBytes, Delta);
+    if AResult.UseCount = 0 then
+      Inc(FUnusedBytes, Delta);
   finally
     LeaveCriticalSection(FLock);
   end;
@@ -171,8 +196,8 @@ var
   R: TCADResult;
 begin
   R := FMap.Data[AIndex];
-  Dec(FBytes, R.EstimatedBytes);
-  Dec(FUnusedBytes, R.EstimatedBytes);
+  Dec(FBytes, R.AccountedBytes);
+  Dec(FUnusedBytes, R.AccountedBytes);
   FMap.Delete(AIndex);
   R.Free;
   Inc(FEvictions);

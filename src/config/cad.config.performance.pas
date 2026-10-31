@@ -31,6 +31,17 @@ type
     MaxBytes: Int64;
   end;
 
+  { When display meshes (triangles for the viewport) are made.
+    See docs/PERFORMANCE.md, "Display pass". }
+  TCADMeshTiming = (
+    cmtDisplayed,    { default: after the recompute, only results that are
+                       shown (end of a chain or ShowMode = csmShow) }
+    cmtEveryResult,  { inside Compute, every result, also intermediate ones
+                       (slow: e.g. 6 holes in a row = 6 meshes, 1 shown) }
+    cmtManual        { never automatically: the caller runs
+                       TCADDocument.PrepareDisplay when it needs meshes }
+  );
+
   { Triangulation (OCCT BRepMesh_IncrementalMesh / IMeshTools_Parameters). }
   TCADMeshOptions = record
     InParallel: Boolean;              { faces meshed on all cores }
@@ -41,9 +52,7 @@ type
     ControlSurfaceDeflection: Boolean; { False = faster on freeform surfaces }
     AllowQualityDecrease: Boolean;    { reuse a finer existing mesh }
     KeepExistingTriangulation: Boolean; { do not clean: unchanged faces keep their mesh }
-    { Mesh each feature result during the (parallel) recompute, so the viewport
-      gets triangles without waiting. False = mesh later, only what is shown. }
-    MeshInRecompute: Boolean;
+    Timing: TCADMeshTiming;           { which results get a mesh, and when }
   end;
 
   { Booleans and other BOPAlgo-based operations (OCCT). }
@@ -96,7 +105,7 @@ begin
   Result.Mesh.ControlSurfaceDeflection := True;
   Result.Mesh.AllowQualityDecrease := True;
   Result.Mesh.KeepExistingTriangulation := True;
-  Result.Mesh.MeshInRecompute := True;
+  Result.Mesh.Timing := cmtDisplayed;
 
   Result.Booleans.RunParallel := True;
   Result.Booleans.UseOBB := True;

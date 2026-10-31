@@ -67,7 +67,7 @@ type
     function ReadOptions(out AOptions: TOCCTBridgeOptions): Boolean;
     function BridgeOptionsSize: Integer;
 
-    { The options last sent with ApplyOptions (features read MeshInRecompute). }
+    { The options last sent with ApplyOptions (features read Mesh.Timing). }
     property Options: TCADPerformanceOptions read FOptions;
     { Box with its minimum corner at (X, Y, Z). }
     function MakeBox(X, Y, Z, DX, DY, DZ: Double): TOCCTShapeHandle;

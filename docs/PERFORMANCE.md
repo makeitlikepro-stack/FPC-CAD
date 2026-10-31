@@ -30,6 +30,17 @@ fields of `TCADPerformanceOptions` (`src/config/cad.config.performance.pas`).
 5. Before computing, each feature builds its **cache key**. If the key equals the
    key of its current result, or the cache holds a result for it, nothing runs.
 
+6. **Display pass** (`CAD.Core.DisplayPass`, after all levels): only results
+   that are *shown* get a mesh. Shown = nothing uses the feature (end of a
+   chain) or `ShowMode = csmShow`; `csmHide` never. A plate with 6 holes in a
+   row makes 6 boolean results but only the last is drawn: 1 mesh, not 6.
+   A result from the cache (Undo, drag back) keeps its mesh: no remesh.
+   Serial on the calling thread on purpose: the bridge meshes under an
+   exclusive lock and each mesh already uses all cores (`Mesh.InParallel`).
+   `Mesh.Timing` chooses: `cmtDisplayed` (default), `cmtEveryResult` (mesh in
+   `Compute`, old behaviour, e.g. for export of every step), `cmtManual`
+   (caller runs `TCADDocument.PrepareDisplay`).
+
 Rules that keep this safe:
 - During a recompute the document is read-only. A feature only reads its inputs'
   results (immutable once stored) and writes its own result.
@@ -47,6 +58,7 @@ Rules that keep this safe:
 | `Mesh.ControlSurfaceDeflection` | `ControlSurfaceDeflection` | off = faster, slightly less accurate on freeform |
 | `Mesh.AllowQualityDecrease` | `AllowQualityDecrease` | reuse a finer existing mesh instead of remeshing |
 | `Mesh.KeepExistingTriangulation` | (skip `BRepTools::Clean`) | unchanged faces are not remeshed |
+| `Mesh.Timing` | (FPC-CAD, display pass) | which results get a mesh: shown only (default), every result, or manual |
 | `Booleans.RunParallel` | `BOPAlgo_Options::SetRunParallel` | parallel intersection |
 | `Booleans.UseOBB` | `SetUseOBB` | oriented boxes reject non-touching pairs early |
 | `Booleans.FuzzyValue` | `SetFuzzyValue` | tolerance for near-coincident input (robustness, sometimes speed) |

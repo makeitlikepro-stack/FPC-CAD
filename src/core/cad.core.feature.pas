@@ -18,19 +18,31 @@ uses
   SysUtils, CAD.Core.Ids, CAD.Core.Values;
 
 type
-  { Output of one feature. Immutable once stored in the cache: many features
-    and the undo history may share it. The cache owns every result. }
+  { Output of one feature. The model part (shape, value) is immutable once
+    stored in the cache: many features and the undo history may share it.
+    The cache owns every result.
+    Display part (mesh): added later, only for results that are shown, by
+    the display pass (CAD.Core.DisplayPass) on the calling thread after all
+    recompute levels finished - never while workers run. }
   TCADResult = class
   private
     FKey: TCADHash;
     FUseCount: Integer;       { features holding it; changed under the cache lock }
     FLastUse: QWord;          { cache LRU stamp }
+    FAccountedBytes: Int64;   { size the cache counted for it (cache lock) }
   public
     { Rough memory size for the cache limit; override for big results. }
     function EstimatedBytes: Int64; virtual;
+    { --- display data (viewport). Default: nothing to prepare. --- }
+    { True when the viewport can draw it without more work. }
+    function DisplayReady: Boolean; virtual;
+    { Makes the display data (OCCT: the mesh). False + AError on failure;
+      the model result stays valid. }
+    function PrepareDisplay(out AError: string): Boolean; virtual;
     property Key: TCADHash read FKey write FKey;
     property UseCount: Integer read FUseCount write FUseCount;
     property LastUse: QWord read FLastUse write FLastUse;
+    property AccountedBytes: Int64 read FAccountedBytes write FAccountedBytes;
   end;
 
   TCADResultArray = array of TCADResult;
@@ -40,6 +52,13 @@ type
     cfsClean,     { result is valid for the current parameters and inputs }
     cfsFailed,    { Compute returned False or raised; see LastError }
     cfsBlocked    { an input is failed or blocked, Compute was not called }
+  );
+
+  { Is the feature's result drawn in the viewport (and so meshed)? }
+  TCADShowMode = (
+    csmAuto,      { shown when nothing uses it (end of a chain) - default }
+    csmShow,      { always shown, e.g. a body the user wants to see mid-tree }
+    csmHide       { never shown }
   );
 
   TCADFeature = class
@@ -53,6 +72,8 @@ type
     FResult: TCADResult;      { not owned (the cache owns it) }
     FState: TCADFeatureState;
     FLastError: string;
+    FShowMode: TCADShowMode;
+    FDisplayError: string;    { last PrepareDisplay failure ('' = ok) }
     function IndexOfParam(const AName: string): Integer;
     function GetParamCount: Integer;
     function GetParam(AIndex: Integer): TCADParam;
@@ -81,6 +102,8 @@ type
     procedure SetInputs(const AInputs: TCADIdArray);
     procedure SetState(AState: TCADFeatureState; const AError: string);
     procedure SetResultRef(AResult: TCADResult);
+    procedure SetShowMode(AMode: TCADShowMode);
+    procedure SetDisplayError(const AError: string);
     function RunCompute(const AInputs: array of TCADResult; out AResult: TCADResult;
       out AError: string): Boolean;
     property Id: TCADId read FId;
@@ -91,6 +114,10 @@ type
     property Output: TCADResult read FResult;
     property State: TCADFeatureState read FState;
     property LastError: string read FLastError;
+    { Change it with TCADDocument.SetShowMode (marks the display pass). }
+    property ShowMode: TCADShowMode read FShowMode;
+    { The model is valid but its mesh failed (State stays cfsClean). }
+    property DisplayError: string read FDisplayError;
     property ParamCount: Integer read GetParamCount;
     property Params[AIndex: Integer]: TCADParam read GetParam;
   end;
@@ -104,11 +131,23 @@ begin
   Result := InstanceSize;
 end;
 
+function TCADResult.DisplayReady: Boolean;
+begin
+  Result := True;
+end;
+
+function TCADResult.PrepareDisplay(out AError: string): Boolean;
+begin
+  AError := '';
+  Result := True;
+end;
+
 constructor TCADFeature.Create;
 begin
   inherited Create;
   FId := CADNoId;
   FState := cfsDirty;
+  FShowMode := csmAuto;
   DefineParams;
 end;
 
@@ -228,6 +267,16 @@ end;
 procedure TCADFeature.SetResultRef(AResult: TCADResult);
 begin
   FResult := AResult;
+end;
+
+procedure TCADFeature.SetShowMode(AMode: TCADShowMode);
+begin
+  FShowMode := AMode;
+end;
+
+procedure TCADFeature.SetDisplayError(const AError: string);
+begin
+  FDisplayError := AError;
 end;
 
 function TCADFeature.RunCompute(const AInputs: array of TCADResult;

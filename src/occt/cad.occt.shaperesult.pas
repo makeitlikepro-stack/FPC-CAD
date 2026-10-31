@@ -3,11 +3,14 @@ unit CAD.OCCT.ShapeResult;
 
 { ROLE:      the result of an OCCT feature: one B-rep shape handle, its exact
              volume and (optionally) its display mesh handle.
-  CALLED BY: OCCT features (create it in Compute), the cache (frees it),
-             the viewport (stage 4: reads the mesh).
+  CALLED BY: OCCT features (create it in Compute), the display pass
+             (PrepareDisplay = make the mesh), the cache (frees it), the
+             viewport (stage 4: reads the mesh).
   CALLS:     CAD.OCCT.Bridge (FreeShape, FreeMesh, MeshVertexCount).
-  THREADS:   created on a worker thread, immutable afterwards, freed by the
-             cache under its lock. The bridge frees handles thread-safely.
+  THREADS:   created on a worker thread; the shape is immutable afterwards.
+             The mesh is added once, by PrepareDisplay (display pass, calling
+             thread, no recompute running) or inside Compute when
+             Mesh.Timing = cmtEveryResult. Freed by the cache under its lock.
   SPEED:     EstimatedBytes follows the mesh size, so the cache limit is
              about real memory; the shape is shared, never copied. }
 
@@ -27,6 +30,9 @@ type
     constructor Create(AShape: TOCCTShapeHandle; AMesh: TOCCTMeshHandle; AVolume: Double);
     destructor Destroy; override;
     function EstimatedBytes: Int64; override;
+    { Display = the triangle mesh (OCCT BRepMesh, options from the bridge). }
+    function DisplayReady: Boolean; override;
+    function PrepareDisplay(out AError: string): Boolean; override;
     property Shape: TOCCTShapeHandle read FShape;
     property Mesh: TOCCTMeshHandle read FMesh;
     property Volume: Double read FVolume;
@@ -48,6 +54,21 @@ begin
   OCCT.FreeMesh(FMesh);
   OCCT.FreeShape(FShape);
   inherited Destroy;
+end;
+
+function TOCCTShapeResult.DisplayReady: Boolean;
+begin
+  Result := FMesh <> nil;
+end;
+
+function TOCCTShapeResult.PrepareDisplay(out AError: string): Boolean;
+begin
+  AError := '';
+  if FMesh = nil then
+    FMesh := OCCT.MeshShape(FShape, 0);     { 0 = deflection from the options }
+  Result := FMesh <> nil;
+  if not Result then
+    AError := 'mesh: ' + OCCT.LastError;
 end;
 
 function TOCCTShapeResult.EstimatedBytes: Int64;

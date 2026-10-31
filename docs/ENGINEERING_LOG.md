@@ -23,3 +23,12 @@
 - Pascal: `CAD.OCCT.ShapeResult` (result owns shape + mesh handles, size estimate from the mesh), `src/features/` (`CAD.Features.OCCTBase`, `.Box`, `.Cylinder`, `.BooleanOp`), global `OCCT` accessor, `Mesh.MeshInRecompute` option (default on). Unit names scanned for reserved words.
 - Test `tests/occt/occt_features_tests.lpr` (run by `scripts/test_occt.sh`): volumes (cut, fuse 9000, common 3000), partial recompute, undo from the cache (0 OCCT calls), error text and blocking, 8 chains x 6 booleans serial vs all cores (INFO) with correct volumes. NOT RUN here.
 - 2026-10-31 user run: occt bridge 19/19 PASS, occt features 17/17 PASS (OCCT 7.8.1). Parallel chains: serial 650 ms, all cores 633 ms — little gain: OCCT ops already run parallel inside (RunParallel, InParallel) and every intermediate boolean result is meshed under the exclusive mesh lock. Next: mesh only results that are displayed (leaf features). Merged to dev.
+
+## 2026-10-31 — Stage 3 step 3: mesh only shown results (Candidate)
+- Cause: 8 chains x 6 booleans gained little from parallel recompute (650 vs 633 ms); every intermediate result was meshed under the exclusive mesh lock (104 meshes, 8 shown).
+- New `CAD.Core.DisplayPass`: after the levels, meshes only shown results (end of a chain, or `ShowMode = csmShow`; `csmHide` never). Serial on the calling thread (exclusive mesh lock, InParallel inside). Cached results keep their mesh.
+- `TCADResult`: `DisplayReady` / `PrepareDisplay` (virtual, default no-op), `AccountedBytes`; cache counts bytes once and `Remeasure` updates totals when a mesh is added (before, `EstimatedBytes` changed after store and totals could drift).
+- `TCADFeature.ShowMode`, `DisplayError`; document `SetShowMode`, `IsShown`, `PrepareDisplay`, `NeedsDisplay`; report `Display` (Shown, Prepared, Failed, ms). Detach marks the display pass (inputs become chain ends).
+- Option `Mesh.MeshInRecompute` replaced by `Mesh.Timing` (`cmtDisplayed` default, `cmtEveryResult` old behaviour, `cmtManual`).
+- Tests: core `TestDisplayPass` (chain end only, csmShow mid-tree, attach/detach end, manual mode, cache bytes +2000); OCCT features: inputs of a cut not meshed, undo keeps the mesh, csmShow without model recompute, chains INFO every result vs shown only (8 meshes). NOT RUN here (no FPC).
+

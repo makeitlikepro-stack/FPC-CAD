@@ -4,18 +4,20 @@ program cad_core_tests;
 { Headless tests of the FPC-CAD core (no OCCT, no OpenGL, no LCL).
   Run: bash scripts/test_core.sh
   Sections follow docs/CODE_FLOW.md: ids/values -> registry -> graph ->
-  plan -> document recompute -> cache -> undo/redo -> failures -> speed. }
+  plan -> document recompute -> cache -> undo/redo -> failures -> display
+  pass -> speed. }
 
 uses
   {$ifdef unix}cthreads,{$endif}
   Classes, SysUtils, CAD.Core.Ids, CAD.Core.Values, CAD.Core.Feature,
   CAD.Core.FeatureRegistry, CAD.Core.Graph, CAD.Core.RecomputePlan,
-  CAD.Core.WorkerPool, CAD.Core.ResultCache, CAD.Core.Document,
+  CAD.Core.WorkerPool, CAD.Core.ResultCache, CAD.Core.DisplayPass, CAD.Core.Document,
   CAD.Core.Commands, CAD.Core.History, CAD.Config.Performance;
 
 var
   Checks, Failures: Integer;
   ComputeCalls: LongInt;          { all test features, atomic }
+  PrepareCalls: Integer;          { TNumResult.PrepareDisplay (calling thread) }
 
 procedure Check(ACondition: Boolean; const AName: string);
 begin
@@ -30,9 +32,14 @@ end;
 { ---------------------------------------------------------------- test features }
 
 type
+  { Stands in for an OCCT shape: "meshing" sets Meshed and adds 1000 bytes. }
   TNumResult = class(TCADResult)
   public
     Value: Double;
+    Meshed: Boolean;
+    function EstimatedBytes: Int64; override;
+    function DisplayReady: Boolean; override;
+    function PrepareDisplay(out AError: string): Boolean; override;
   end;
 
   { value }
@@ -69,6 +76,24 @@ type
   public
     class function TypeName: string; override;
   end;
+
+function TNumResult.EstimatedBytes: Int64;
+begin
+  Result := InstanceSize + 1000 * Ord(Meshed);
+end;
+
+function TNumResult.DisplayReady: Boolean;
+begin
+  Result := Meshed;
+end;
+
+function TNumResult.PrepareDisplay(out AError: string): Boolean;
+begin
+  AError := '';
+  Inc(PrepareCalls);
+  Meshed := True;
+  Result := True;
+end;
 
 class function TConstFeature.TypeName: string;
 begin
@@ -522,6 +547,70 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------------- 7. display pass }
+
+function IsMeshed(ADoc: TCADDocument; const AId: TCADId): Boolean;
+begin
+  Result := TNumResult(ADoc.Find(AId).Output).Meshed;
+end;
+
+procedure TestDisplayPass;
+var
+  D: TCADDocument;
+  O: TCADPerformanceOptions;
+  A, B, C, E: TCADId;
+  R: TCADRecomputeReport;
+  Dp: TCADDisplayReport;
+  Detached: TCADFeature;
+  Bytes0: Int64;
+begin
+  D := TCADDocument.CreateWithOptions(SerialOptions);
+  try
+    { A -> B -> C: only C (end of the chain) is shown and meshed. }
+    A := D.AttachFeature(NewConst(1));
+    B := D.AttachFeature(NewSum(1));
+    C := D.AttachFeature(NewSum(1));
+    Link(D, B, A);
+    Link(D, C, B);
+    PrepareCalls := 0;
+    R := D.Recompute;
+    Check((R.Display.Shown = 1) and (R.Display.Prepared = 1) and (PrepareCalls = 1),
+      'display pass: one shown result, one mesh');
+    Check(IsMeshed(D, C) and not IsMeshed(D, A) and not IsMeshed(D, B), 'only the chain end is meshed');
+    R := D.Recompute;
+    Check((R.Planned = 0) and (R.Display.Prepared = 0) and not D.NeedsDisplay, 'clean: no display work');
+
+    Check(D.SetShowMode(A, csmShow) and D.NeedsDisplay, 'csmShow marks the display pass');
+    R := D.Recompute;
+    Check((R.Planned = 0) and (R.Display.Prepared = 1) and IsMeshed(D, A), 'csmShow meshes a feature mid-tree');
+
+    E := D.AttachFeature(NewSum(1));
+    Link(D, E, C);
+    R := D.Recompute;
+    Check((R.Display.Prepared = 1) and IsMeshed(D, E) and not D.IsShown(C), 'new chain end meshed, old end hidden');
+    Detached := D.DetachFeature(E);
+    R := D.Recompute;
+    Check((Detached <> nil) and D.IsShown(C) and (R.Display.Shown = 2) and (R.Display.Prepared = 0),
+      'removing the end shows C again, its mesh is reused');
+    Detached.Free;
+
+    { cmtManual: the recompute makes no mesh; the caller asks for it. }
+    O := SerialOptions;
+    O.Mesh.Timing := cmtManual;
+    D.SetOptions(O);
+    D.SetParam(A, 'value', CADFloat(5));
+    R := D.Recompute;
+    Check((R.Computed = 3) and (R.Display.Prepared = 0) and D.NeedsDisplay, 'manual: recompute makes no mesh');
+    Bytes0 := D.Cache.Stats.Bytes;
+    Dp := D.PrepareDisplay;
+    Check((Dp.Prepared = 2) and IsMeshed(D, A) and IsMeshed(D, C) and not IsMeshed(D, B),
+      'manual PrepareDisplay meshes the shown results (A shown, C end)');
+    Check(D.Cache.Stats.Bytes = Bytes0 + 2000, 'cache bytes grow by the mesh size (Remeasure)');
+  finally
+    D.Free;
+  end;
+end;
+
 procedure TestOptions;
 var
   O: TCADPerformanceOptions;
@@ -529,6 +618,7 @@ begin
   O := DefaultPerformanceOptions;
   Check(O.Mesh.InParallel and O.Booleans.RunParallel and O.Booleans.UseOBB, 'OCCT parallel options on by default');
   Check(O.Cache.Enabled and (O.Cache.MaxBytes > 0), 'cache on by default');
+  Check(O.Mesh.Timing = cmtDisplayed, 'mesh only shown results by default');
   O.Threads.RecomputeThreads := 1;
   Check(ResolveRecomputeThreads(O.Threads, 16) = 0, '1 thread = no workers (serial)');
   O.Threads.RecomputeThreads := 0;
@@ -546,6 +636,7 @@ begin
   TestCacheLimit;
   TestHistory;
   TestFailures;
+  TestDisplayPass;
   TestParallelSpeed;
   TestThreadStress;
   TestOptions;

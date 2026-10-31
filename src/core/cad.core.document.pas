@@ -2,23 +2,25 @@ unit CAD.Core.Document;
 {$mode objfpc}{$H+}
 
 { ROLE:      the model: owns features, keeps the dependency graph, and runs
-             the recompute (plan -> parallel levels -> cache -> report).
+             the recompute (plan -> parallel levels -> cache -> display
+             pass -> report).
   CALLED BY: commands (edits), UI and tests (Recompute, Find, report).
   CALLS:     Graph, RecomputePlan, WorkerPool, ResultCache, Feature,
-             Config.Performance.
+             DisplayPass, Config.Performance.
   THREADS:   edits and Recompute on the UI thread. Inside Recompute,
              ComputeOne runs on worker threads; it touches only its own
              feature and the thread-safe cache.
   SPEED:     Find is an array index. Recompute visits only changed features
              and their users, skips every feature whose key is unchanged or
-             cached, and runs each level in parallel. }
+             cached, and runs each level in parallel. Meshes are made only
+             for shown results, after the levels (CAD.Core.DisplayPass). }
 
 interface
 
 uses
   Classes, SysUtils, CAD.Core.Ids, CAD.Core.Values, CAD.Core.Feature,
   CAD.Core.Graph, CAD.Core.RecomputePlan, CAD.Core.WorkerPool,
-  CAD.Core.ResultCache, CAD.Config.Performance;
+  CAD.Core.ResultCache, CAD.Core.DisplayPass, CAD.Config.Performance;
 
 type
   TCADRecomputeReport = record
@@ -29,7 +31,9 @@ type
     Blocked: Integer;
     Levels: Integer;
     Threads: Integer;       { workers + the calling thread }
-    Milliseconds: QWord;
+    Display: TCADDisplayReport;  { meshes for shown results (all zero when
+                                   Mesh.Timing <> cmtDisplayed) }
+    Milliseconds: QWord;    { model + display }
   end;
 
   TCADDocument = class
@@ -45,8 +49,11 @@ type
     FLevel: TCADIntArray;             { level being computed (worker input) }
     FComputed, FHits, FFailed, FBlocked: LongInt;   { atomic counters }
     FRevision: QWord;
+    FDisplayDirty: Boolean;           { shown set or results changed since the
+                                        last display pass }
     procedure MarkChanged(ASlot: LongInt);
     procedure ComputeOne(AIndex: Integer);
+    procedure RunLevels(var AReport: TCADRecomputeReport);
     procedure ReleaseResult(AFeature: TCADFeature);
     procedure RebuildPool;
     function SlotOf(const AId: TCADId): LongInt;
@@ -71,10 +78,21 @@ type
     function SetParam(const AId: TCADId; const AName: string; const AValue: TCADValue): Boolean;
     procedure Touch(const AId: TCADId);
     function UserCount(const AId: TCADId): Integer;
+    { Show a feature mid-tree, hide it, or back to auto (end of a chain).
+      Not an undo step: a view setting, like a camera. }
+    function SetShowMode(const AId: TCADId; AMode: TCADShowMode): Boolean;
+    { Shown in the viewport now (same rule as the display pass). }
+    function IsShown(const AId: TCADId): Boolean;
 
     { --- recompute --- }
     function NeedsRecompute: Boolean;
+    { 1. model levels (parallel)  2. display pass when Mesh.Timing =
+      cmtDisplayed. Also runs when only the shown set changed. }
     function Recompute: TCADRecomputeReport;
+    { Meshes every shown result that has none. Recompute calls it; call it
+      yourself when Mesh.Timing = cmtManual. UI thread, not during Recompute. }
+    function PrepareDisplay: TCADDisplayReport;
+    property NeedsDisplay: Boolean read FDisplayDirty;
 
     procedure SetOptions(const AOptions: TCADPerformanceOptions);
     property Options: TCADPerformanceOptions read FOptions;
@@ -197,6 +215,7 @@ begin
   Result.SetState(cfsDirty, '');
   FSlots[S] := nil;
   Inc(FRevision);
+  FDisplayDirty := True;             { its inputs may be chain ends now }
 end;
 
 function TCADDocument.ReattachFeature(AFeature: TCADFeature): Boolean;
@@ -292,6 +311,27 @@ begin
   Result := FGraph.UserCount(AId.Slot);
 end;
 
+function TCADDocument.SetShowMode(const AId: TCADId; AMode: TCADShowMode): Boolean;
+var
+  F: TCADFeature;
+begin
+  F := Find(AId);
+  Result := F <> nil;
+  if (not Result) or (F.ShowMode = AMode) then
+    Exit;
+  F.SetShowMode(AMode);
+  Inc(FRevision);
+  FDisplayDirty := True;
+end;
+
+function TCADDocument.IsShown(const AId: TCADId): Boolean;
+var
+  F: TCADFeature;
+begin
+  F := Find(AId);
+  Result := (F <> nil) and CADIsShown(F, FGraph.UserCount(AId.Slot));
+end;
+
 function TCADDocument.NeedsRecompute: Boolean;
 begin
   Result := Length(FChanged) > 0;
@@ -353,17 +393,12 @@ begin
   F.SetState(cfsClean, '');
 end;
 
-function TCADDocument.Recompute: TCADRecomputeReport;
+{ Step 1 of Recompute: dirty set -> plan -> levels (each level parallel). }
+procedure TCADDocument.RunLevels(var AReport: TCADRecomputeReport);
 var
   Dirty: TCADIntArray;
   L, I: Integer;
-  T0: QWord;
 begin
-  T0 := GetTickCount64;
-  FillChar(Result, SizeOf(Result), 0);
-  Result.Threads := FPool.WorkerCount + 1;
-  if Length(FChanged) = 0 then
-    Exit;
   FGraph.CollectDirty(FChanged, Dirty);
   FChanged := nil;
   FPlan.Build(FGraph, Dirty);
@@ -380,13 +415,33 @@ begin
       FPool.Run(Length(FLevel), @ComputeOne);
   end;
   FLevel := nil;
-  Result.Planned := FPlan.FeatureCount;
-  Result.Levels := FPlan.LevelCount;
-  Result.Computed := FComputed;
-  Result.CacheHits := FHits;
-  Result.Failed := FFailed;
-  Result.Blocked := FBlocked;
+  AReport.Planned := FPlan.FeatureCount;
+  AReport.Levels := FPlan.LevelCount;
+  AReport.Computed := FComputed;
+  AReport.CacheHits := FHits;
+  AReport.Failed := FFailed;
+  AReport.Blocked := FBlocked;
+  FDisplayDirty := True;             { new results may need meshes }
+end;
+
+function TCADDocument.Recompute: TCADRecomputeReport;
+var
+  T0: QWord;
+begin
+  T0 := GetTickCount64;
+  FillChar(Result, SizeOf(Result), 0);
+  Result.Threads := FPool.WorkerCount + 1;
+  if Length(FChanged) > 0 then
+    RunLevels(Result);                                  { 1. model }
+  if FDisplayDirty and (FOptions.Mesh.Timing = cmtDisplayed) then
+    Result.Display := PrepareDisplay;                   { 2. meshes, shown only }
   Result.Milliseconds := GetTickCount64 - T0;
+end;
+
+function TCADDocument.PrepareDisplay: TCADDisplayReport;
+begin
+  Result := RunDisplayPass(FSlots, FSlotCount, FGraph, FCache);
+  FDisplayDirty := False;
 end;
 
 end.

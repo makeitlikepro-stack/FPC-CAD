@@ -16,6 +16,17 @@ uses
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.TrimExtend,
   CAD.Sketch.Solver, CAD.Sketch.Text;
 
+type
+  TCADCurveIntersection = record
+    X, Y: Double;
+  end;
+  TCADCurveIntersections = array[0..1] of TCADCurveIntersection;
+
+{ Returns true finite-geometry intersections for all line/arc/circle
+  combinations. Reused by non-destructive region extraction. }
+function CADSketchIntersections(S: TCADSketch; A, B: Integer;
+  out Points: TCADCurveIntersections): Integer;
+
 { APlan.FromT and ToT follow the entity's parameter:
     line: 0..1 along P1 -> P2;
     arc: 0..1 along its CCW sweep;
@@ -35,10 +46,6 @@ const
   ParamEpsilon = 1e-8;
 
 type
-  TIntersection = record
-    X, Y: Double;
-  end;
-  TIntersections = array[0..1] of TIntersection;
   TCrossing = record
     T: Double;
     Boundary: Integer;
@@ -123,8 +130,8 @@ end;
 
 { Compute up to two geometrical intersections, keeping only those that
   lie on BOTH finite entities. Tangent roots are counted once. }
-function EntityIntersections(S: TCADSketch; A, B: Integer;
-  out Points: TIntersections): Integer;
+function CADSketchIntersections(S: TCADSketch; A, B: Integer;
+  out Points: TCADCurveIntersections): Integer;
 var
   EA, EB, EL: TCADSketchEntity;
   LineIndex, CurveIndex: Integer;
@@ -262,7 +269,7 @@ function CADPlanSketchTrim(S: TCADSketch; AEntity: Integer; X, Y: Double;
 var
   E: TCADSketchEntity;
   Hits: TCrossings;
-  Pair: TIntersections;
+  Pair: TCADCurveIntersections;
   ClickT, T, Tol, LeftT, RightT: Double;
   I, J, K, Count, Num, LeftId, RightId: Integer;
   Duplicate: Boolean;
@@ -299,7 +306,7 @@ begin
   for I := 0 to S.EntityCount - 1 do
   begin
     if I = AEntity then Continue;
-    Num := EntityIntersections(S, AEntity, I, Pair);
+    Num := CADSketchIntersections(S, AEntity, I, Pair);
     for J := 0 to Num - 1 do
     begin
       T := EntityParameter(S, AEntity, Pair[J].X, Pair[J].Y);

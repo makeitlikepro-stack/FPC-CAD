@@ -122,7 +122,7 @@ end;
 function LineOverlap(S: TCADSketch; A, B: Integer): Boolean;
 var
   EA, EB: TCADSketchEntity;
-  AX, AY, DX, DY, BX, BY, EX, EY, L: Double;
+  AX, AY, DX, DY, BX, BY, EX, EY, L, T1, T2: Double;
 begin
   Result := False;
   EA := S.Entities[A]; EB := S.Entities[B];
@@ -136,10 +136,9 @@ begin
   if Abs(DX*EY-DY*EX) > 1e-9*Max(1.0,L*Hypot(EX,EY)) then Exit;
   if Abs(DX*(BY-AY)-DY*(BX-AX)) > 1e-9*Max(1.0,L) then Exit;
   { Collinear overlap beyond a single shared endpoint. }
-  Result := (Max(Min(0.0,(DX*(BX-AX)+DY*(BY-AY))/Sqr(L)),
-                 Min(1.0,(DX*(BX+EX-AX)+DY*(BY+EY-AY))/Sqr(L))) <
-             Min(Max(0.0,(DX*(BX-AX)+DY*(BY-AY))/Sqr(L)),
-                 Max(1.0,(DX*(BX+EX-AX)+DY*(BY+EY-AY))/Sqr(L))) - ParamTol);
+  T1:=(DX*(BX-AX)+DY*(BY-AY))/Sqr(L);
+  T2:=(DX*(BX+EX-AX)+DY*(BY+EY-AY))/Sqr(L);
+  Result:=Max(0.0,Min(T1,T2)) < Min(1.0,Max(T1,T2))-ParamTol;
 end;
 
 function CoincidentCurves(S: TCADSketch; A, B: Integer): Boolean;
@@ -209,6 +208,7 @@ var
   LeftPX,LeftPY,MinArea:Double;
   ExteriorSample:array of TNode;
   NewEdge:TCADProfileEdge;
+  TempSplit:TSplit;
 
   function NodeFor(AX,AY:Double):Integer;
   var Q:Integer;
@@ -371,11 +371,9 @@ begin
       T:=J;
       while (T>0) and (Splits[I][T-1].T>Splits[I][T].T) do
       begin
-        { Use a record temporary rather than moving entity or sketch data. }
-        with Splits[I][T-1] do begin U:=Self.T; NodeA:=Node; end;
+        TempSplit:=Splits[I][T-1];
         Splits[I][T-1]:=Splits[I][T];
-        Splits[I][T].T:=U;
-        Splits[I][T].Node:=NodeA;
+        Splits[I][T]:=TempSplit;
         Dec(T);
       end;
     end;

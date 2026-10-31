@@ -130,6 +130,8 @@ type
     procedure SelectItem(AKind: TCADHitKind; AIndex: Integer);
     { Item under the cursor (Select tool). True when it changed. }
     function UpdateHover(X, Y: Double): Boolean;
+    { Same entity-only hit priority as Trim/Extend clicks. }
+    function UpdateEntityHover(X, Y: Double): Boolean;
     function IsSelected(AKind: TCADHitKind; AIndex: Integer): Boolean;
     property HoverKind: TCADHitKind read FHoverKind;
     property HoverIndex: Integer read FHoverIndex;
@@ -205,6 +207,18 @@ begin
     K := chkNone;
     I := -1;
   end;
+  Result := (K <> FHoverKind) or (I <> FHoverIndex);
+  FHoverKind := K;
+  FHoverIndex := I;
+end;
+
+function TCADSketchEditor.UpdateEntityHover(X, Y: Double): Boolean;
+var
+  K: TCADHitKind;
+  I: Integer;
+begin
+  I := CADSketchEntityHit(FSketch, X, Y, FSnapTolerance);
+  if I >= 0 then K := chkEntity else K := chkNone;
   Result := (K <> FHoverKind) or (I <> FHoverIndex);
   FHoverKind := K;
   FHoverIndex := I;

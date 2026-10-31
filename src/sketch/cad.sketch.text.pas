@@ -67,10 +67,21 @@ var
   E: TCADSketchEntity;
   C: TCADSketchConstraint;
   P: TCADSketchPlane;
+  HasDeleted: Boolean;
 begin
+  HasDeleted := False;
+  for I := 0 to S.EntityCount - 1 do
+    if not S.Entities[I].Active then
+      HasDeleted := True;
+  for I := 0 to S.PointCount - 1 do
+    if not S.Points[I].Active then
+      HasDeleted := True;
   L := TStringList.Create;
   try
-    L.Add('FPCSKETCH 1');
+    { New editors read both versions. Old editors must not silently
+      resurrect deleted geometry by ignoring optional Active fields. }
+    if HasDeleted then L.Add('FPCSKETCH 2')
+    else L.Add('FPCSKETCH 1');
     P := S.Plane;
     L.Add(Format('plane %s %s %s %s %s %s %s %s %s', [Num(P.Origin[0]), Num(P.Origin[1]),
       Num(P.Origin[2]), Num(P.XDir[0]), Num(P.XDir[1]), Num(P.XDir[2]), Num(P.Normal[0]),
@@ -141,8 +152,10 @@ begin
     F.Delimiter := ' ';
     F.StrictDelimiter := True;
     I := 0;
-    if (Lines.Count = 0) or (Trim(Lines[0]) <> 'FPCSKETCH 1') then
-      Bad('expected "FPCSKETCH 1"');
+    if (Lines.Count = 0) or
+       ((Trim(Lines[0]) <> 'FPCSKETCH 1') and
+        (Trim(Lines[0]) <> 'FPCSKETCH 2')) then
+      Bad('expected "FPCSKETCH 1" or "FPCSKETCH 2"');
     for I := 1 to Lines.Count - 1 do
     begin
       if Trim(Lines[I]) = '' then

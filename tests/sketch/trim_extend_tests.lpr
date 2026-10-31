@@ -181,6 +181,8 @@ begin
     Check(CADSketchHit(S, 5, 0, 0.2, I) = chkNone,
       'power trim: the removed portion cannot be selected');
     Encoded := CADSketchToText(S);
+    Check(Pos('FPCSKETCH 2', Encoded) = 1,
+      'power trim: deleted geometry uses version 2 to block old readers');
     CADSketchFromText(Encoded, Restored);
     Check((Restored.EntityCount = 5) and (not Restored.Entities[Line].Active) and
       (CADSketchToText(Restored) = Encoded),

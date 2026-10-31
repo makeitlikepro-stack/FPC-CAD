@@ -310,8 +310,13 @@ begin
 end;
 
 function TCADSketch.AddLineXY(X1, Y1, X2, Y2: Double): Integer;
+var
+  P1: Integer;
 begin
-  Result := AddLine(AddPoint(X1, Y1), AddPoint(X2, Y2));
+  { one call per statement: FPC may evaluate arguments right to left, and
+    the start point must get the lower index }
+  P1 := AddPoint(X1, Y1);
+  Result := AddLine(P1, AddPoint(X2, Y2));
 end;
 
 function TCADSketch.AddCircle(ACenter: Integer; ARadius: Double): Integer;

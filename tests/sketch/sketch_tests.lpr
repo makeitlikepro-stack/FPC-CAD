@@ -1105,7 +1105,7 @@ end;
 procedure TestSmartDimension;
 var
   S: TCADSketch;
-  L1, L2, C: Integer;
+  L1, L2, C, P0, P1, Cir1, Cir2: Integer;
   Err: string;
 begin
   S := TCADSketch.Create;
@@ -1119,6 +1119,33 @@ begin
     Check(CADApplyCommand(S, Sel([], [L1, L2]), sccDimension, C, Err) and
       (S.Constraints[C].Kind = sckAngle) and Near(CADDimensionShownIn(S, C), 45, 1e-6),
       'smart dimension: two crossing lines get the angle between them, 45');
+  finally
+    S.Free;
+  end;
+
+  { The picking tool can also dimension a point pair and a point + line. }
+  S := TCADSketch.Create;
+  try
+    P0 := S.AddPoint(0, 0);
+    P1 := S.AddPoint(3, 4);
+    Check(CADApplyCommand(S, Sel([P0, P1], []), sccDimension, C, Err) and
+      (S.Constraints[C].Kind = sckDistance) and Near(S.Constraints[C].Value, 5),
+      'smart dimension: two points get their 5 mm distance (' + Err + ')');
+  finally
+    S.Free;
+  end;
+
+  S := TCADSketch.Create;
+  try
+    P0 := S.AddPoint(4, 7);
+    L1 := S.AddLineXY(0, 0, 10, 0);
+    Check(CADApplyCommand(S, Sel([P0], [L1]), sccDimension, C, Err) and
+      (S.Constraints[C].Kind = sckPointLineDist) and Near(S.Constraints[C].Value, 7),
+      'smart dimension: point and line get their 7 mm distance (' + Err + ')');
+    Cir1 := S.AddCircle(S.AddPoint(0, 20), 3);
+    Cir2 := S.AddCircle(S.AddPoint(20, 20), 2);
+    Check(not CADApplyCommand(S, Sel([], [Cir1, Cir2]), sccDimension, C, Err) and (C = -1),
+      'smart dimension: unsupported circle pair is rejected');
   finally
     S.Free;
   end;

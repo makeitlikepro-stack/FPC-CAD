@@ -15,7 +15,17 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_MakeWire.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
+#include <BRepCheck_Analyzer.hxx>
+#include <GC_MakeArcOfCircle.hxx>
+#include <GeomAbs_SurfaceType.hxx>
+#include <Geom_TrimmedCurve.hxx>
+#include <gp_Ax3.hxx>
+#include <gp_Circ.hxx>
+#include <gp_Pln.hxx>
 #include <BRep_Builder.hxx>
 #include <BRepBndLib.hxx>
 #include <Bnd_Box.hxx>
@@ -1172,6 +1182,173 @@ double occt_bridge_shape_volume(void* shapeHandle) {
     BRepGProp::VolumeProperties(shape->shape, properties);
     return properties.Mass();
   } OCCT_BRIDGE_TRY("Unknown volume failure")
+  return -1.0;
+}
+
+// ---- sketch profiles (FPC-CAD stage 5) ----------------------------------
+// plane: 9 doubles = origin[3], x direction[3], normal[3] (unit, orthogonal).
+// edges: 9 doubles per edge, in loop order:
+//   kind (0 line, 1 arc, 2 circle), x1, y1, x2, y2, cx, cy, r, ccw (1/0)
+//   (sketch 2D; an arc runs from (x1, y1) to (x2, y2), ccw around (cx, cy)).
+// loopSizes[loopCount]: edges per loop. faceLoops[faceCount]: loops per face,
+// the first is the outer loop (counter-clockwise), the others holes
+// (clockwise). Result: one face, or a compound of faces.
+void* occt_bridge_make_planar_faces(const double* plane, const double* edges,
+                                    const int32_t* loopSizes, int32_t loopCount,
+                                    const int32_t* faceLoops, int32_t faceCount) {
+  gLastError.clear();
+  try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
+    if (plane == nullptr || edges == nullptr || loopSizes == nullptr ||
+        faceLoops == nullptr || loopCount <= 0 || faceCount <= 0) {
+      throw Standard_Failure("Profile needs a plane, edges, loops and faces");
+    }
+    const gp_Pnt origin(plane[0], plane[1], plane[2]);
+    const gp_Dir xDir(plane[3], plane[4], plane[5]);
+    const gp_Dir normal(plane[6], plane[7], plane[8]);
+    const gp_Ax3 axes(origin, normal, xDir);
+    const gp_Dir yDir = normal.Crossed(xDir);
+    const gp_Pln pln(axes);
+    auto at = [&](double u, double v) {
+      return gp_Pnt(origin.X() + u * xDir.X() + v * yDir.X(),
+                    origin.Y() + u * xDir.Y() + v * yDir.Y(),
+                    origin.Z() + u * xDir.Z() + v * yDir.Z());
+    };
+
+    std::vector<TopoDS_Wire> wires;
+    std::size_t edgeIndex = 0;
+    for (int32_t loop = 0; loop < loopCount; ++loop) {
+      if (loopSizes[loop] <= 0) {
+        throw Standard_Failure("Profile loop without edges");
+      }
+      BRepBuilderAPI_MakeWire wire;
+      for (int32_t k = 0; k < loopSizes[loop]; ++k, ++edgeIndex) {
+        const double* d = edges + 9 * edgeIndex;
+        const int kind = static_cast<int>(d[0]);
+        const bool ccw = d[8] != 0.0;
+        TopoDS_Edge edge;
+        if (kind == 0) {
+          edge = BRepBuilderAPI_MakeEdge(at(d[1], d[2]), at(d[3], d[4])).Edge();
+        } else if (kind == 1) {
+          // Through the middle of the walk: the arc goes the right way round.
+          const double a1 = std::atan2(d[2] - d[6], d[1] - d[5]);
+          const double a2 = std::atan2(d[4] - d[6], d[3] - d[5]);
+          double sweep = ccw ? a2 - a1 : a1 - a2;
+          while (sweep <= 1e-12) {
+            sweep += 2.0 * M_PI;
+          }
+          const double mid = a1 + (ccw ? 0.5 : -0.5) * sweep;
+          GC_MakeArcOfCircle arc(at(d[1], d[2]),
+                                 at(d[5] + d[7] * std::cos(mid), d[6] + d[7] * std::sin(mid)),
+                                 at(d[3], d[4]));
+          if (!arc.IsDone()) {
+            throw Standard_Failure("Profile arc could not be built");
+          }
+          edge = BRepBuilderAPI_MakeEdge(arc.Value()).Edge();
+        } else if (kind == 2) {
+          const gp_Dir axis = ccw ? normal : normal.Reversed();
+          edge = BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(at(d[5], d[6]), axis, xDir), d[7])).Edge();
+        } else {
+          throw Standard_Failure("Unknown profile edge kind");
+        }
+        wire.Add(edge);
+        if (!wire.IsDone()) {
+          throw Standard_Failure("Profile edges do not join into a wire");
+        }
+      }
+      wires.push_back(wire.Wire());
+    }
+
+    BRep_Builder builder;
+    TopoDS_Compound compound;
+    builder.MakeCompound(compound);
+    TopoDS_Shape single;
+    std::size_t wireIndex = 0;
+    for (int32_t f = 0; f < faceCount; ++f) {
+      if (faceLoops[f] <= 0 || wireIndex + static_cast<std::size_t>(faceLoops[f]) > wires.size()) {
+        throw Standard_Failure("Profile face loop counts do not match the loops");
+      }
+      BRepBuilderAPI_MakeFace face(pln, wires[wireIndex++], Standard_True);
+      for (int32_t h = 1; h < faceLoops[f]; ++h) {
+        face.Add(wires[wireIndex++]);
+      }
+      if (!face.IsDone()) {
+        throw Standard_Failure("Profile face could not be built");
+      }
+      BRepCheck_Analyzer check(face.Face());
+      if (!check.IsValid()) {
+        throw Standard_Failure("Profile face is not valid");
+      }
+      builder.Add(compound, face.Face());
+      single = face.Face();
+    }
+    auto result = std::make_unique<ShapeHandle>();
+    result->shape = (faceCount == 1) ? single : TopoDS_Shape(compound);
+    return result.release();
+  } OCCT_BRIDGE_TRY("Unknown profile failure")
+  return nullptr;
+}
+
+// Prism of planar faces along their normal. symmetric: half the length to
+// each side; reversed: against the normal.
+void* occt_bridge_extrude(void* shapeHandle, double length, int32_t symmetric,
+                          int32_t reversed) {
+  gLastError.clear();
+  try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
+    const ShapeHandle* shape = static_cast<const ShapeHandle*>(shapeHandle);
+    if (shape == nullptr || shape->shape.IsNull()) {
+      throw Standard_Failure("Extrude needs a valid profile");
+    }
+    if (!(length > 0.0)) {
+      throw Standard_Failure("Extrude length must be positive");
+    }
+    TopExp_Explorer faces(shape->shape, TopAbs_FACE);
+    if (!faces.More()) {
+      throw Standard_Failure("Extrude needs a face");
+    }
+    const TopoDS_Face first = TopoDS::Face(faces.Current());
+    BRepAdaptor_Surface surface(first);
+    if (surface.GetType() != GeomAbs_Plane) {
+      throw Standard_Failure("Extrude needs a planar profile");
+    }
+    gp_Dir normal = surface.Plane().Axis().Direction();
+    if (first.Orientation() == TopAbs_REVERSED) {
+      normal.Reverse();
+    }
+    if (reversed != 0) {
+      normal.Reverse();
+    }
+    TopoDS_Shape base = shape->shape;
+    if (symmetric != 0) {
+      gp_Trsf move;
+      move.SetTranslation(gp_Vec(normal) * (-0.5 * length));
+      base = BRepBuilderAPI_Transform(shape->shape, move, Standard_True).Shape();
+    }
+    BRepPrimAPI_MakePrism prism(base, gp_Vec(normal) * length);
+    if (!prism.IsDone()) {
+      throw Standard_Failure("Extrude failed");
+    }
+    auto result = std::make_unique<ShapeHandle>();
+    result->shape = prism.Shape();
+    return result.release();
+  } OCCT_BRIDGE_TRY("Unknown extrude failure")
+  return nullptr;
+}
+
+// Sum of face areas (exact B-rep). -1 on error.
+double occt_bridge_shape_area(void* shapeHandle) {
+  gLastError.clear();
+  try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
+    const ShapeHandle* shape = static_cast<const ShapeHandle*>(shapeHandle);
+    if (shape == nullptr || shape->shape.IsNull()) {
+      throw Standard_Failure("Area needs a valid shape");
+    }
+    GProp_GProps properties;
+    BRepGProp::SurfaceProperties(shape->shape, properties);
+    return properties.Mass();
+  } OCCT_BRIDGE_TRY("Unknown area failure")
   return -1.0;
 }
 

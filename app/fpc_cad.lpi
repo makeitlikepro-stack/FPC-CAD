@@ -34,7 +34,7 @@
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>
       <!-- Engine: sibling checkout ../FPC-OpenGL-UI-Engine at engine/ENGINE_REF.txt. -->
-      <OtherUnitFiles Value="../src/config;../src/core;../src/occt;../src/features;../src/view;../src/app;../../FPC-OpenGL-UI-Engine/src/core;../../FPC-OpenGL-UI-Engine/src/math;../../FPC-OpenGL-UI-Engine/src/buffers;../../FPC-OpenGL-UI-Engine/src/ecs;../../FPC-OpenGL-UI-Engine/src/effects;../../FPC-OpenGL-UI-Engine/src/shaders;../../FPC-OpenGL-UI-Engine/src/text;../../FPC-OpenGL-UI-Engine/src/cad;../../FPC-OpenGL-UI-Engine/src/compute;../../FPC-OpenGL-UI-Engine/src/resources;../../FPC-OpenGL-UI-Engine/src/rendering;../../FPC-OpenGL-UI-Engine/src/ui"/>
+      <OtherUnitFiles Value="../src/config;../src/core;../src/occt;../src/features;../src/sketch;../src/view;../src/app;../../FPC-OpenGL-UI-Engine/src/core;../../FPC-OpenGL-UI-Engine/src/math;../../FPC-OpenGL-UI-Engine/src/buffers;../../FPC-OpenGL-UI-Engine/src/ecs;../../FPC-OpenGL-UI-Engine/src/effects;../../FPC-OpenGL-UI-Engine/src/shaders;../../FPC-OpenGL-UI-Engine/src/text;../../FPC-OpenGL-UI-Engine/src/cad;../../FPC-OpenGL-UI-Engine/src/compute;../../FPC-OpenGL-UI-Engine/src/resources;../../FPC-OpenGL-UI-Engine/src/rendering;../../FPC-OpenGL-UI-Engine/src/ui"/>
       <UnitOutputDirectory Value="lib/$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>

@@ -111,8 +111,9 @@ type
     { Line with two new points. }
     function AddLineXY(X1, Y1, X2, Y2: Double): Integer;
     function AddCircle(ACenter: Integer; ARadius: Double): Integer;
-    { Adds the arc rule constraint as well. }
-    function AddArc(ACenter, AStart, AEnd: Integer): Integer;
+    { Adds the arc rule constraint as well (AAutoRule = False: only for
+      loading, where the saved constraint list already has it). }
+    function AddArc(ACenter, AStart, AEnd: Integer; AAutoRule: Boolean = True): Integer;
     procedure SetConstruction(AEntity: Integer; AValue: Boolean);
     procedure FixPoint(APoint: Integer; AFixed: Boolean = True);
     procedure MovePoint(APoint: Integer; X, Y: Double);
@@ -146,6 +147,9 @@ type
     function Concentric(ACircle1, ACircle2: Integer): Integer;
     function Midpoint(APoint, ALine: Integer): Integer;
     function Symmetric(APa, APb, AAxisLine: Integer): Integer;
+    { Loading: appends a constraint as saved (kind, references, value, side,
+      active), after checking that its references exist. }
+    function AddConstraintRaw(const C: TCADSketchConstraint): Integer;
     procedure SetConstraintValue(AIndex: Integer; AValue: Double);
     procedure RemoveConstraint(AIndex: Integer);
     { --- plane --- }
@@ -324,7 +328,7 @@ begin
   Result := NewEntity(E);
 end;
 
-function TCADSketch.AddArc(ACenter, AStart, AEnd: Integer): Integer;
+function TCADSketch.AddArc(ACenter, AStart, AEnd: Integer; AAutoRule: Boolean): Integer;
 var
   E: TCADSketchEntity;
 begin
@@ -338,7 +342,8 @@ begin
   E.Center := ACenter;
   E.RadiusParam := -1;
   Result := NewEntity(E);
-  NewConstraint(sckArcRule, Result, -1, -1, 0);
+  if AAutoRule then
+    NewConstraint(sckArcRule, Result, -1, -1, 0);
 end;
 
 procedure TCADSketch.SetConstruction(AEntity: Integer; AValue: Boolean);
@@ -580,6 +585,47 @@ begin
   CheckPoint(APb);
   CheckEntity(AAxisLine, [sekLine]);
   Result := NewConstraint(sckSymmetric, APa, APb, AAxisLine, 0);
+end;
+
+function TCADSketch.AddConstraintRaw(const C: TCADSketchConstraint): Integer;
+
+  procedure Ref(AIndex: Integer; APoint: Boolean);
+  begin
+    if APoint then
+      CheckPoint(AIndex)
+    else
+      CheckEntity(AIndex, [sekLine, sekCircle, sekArc]);
+  end;
+
+begin
+  case C.Kind of
+    sckCoincident, sckHorizontalPts, sckVerticalPts, sckDistance, sckDistanceX, sckDistanceY:
+      begin
+        Ref(C.A, True);
+        Ref(C.B, True);
+      end;
+    sckHorizontal, sckVertical, sckLength, sckRadius, sckDiameter, sckArcRule:
+      Ref(C.A, False);
+    sckPointOnLine, sckPointOnCircle, sckPointLineDist, sckMidpoint:
+      begin
+        Ref(C.A, True);
+        Ref(C.B, False);
+      end;
+    sckSymmetric:
+      begin
+        Ref(C.A, True);
+        Ref(C.B, True);
+        Ref(C.C, False);
+      end;
+  else
+    begin
+      Ref(C.A, False);
+      Ref(C.B, False);
+    end;
+  end;
+  Result := NewConstraint(C.Kind, C.A, C.B, C.C, C.Value);
+  FConstraints[Result].Side := C.Side;
+  FConstraints[Result].Active := C.Active;
 end;
 
 procedure TCADSketch.SetConstraintValue(AIndex: Integer; AValue: Double);

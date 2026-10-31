@@ -38,6 +38,10 @@ type
     FMakeCylinder: function(X, Y, Z, ARadius, AHeight: Double): Pointer; cdecl;
     FBoolean: function(AOp: LongInt; AObject, ATool: Pointer): Pointer; cdecl;
     FShapeVolume: function(AShape: Pointer): Double; cdecl;
+    FMakePlanarFaces: function(APlane, AEdges: PDouble; ALoopSizes: PLongInt;
+      ALoopCount: LongInt; AFaceLoops: PLongInt; AFaceCount: LongInt): Pointer; cdecl;
+    FExtrude: function(AShape: Pointer; ALength: Double; ASymmetric, AReversed: LongInt): Pointer; cdecl;
+    FShapeArea: function(AShape: Pointer): Double; cdecl;
     FOptions: TCADPerformanceOptions;
     FMeshShape: function(AShape: Pointer; ALinearDeflection: Double): Pointer; cdecl;
     FFreeMesh: procedure(AMesh: Pointer); cdecl;
@@ -78,6 +82,17 @@ type
     function BooleanOp(AOp: Integer; AObject, ATool: TOCCTShapeHandle): TOCCTShapeHandle;
     { Exact B-rep volume, -1 on error. }
     function ShapeVolume(AShape: TOCCTShapeHandle): Double;
+    { Planar faces of a sketch profile. APlane: origin, X, normal (9).
+      AEdges: 9 per edge (kind 0 line / 1 arc / 2 circle, x1, y1, x2, y2,
+      cx, cy, r, ccw). ALoopSizes: edges per loop. AFaceLoops: loops per face
+      (outer first). One face or a compound. }
+    function MakePlanarFaces(const APlane, AEdges: array of Double;
+      const ALoopSizes, AFaceLoops: array of LongInt): TOCCTShapeHandle;
+    { Prism of planar faces along their normal. }
+    function Extrude(AShape: TOCCTShapeHandle; ALength: Double;
+      ASymmetric, AReversed: Boolean): TOCCTShapeHandle;
+    { Sum of face areas; -1 on error. }
+    function ShapeArea(AShape: TOCCTShapeHandle): Double;
     function MakePrism(AWidth, ADepth, AHeight: Double): TOCCTShapeHandle;
     function CutCylinder(ABase: TOCCTShapeHandle; ARadius, ACenterX, ACenterY: Double): TOCCTShapeHandle;
     procedure FreeShape(AShape: TOCCTShapeHandle);
@@ -194,6 +209,9 @@ begin
   Pointer(FMakeCylinder) := Sym('occt_bridge_make_cylinder');
   Pointer(FBoolean) := Sym('occt_bridge_boolean');
   Pointer(FShapeVolume) := Sym('occt_bridge_shape_volume');
+  Pointer(FMakePlanarFaces) := Sym('occt_bridge_make_planar_faces');
+  Pointer(FExtrude) := Sym('occt_bridge_extrude');
+  Pointer(FShapeArea) := Sym('occt_bridge_shape_area');
   Pointer(FMeshShape) := Sym('occt_bridge_mesh_shape');
   Pointer(FFreeMesh) := Sym('occt_bridge_free_demo_mesh');
   Pointer(FVertexCount) := Sym('occt_bridge_mesh_vertex_count');
@@ -268,6 +286,27 @@ end;
 function TOCCTLibrary.ShapeVolume(AShape: TOCCTShapeHandle): Double;
 begin
   Result := FShapeVolume(AShape);
+end;
+
+function TOCCTLibrary.MakePlanarFaces(const APlane, AEdges: array of Double;
+  const ALoopSizes, AFaceLoops: array of LongInt): TOCCTShapeHandle;
+begin
+  if (Length(APlane) < 9) or (Length(AEdges) = 0) or (Length(ALoopSizes) = 0) or
+     (Length(AFaceLoops) = 0) then
+    Exit(nil);
+  Result := FMakePlanarFaces(@APlane[0], @AEdges[0], @ALoopSizes[0], Length(ALoopSizes),
+    @AFaceLoops[0], Length(AFaceLoops));
+end;
+
+function TOCCTLibrary.Extrude(AShape: TOCCTShapeHandle; ALength: Double;
+  ASymmetric, AReversed: Boolean): TOCCTShapeHandle;
+begin
+  Result := FExtrude(AShape, ALength, Ord(ASymmetric), Ord(AReversed));
+end;
+
+function TOCCTLibrary.ShapeArea(AShape: TOCCTShapeHandle): Double;
+begin
+  Result := FShapeArea(AShape);
 end;
 
 function TOCCTLibrary.MakePrism(AWidth, ADepth, AHeight: Double): TOCCTShapeHandle;

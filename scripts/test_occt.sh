@@ -11,9 +11,9 @@ bash "$ROOT/external/occt_bridge/build.sh"
 OUT="${OUTDIR:-$(mktemp -d "${TMPDIR:-/tmp}/fpccad-occt.XXXXXX")}"
 export OCCT_BRIDGE_LIB="$ROOT/external/occt_bridge/libocct_bridge.so"
 RC=0
-for PROG in occt_bridge_tests occt_features_tests; do
+for PROG in occt_bridge_tests occt_features_tests occt_sketch_tests; do
   if ! "$FPC" -Mobjfpc -Sa -gl -O2 \
-      "-Fu$ROOT/src/core" "-Fu$ROOT/src/config" "-Fu$ROOT/src/occt" "-Fu$ROOT/src/features" \
+      "-Fu$ROOT/src/core" "-Fu$ROOT/src/config" "-Fu$ROOT/src/occt" "-Fu$ROOT/src/features" "-Fu$ROOT/src/sketch" \
       "-FU$OUT" "-FE$OUT" "$ROOT/tests/occt/$PROG.lpr" > "$OUT/build-$PROG.log" 2>&1; then
     echo "BUILD FAILED: $PROG (log: $OUT/build-$PROG.log)" >&2
     grep -E "Error|Fatal" "$OUT/build-$PROG.log" | head -20 >&2

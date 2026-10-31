@@ -39,12 +39,15 @@ type
     Radius: TUISlider;
     Selected, Hover, Recompute, Computed, Meshes, Sync: TUILabel;
     Status: TUILabel;
+    { first paint order above the design (TUIForm.Design.MaxDocumentRenderOrder + 1) }
+    OverlayOrder: Integer;
   end;
 
   TCADAppController = class
   private
     FHost: TUIHostControl;
     W: TCADAppWidgets;
+    FOverlay: TUIPanel;                   { over the view: sketch toolbar and chips }
     FOCCT: TOCCTLibrary;
     FDoc: TCADDocument;
     FTarget: TCADViewportTarget;
@@ -163,7 +166,14 @@ begin
   W.Radius.Step := 0.25;
   W.Radius.Value := StartRadius;
   W.RadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
-  { the sketch UI is still built in code (it is redesigned next) }
+  { The sketch UI is still built in code (it is redesigned next). The
+    design's widgets get paint bands when the design loads, so a widget made
+    later would paint under the view: the toolbar and the chips live on a
+    see-through overlay (host root, not the design) painted after the design;
+    their own widgets get the overlay's order + 1 when they are made. }
+  FOverlay := UI.CreatePanel(FHost.Root, 0, 0, 100, 100, 0, tColor4.Create(0, 0, 0, 0));
+  FOverlay.InputTransparent := True;
+  FOverlay.RenderOrder := W.OverlayOrder;
   FSketchMode := TCADSketchMode.Create(W.View);
   FSketchMode.OnChanged := @SketchChanged;
   FSketchPanel := TCADSketchPanel.Create(UI, W.SidePanel, FSketchMode);
@@ -171,9 +181,9 @@ begin
   FSketchPanel.OnFinish := @FinishClick;
   FSketchPanel.OnEditSketch := @EditSketchClick;
   FSketchPanel.OnStatus := @SketchStatus;
-  FSketchToolbar := TCADSketchToolbar.Create(UI, W.Root, FSketchMode, FSketchPanel);
+  FSketchToolbar := TCADSketchToolbar.Create(UI, FOverlay, FSketchMode, FSketchPanel);
   FSketchToolbar.OnFinish := @FinishClick;
-  FSketchDims := TCADSketchDims.Create(UI, W.Root, W.View, FSketchMode);
+  FSketchDims := TCADSketchDims.Create(UI, FOverlay, W.View, FSketchMode);
   FSketchDims.OnStatus := @SketchStatus;
   FSketchDims.OnConstraintClick := @RelationClick;
   Layout;
@@ -213,6 +223,9 @@ begin
   W.View.Height := VH;
   W.View.Left := 0;
   W.View.Top := 0;
+  FHost.UI.ResizeWidgetKeepingChildren(FOverlay, VW, VH);
+  FOverlay.Left := 0;
+  FOverlay.Top := 0;
   FHost.UI.ResizeWidgetKeepingChildren(W.SidePanel, PW, VH);
   W.SidePanel.Left := VW;
   W.SidePanel.Top := 0;

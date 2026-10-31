@@ -143,3 +143,4 @@
 - Still code-built: sketch toolbar, sketch panel, dimension chips (redesigned next).
 - Static: interface-section check PASS; fvform parses. NOT RUN: build, GUI, opening in the IDE.
 - Open: the declarative form has no Align / Anchors (Lazarus-style). Proposed as an engine + IDE feature so window edges move out of code.
+- 2026-10-31 user GUI run: the window works, but in a sketch nothing showed over the view (no toolbar). Cause: the declarative tree gives the design's widgets paint bands when it loads (`RebuildPaintBands`); widgets made later on the design root get parent order + 1 and paint under the viewport. Fix: a see-through, input-transparent overlay panel on the host root (not the design) with `RenderOrder = Design.MaxDocumentRenderOrder + 1`, sized to the view; the sketch toolbar and the dimension chips / glyphs / edit are made on it (their widgets get order + 1 when made).

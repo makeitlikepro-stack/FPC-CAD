@@ -83,6 +83,7 @@ begin
   W.Meshes := MeshesLabel;
   W.Sync := SyncLabel;
   W.Status := StatusLabel;
+  W.OverlayOrder := Design.MaxDocumentRenderOrder + 1;
   FApp := TCADAppController.Create(Host, W);
   FApp.Start;
 end;

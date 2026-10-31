@@ -61,6 +61,7 @@ type
     FExtrudePreviewActive: Boolean;
     FExtrudeOptions: TCADExtrudeOptions;
     FExtrudePreviewError: string;
+    FExtrudeSavedYaw, FExtrudeSavedPitch: Double;
     FLastExtrudeRevision: Cardinal;
     FLastExtrudeContours: string;
     FLastExtrudeOptions: TCADExtrudeOptions;
@@ -525,6 +526,24 @@ begin
     FExtrudePreviewError := E;
     Changed;
     Exit;
+  end;
+  if AEnabled and not FExtrudePreviewActive then
+  begin
+    { A first preview needs an oblique camera, otherwise even a 3D solid
+      looks like a flat face in the normal-to-sketch view. Remember the
+      user's camera so Cancel can return to exactly the prior orientation. }
+    FExtrudeSavedYaw := FView.Camera.YawDeg;
+    FExtrudeSavedPitch := FView.Camera.PitchDeg;
+    FView.Camera.Orbit(25, -24);
+    FView.OnPointerDrag := nil;            { built-in left-drag orbits }
+    FView.Invalidate3D;
+  end
+  else if (not AEnabled) and FExtrudePreviewActive then
+  begin
+    FView.Camera.YawDeg := FExtrudeSavedYaw;
+    FView.Camera.PitchDeg := FExtrudeSavedPitch;
+    FView.OnPointerDrag := @PointerDrag;   { restore sketch point editing }
+    FView.Invalidate3D;
   end;
   FExtrudePreviewActive := AEnabled;
   FExtrudeOptions := AOptions;

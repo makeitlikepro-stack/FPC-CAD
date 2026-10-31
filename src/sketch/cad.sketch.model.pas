@@ -375,6 +375,10 @@ begin
   if (AEntity < 0) or (AEntity >= FEntityCount) then
     raise ECADSketch.CreateFmt('sketch: entity %d does not exist', [AEntity]);
   FEntities[AEntity].Active := AActive;
+  { A retired circle's radius is a standalone parameter, not a point.
+    Fix it so it does not contribute phantom solver degrees of freedom. }
+  if FEntities[AEntity].Kind = sekCircle then
+    FFixed[FEntities[AEntity].RadiusParam] := not AActive;
   Inc(FRevision);
 end;
 
@@ -432,6 +436,8 @@ begin
     Exit;
   E := FEntities[AEntity];
   FEntities[AEntity].Active := False;
+  if E.Kind = sekCircle then
+    FFixed[E.RadiusParam] := True;
   for I := 0 to FConstraintCount - 1 do
     if FConstraints[I].Active and ConstraintUsesEntity(FConstraints[I], AEntity) then
       FConstraints[I].Active := False;

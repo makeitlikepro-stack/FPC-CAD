@@ -100,3 +100,4 @@
 - Editor: `SelectAt` (Shift adds), `Apply`, `SetDimension`, `Resolve`; selection drawn as diamonds (points, line middles, circle centres).
 - App: `CAD.App.SketchPanel` (sketch tools moved out of the main form; constraint buttons 3 x 5, constraint list, value edit + Set, Delete, DOF / selection line); the demo part of the panel hides while sketching; fully constrained sketch strokes turn green.
 - Tests: `TestCommands` (hits, toggle, fix, horizontal, implied second horizontal taken back, perpendicular, parallel, vertical, tangent on two lines refused, dimension keeps the geometry, set 50, label, negative refused, implied top length taken back, equal -> square 50, DOF 0, implied diagonal taken back, circle diameter, line-circle tangent). NOT RUN here.
+- 2026-10-31 user run: `bash scripts/test_sketch.sh` 142/143. The failure was the test: the sketch also holds a free circle (centre + radius = 3 DOF), so DOF after the square is 3, not 0. Expectation fixed.

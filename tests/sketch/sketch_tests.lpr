@@ -832,7 +832,8 @@ begin
       'top length is implied by the rectangle: taken back');
     Check(CADApplyCommand(S, Sel([], [L0, L1]), sccEqual, C, Err) and Near(S.PointY(P2), 50), 'equal: square 50');
     R := CADSolveSketch(S);
-    Check((R.Status = cssSolved) and (R.DOF = 0), Format('square is fully constrained, DOF %d', [R.DOF]));
+    { the square is fixed; only the free circle (centre x, y, radius) is left }
+    Check((R.Status = cssSolved) and (R.DOF = 3), Format('square fully constrained, circle free: DOF 3, got %d', [R.DOF]));
 
     { conflicting: a diagonal dimension that the square cannot take }
     Check(CADApplyCommand(S, Sel([P0, P2], []), sccDimension, C, Err) = False, 'diagonal of a fixed square is implied');

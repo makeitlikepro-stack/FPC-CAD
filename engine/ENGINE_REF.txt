@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
 branch=claude/xml-button-icons
-commit=dd52259da17125a10292a4f92dcda6933aa29643
+commit=910d08c3346c718a01c682fa3cd0633044d385b9
 checkpoint=2026-10-31 Candidate: main caa157a + TUIViewport3D.OnPointerDrag + per-object edge colour + XML button icons/hints; back to a main commit after acceptance
 note=Engine source is not copied here. The build resolves this exact commit (scripts/test_view.sh: ENGINE_DIR).

@@ -13,7 +13,7 @@ unit CAD.Sketch.TrimExtend;
 interface
 
 uses
-  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Solver;
+  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Solver, CAD.Sketch.Text;
 
 type
   TCADLineEditMode = (lemTrim, lemExtend);
@@ -24,7 +24,14 @@ type
     BoundaryEntity: Integer;
     Endpoint: TCADLineEndpoint;
     X, Y: Double;
-    T: Double;          { point A + T * (B - A); Trim: 0..1 }
+    T: Double;
+  end;
+
+  { Trim deletes the interval that contains the click. }
+  TCADTrimPlan = record
+    TargetEntity: Integer;
+    FromT, ToT: Double;
+    LeftBoundary, RightBoundary: Integer;
   end;
 
 { Plan the operation nearest the click on ALine.
@@ -37,6 +44,14 @@ function CADPlanLineEdit(ASketch: TCADSketch; ALine: Integer; AClickX, AClickY: 
 { Apply only a plan whose edited endpoint is unshared, unfixed and
   independent of other constraints; solve and roll back on conflict. }
 function CADApplyLineEdit(ASketch: TCADSketch; const APlan: TCADLineEditPlan;
+  out AError: string): Boolean;
+
+{ Find the bounded span containing the click, including the middle. }
+function CADPlanLineTrim(ASketch: TCADSketch; ALine: Integer;
+  AClickX, AClickY: Double; out APlan: TCADTrimPlan; out AError: string): Boolean;
+
+{ Split/delete on a trial sketch; copy back only if valid. }
+function CADApplyLineTrim(ASketch: TCADSketch; const APlan: TCADTrimPlan;
   out AError: string): Boolean;
 
 implementation

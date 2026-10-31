@@ -474,7 +474,8 @@ begin
 
   Trial := TCADSketch.Create;
   try
-    CADSketchFromText(CADSketchToText(ASketch), Trial);
+    try
+      CADSketchFromText(CADSketchToText(ASketch), Trial);
     Target := Trial.Entities[APlan.TargetEntity];
     AX := Trial.PointX(Target.P1);
     AY := Trial.PointY(Target.P1);
@@ -501,6 +502,13 @@ begin
     end;
     ASketch.AssignFrom(Trial);
     Result := True;
+    except
+      on E: Exception do
+      begin
+        AError := 'trim failed: ' + E.Message;
+        Result := False;
+      end;
+    end;
   finally
     Trial.Free;
   end;

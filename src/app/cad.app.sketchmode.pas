@@ -21,7 +21,8 @@ uses
   OpenGL.Render.Viewport3DPass,
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
   CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.Sketch.DimGraphic, CAD.View.SketchDraw,
-  OpenGL.Render.Material, CAD.App.SketchFill, CAD.Sketch.TrimExtend;
+  OpenGL.Render.Material, CAD.App.SketchFill, CAD.Sketch.TrimExtend,
+  CAD.Sketch.CurveTrim;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
@@ -46,7 +47,7 @@ type
     FOnChanged: TNotifyEvent;
     FOnEntityDoubleClick: TCADEntityEvent;
     FSmartDim: Boolean;                  { Smart Dimension tool: clicks pick, then dimension }
-    FLineEditActive: Boolean;            { current end-only Trim / Extend tool }
+    FLineEditActive: Boolean;            { active Trim (lines/arcs/circles) or Extend }
     FLineEditMode: TCADLineEditMode;
     FLineEditMessage: string;
     FOnSmartDimension: TNotifyEvent;
@@ -111,7 +112,7 @@ type
       or two items (points, lines), or a picked line / point and a click on
       empty space fire OnSmartDimension with the picked items selected. }
     procedure SetSmartDimension(AOn: Boolean);
-    { End-only Trim / Extend: click the outer portion of a line. }
+    { Trim: click any line / arc / circle segment; Extend: line endpoints. }
     procedure SetLineEdit(AMode: TCADLineEditMode);
     property LineEditActive: Boolean read FLineEditActive;
     property LineEditMode: TCADLineEditMode read FLineEditMode;
@@ -697,13 +698,14 @@ begin
   K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
   if K <> chkEntity then
     FLineEditMessage := 'Trim / Extend: click the body of a straight line'
-  else if FSketch.Entities[Index].Kind <> sekLine then
-    FLineEditMessage := 'Trim / Extend: circles and arcs are not supported yet'
+  else if (FLineEditMode = lemExtend) and
+          (FSketch.Entities[Index].Kind <> sekLine) then
+    FLineEditMessage := 'Extend currently supports straight lines only'
   else if FLineEditMode = lemTrim then
   begin
-    if not CADPlanLineTrim(FSketch, Index, U, V, TrimPlan, Err) then
+    if not CADPlanSketchTrim(FSketch, Index, U, V, TrimPlan, Err) then
       FLineEditMessage := Err
-    else if not CADApplyLineTrim(FSketch, TrimPlan, Err) then
+    else if not CADApplySketchTrim(FSketch, TrimPlan, Err) then
       FLineEditMessage := Err
     else
     begin
@@ -811,7 +813,7 @@ begin
     if FLineEditMessage <> '' then
       Exit(FLineEditMessage);
     if FLineEditMode = lemTrim then
-      Exit('Trim: click any unwanted line segment (including between crossings) | Esc: Select')
+      Exit('Trim: click the unwanted line, arc or circle segment | Esc: Select')
     else
       Exit('Extend: click near a line end to reach a boundary | Esc: Select');
   end;

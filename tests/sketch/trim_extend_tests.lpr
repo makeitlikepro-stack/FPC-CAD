@@ -1,0 +1,141 @@
+program trim_extend_tests;
+{$mode objfpc}{$H+}
+
+{ Pure, headless geometry tests for CAD.Sketch.TrimExtend. }
+
+uses
+  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.TrimExtend;
+
+var
+  Checks, Failures: Integer;
+
+procedure Check(AOk: Boolean; const AName: string);
+begin
+  Inc(Checks);
+  if not AOk then
+  begin
+    Inc(Failures);
+    WriteLn('FAIL  ', AName);
+  end;
+end;
+
+function Near(A, B: Double): Boolean;
+begin
+  Result := Abs(A - B) < 1e-7;
+end;
+
+procedure TestTrimEnd;
+var
+  S: TCADSketch;
+  Line: Integer;
+  P: TCADLineEditPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 10, 0);
+    S.AddLineXY(4, -4, 4, 4);
+    Check(CADPlanLineEdit(S, Line, 1, 0, lemTrim, P, Err) and
+      (P.Endpoint = leStart) and Near(P.X, 4) and Near(P.Y, 0),
+      'trim: click before crossing moves line start');
+    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, P, Err) and
+      (P.Endpoint = leEnd) and Near(P.X, 4),
+      'trim: click after crossing moves line end');
+    Check(Near(S.PointX(S.Entities[Line].P1), 0) and
+      Near(S.PointX(S.Entities[Line].P2), 10),
+      'trim: planning leaves the original sketch unchanged');
+    Check(not CADPlanLineEdit(S, Line, 4, 0, lemTrim, P, Err) and (Err <> ''),
+      'trim: clicking on the intersection is not an unintentional edit');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestMiddleTrim;
+var
+  S: TCADSketch;
+  Line: Integer;
+  P: TCADLineEditPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 10, 0);
+    S.AddLineXY(3, -3, 3, 3);
+    S.AddLineXY(7, -3, 7, 3);
+    Check(CADPlanLineEdit(S, Line, 1, 0, lemTrim, P, Err) and
+      Near(P.X, 3) and (P.Endpoint = leStart),
+      'trim: first outer span stops at first crossing');
+    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, P, Err) and
+      Near(P.X, 7) and (P.Endpoint = leEnd),
+      'trim: last outer span stops at last crossing');
+    Check(not CADPlanLineEdit(S, Line, 5, 0, lemTrim, P, Err) and
+      (Pos('split', Err) > 0),
+      'trim: a middle span is refused until entity splitting is available');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestExtend;
+var
+  S: TCADSketch;
+  Line: Integer;
+  P: TCADLineEditPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 2, 0);
+    S.AddLineXY(5, -4, 5, 4);
+    S.AddLineXY(8, -4, 8, 4);
+    S.AddLineXY(-3, -4, -3, 4);
+    Check(CADPlanLineEdit(S, Line, 2, 0, lemExtend, P, Err) and
+      (P.Endpoint = leEnd) and Near(P.X, 5),
+      'extend: nearest boundary on the right is chosen');
+    Check(CADPlanLineEdit(S, Line, 0, 0, lemExtend, P, Err) and
+      (P.Endpoint = leStart) and Near(P.X, -3),
+      'extend: nearest boundary on the left is chosen');
+    Check(Near(S.PointX(S.Entities[Line].P2), 2),
+      'extend: planning leaves the original endpoint unchanged');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestNoBoundary;
+var
+  S: TCADSketch;
+  Line: Integer;
+  P: TCADLineEditPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 10, 0);
+    S.AddLineXY(5, 2, 5, 4);  { infinite support crosses, segment does not }
+    Check(not CADPlanLineEdit(S, Line, 8, 0, lemTrim, P, Err) and (Err <> ''),
+      'trim: intersection outside boundary segment is ignored');
+    Check(not CADPlanLineEdit(S, Line, 8, 0, lemExtend, P, Err),
+      'extend: no intersection beyond endpoint');
+    Check(not CADPlanLineEdit(S, 999, 0, 0, lemTrim, P, Err),
+      'invalid line index is rejected');
+  finally
+    S.Free;
+  end;
+end;
+
+begin
+  Checks := 0;
+  Failures := 0;
+  TestTrimEnd;
+  TestMiddleTrim;
+  TestExtend;
+  TestNoBoundary;
+  if Failures = 0 then
+    WriteLn(Format('PASS  trim/extend planning: %d checks', [Checks]))
+  else
+    WriteLn(Format('FAIL  trim/extend planning: %d of %d checks failed',
+      [Failures, Checks]));
+  if Failures > 0 then Halt(1);
+end.

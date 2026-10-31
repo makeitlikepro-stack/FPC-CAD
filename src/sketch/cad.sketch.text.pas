@@ -76,16 +76,16 @@ begin
       Num(P.Origin[2]), Num(P.XDir[0]), Num(P.XDir[1]), Num(P.XDir[2]), Num(P.Normal[0]),
       Num(P.Normal[1]), Num(P.Normal[2])]));
     for I := 0 to S.PointCount - 1 do
-      L.Add(Format('P %s %s %s', [Num(S.PointX(I)), Num(S.PointY(I)),
-        Flag(S.Fixed[S.Points[I].XParam])]));
+      L.Add(Format('P %s %s %s %s', [Num(S.PointX(I)), Num(S.PointY(I)),
+        Flag(S.Fixed[S.Points[I].XParam]), Flag(S.Points[I].Active)]));
     for I := 0 to S.EntityCount - 1 do
     begin
       E := S.Entities[I];
       case E.Kind of
-        sekLine: L.Add(Format('L %d %d %s', [E.P1, E.P2, Flag(E.Construction)]));
-        sekCircle: L.Add(Format('C %d %s %s', [E.Center, Num(S.Params[E.RadiusParam]),
-          Flag(E.Construction)]));
-        sekArc: L.Add(Format('A %d %d %d %s', [E.Center, E.P1, E.P2, Flag(E.Construction)]));
+        sekLine: L.Add(Format('L %d %d %s %s', [E.P1, E.P2, Flag(E.Construction), Flag(E.Active)]));
+        sekCircle: L.Add(Format('C %d %s %s %s', [E.Center, Num(S.Params[E.RadiusParam]),
+          Flag(E.Construction), Flag(E.Active)]));
+        sekArc: L.Add(Format('A %d %d %d %s %s', [E.Center, E.P1, E.P2, Flag(E.Construction), Flag(E.Active)]));
       end;
     end;
     for I := 0 to S.ConstraintCount - 1 do
@@ -160,13 +160,31 @@ begin
           N := S.AddPoint(D(1), D(2));
           if Int(3) <> 0 then
             S.FixPoint(N);
+          { Older FPCSKETCH 1 files have no active field: they stay valid. }
+          if (F.Count > 4) and (Int(4) = 0) then
+            S.SetPointActive(N, False);
         end
         else if F[0] = 'L' then
-          S.SetConstruction(S.AddLine(Int(1), Int(2)), Int(3) <> 0)
+        begin
+          N := S.AddLine(Int(1), Int(2));
+          S.SetConstruction(N, Int(3) <> 0);
+          if (F.Count > 4) and (Int(4) = 0) then
+            S.SetEntityActive(N, False);
+        end
         else if F[0] = 'C' then
-          S.SetConstruction(S.AddCircle(Int(1), D(2)), Int(3) <> 0)
+        begin
+          N := S.AddCircle(Int(1), D(2));
+          S.SetConstruction(N, Int(3) <> 0);
+          if (F.Count > 4) and (Int(4) = 0) then
+            S.SetEntityActive(N, False);
+        end
         else if F[0] = 'A' then
-          S.SetConstruction(S.AddArc(Int(1), Int(2), Int(3), False), Int(4) <> 0)
+        begin
+          N := S.AddArc(Int(1), Int(2), Int(3), False);
+          S.SetConstruction(N, Int(4) <> 0);
+          if (F.Count > 5) and (Int(5) = 0) then
+            S.SetEntityActive(N, False);
+        end
         else if F[0] = 'K' then
         begin
           if F.Count < 2 then

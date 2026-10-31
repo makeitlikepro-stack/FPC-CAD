@@ -4,7 +4,9 @@ unit CAD.Sketch.TrimExtend;
 { ROLE: Pure planning of line Trim and Extend, in sketch millimetres.
   Line/line intersections use the target line's infinite support and the
   boundary line's finite segment. Planning does not mutate the sketch.
-  A later editing step must validate constraints and commit one undo step.
+  CADApplyLineEdit can commit the proposed endpoint only if it is unshared,
+  unfixed and free of incompatible constraints; otherwise the change is
+  refused and the geometry remains unchanged.
   Currently: endpoint trim/extend for straight lines; trimming between two
   crossings requires splitting the entity and is deliberately rejected. }
 

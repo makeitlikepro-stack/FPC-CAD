@@ -4,7 +4,7 @@ Each stage ends with a headless test and an acceptance note. `main` is updated
 only after the user accepts a stage.
 
 - **Stage 1 (done):** architecture, engine pin, repository layout.
-- **Stage 2 (Candidate):** `src/core` document model, feature interface, command
+- **Stage 2 (user PASS 69/69):** `src/core` document model, feature interface, command
   stack (Undo/Redo), dependency graph, parallel recompute levels, result cache,
   performance options (OCCT, threads, GPU). Headless unit tests.
 - **Stage 3:** OCCT adapter: box, cylinder, extrude of a rectangle profile,

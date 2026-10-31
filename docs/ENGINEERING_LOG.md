@@ -32,3 +32,4 @@
 - Option `Mesh.MeshInRecompute` replaced by `Mesh.Timing` (`cmtDisplayed` default, `cmtEveryResult` old behaviour, `cmtManual`).
 - Tests: core `TestDisplayPass` (chain end only, csmShow mid-tree, attach/detach end, manual mode, cache bytes +2000); OCCT features: inputs of a cut not meshed, undo keeps the mesh, csmShow without model recompute, chains INFO every result vs shown only (8 meshes). NOT RUN here (no FPC).
 
+- 2026-10-31 user run (OCCT 7.6.3, bridge builds and passes on 7.6 too): occt bridge 19/19 PASS, occt features 26/26 PASS. 8 plates x 6 holes: mesh every result (104 meshes) serial 529 / all cores 519 ms; mesh shown only (8 meshes) serial 306 / all cores 307 ms (~42% less). Parallel chains still give no gain: OCCT booleans already use all cores inside (RunParallel); to measure next: RunParallel off + parallel chains. Core test output not reported in this run. Merged to dev.

@@ -181,3 +181,4 @@
   - `CAD.Sketch.DimGraphic.AngleDim`: arc between the segment rays (smaller side), radius 46 px or 80 % of the shorter side; no room (shorter sides or arc < 40 px) -> inner arc + extra arc out past side 2 (>= 25 deg) with the value at its end.
   - Tests: 120 / reversed line 36.87 between the sides, set 45, 0 and 200 refused, arc inside the corner.
 - 2026-11-01 user: angle dimension between the sides: correct (GUI PASS).
+- 2026-11-01 user: merge into dev and main. Engine 910d08c released to main (pin branch=main); FPC Visual IDE main 7afcd3a.

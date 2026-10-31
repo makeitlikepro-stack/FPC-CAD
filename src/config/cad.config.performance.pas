@@ -41,6 +41,9 @@ type
     ControlSurfaceDeflection: Boolean; { False = faster on freeform surfaces }
     AllowQualityDecrease: Boolean;    { reuse a finer existing mesh }
     KeepExistingTriangulation: Boolean; { do not clean: unchanged faces keep their mesh }
+    { Mesh each feature result during the (parallel) recompute, so the viewport
+      gets triangles without waiting. False = mesh later, only what is shown. }
+    MeshInRecompute: Boolean;
   end;
 
   { Booleans and other BOPAlgo-based operations (OCCT). }
@@ -93,6 +96,7 @@ begin
   Result.Mesh.ControlSurfaceDeflection := True;
   Result.Mesh.AllowQualityDecrease := True;
   Result.Mesh.KeepExistingTriangulation := True;
+  Result.Mesh.MeshInRecompute := True;
 
   Result.Booleans.RunParallel := True;
   Result.Booleans.UseOBB := True;

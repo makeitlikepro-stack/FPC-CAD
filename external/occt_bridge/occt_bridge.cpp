@@ -10,6 +10,9 @@
 #include <OSD_ThreadPool.hxx>
 #include <TopTools_ListOfShape.hxx>
 #include <mutex>
+#include <shared_mutex>
+#include <BRepAlgoAPI_Common.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -142,6 +145,39 @@ void ApplyBooleanOptions(BRepAlgoAPI_BooleanOperation& op,
   }
   op.SetNonDestructive(o.bool_non_destructive != 0);
   op.SetCheckInverted(o.bool_check_inverted != 0);
+}
+
+// ---------------------------------------------------------------- thread safety
+// Meshing writes Poly_Triangulation into the TFaces of a shape, and a boolean
+// result shares untouched faces with its inputs. FPC-CAD computes features on
+// several threads, so: meshing takes the lock exclusively (one mesh at a time,
+// each mesh itself runs on all cores via InParallel); modelling operations
+// (primitives, booleans, volume) take it shared and run in parallel.
+std::shared_mutex gTopologyLock;
+
+// Boolean of any kind with the speed options (FPC-CAD feature path).
+TopoDS_Shape OptionedBoolean(const int op, const TopoDS_Shape& object,
+                             const TopoDS_Shape& tool) {
+  const occt_bridge_options o = CurrentOptions();
+  std::unique_ptr<BRepAlgoAPI_BooleanOperation> builder;
+  switch (op) {
+    case 0: builder = std::make_unique<BRepAlgoAPI_Cut>(); break;
+    case 1: builder = std::make_unique<BRepAlgoAPI_Fuse>(); break;
+    case 2: builder = std::make_unique<BRepAlgoAPI_Common>(); break;
+    default: throw Standard_Failure("Boolean operation must be 0 cut, 1 fuse or 2 common");
+  }
+  TopTools_ListOfShape args;
+  TopTools_ListOfShape tools;
+  args.Append(object);
+  tools.Append(tool);
+  builder->SetArguments(args);
+  builder->SetTools(tools);
+  ApplyBooleanOptions(*builder, o);
+  builder->Build();
+  if (!builder->IsDone() || builder->Shape().IsNull()) {
+    throw Standard_Failure("Boolean operation failed");
+  }
+  return builder->Shape();
 }
 
 // Cut with options (the 2-argument BRepAlgoAPI_Cut constructor builds at
@@ -1033,6 +1069,7 @@ void* occt_bridge_create_rectangle_prism_shape(
     double width, double depth, double height) {
   gLastError.clear();
   try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
     return MakeRectanglePrismShape(width, depth, height).release();
   } catch (const Standard_Failure& failure) {
     SetError(failure.GetMessageString());
@@ -1048,6 +1085,7 @@ void* occt_bridge_cut_cylinder_shape(void* baseHandle, double radius,
                                      double centerX, double centerY) {
   gLastError.clear();
   try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
     return CutCylinderFromShape(
         static_cast<const ShapeHandle*>(baseHandle), radius, centerX, centerY)
         .release();
@@ -1061,6 +1099,82 @@ void* occt_bridge_cut_cylinder_shape(void* baseHandle, double radius,
   return nullptr;
 }
 
+// ---------------------------------------------------------------- FPC-CAD features
+// All return a new shape handle owned by the caller (occt_bridge_free_shape),
+// or nullptr with occt_bridge_last_error().
+
+#define OCCT_BRIDGE_TRY(failureText)                                        \
+  catch (const Standard_Failure& failure) { SetError(failure.GetMessageString()); } \
+  catch (const std::exception& ex) { SetError(ex.what()); }                 \
+  catch (...) { SetError(failureText); }
+
+// Axis-aligned box with its minimum corner at (x, y, z).
+void* occt_bridge_make_box(double x, double y, double z,
+                           double dx, double dy, double dz) {
+  gLastError.clear();
+  try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
+    if (dx <= 0.0 || dy <= 0.0 || dz <= 0.0) {
+      throw Standard_Failure("Box sizes must be positive");
+    }
+    auto result = std::make_unique<ShapeHandle>();
+    result->shape = BRepPrimAPI_MakeBox(gp_Pnt(x, y, z), dx, dy, dz).Shape();
+    return result.release();
+  } OCCT_BRIDGE_TRY("Unknown box failure")
+  return nullptr;
+}
+
+// Cylinder along +Z with its bottom centre at (x, y, z).
+void* occt_bridge_make_cylinder(double x, double y, double z,
+                                double radius, double height) {
+  gLastError.clear();
+  try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
+    if (radius <= 0.0 || height <= 0.0) {
+      throw Standard_Failure("Cylinder radius and height must be positive");
+    }
+    auto result = std::make_unique<ShapeHandle>();
+    result->shape = BRepPrimAPI_MakeCylinder(
+        gp_Ax2(gp_Pnt(x, y, z), gp_Dir(0.0, 0.0, 1.0)), radius, height).Shape();
+    return result.release();
+  } OCCT_BRIDGE_TRY("Unknown cylinder failure")
+  return nullptr;
+}
+
+// op: 0 cut (object - tool), 1 fuse, 2 common. Inputs are not modified
+// when the NonDestructive option is on (default).
+void* occt_bridge_boolean(int op, void* objectHandle, void* toolHandle) {
+  gLastError.clear();
+  try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
+    const ShapeHandle* object = static_cast<const ShapeHandle*>(objectHandle);
+    const ShapeHandle* tool = static_cast<const ShapeHandle*>(toolHandle);
+    if (object == nullptr || tool == nullptr || object->shape.IsNull() || tool->shape.IsNull()) {
+      throw Standard_Failure("Boolean needs two valid shapes");
+    }
+    auto result = std::make_unique<ShapeHandle>();
+    result->shape = OptionedBoolean(op, object->shape, tool->shape);
+    return result.release();
+  } OCCT_BRIDGE_TRY("Unknown boolean failure")
+  return nullptr;
+}
+
+// Exact B-rep volume (no meshing needed). Returns -1 on error.
+double occt_bridge_shape_volume(void* shapeHandle) {
+  gLastError.clear();
+  try {
+    std::shared_lock<std::shared_mutex> shared(gTopologyLock);
+    const ShapeHandle* shape = static_cast<const ShapeHandle*>(shapeHandle);
+    if (shape == nullptr || shape->shape.IsNull()) {
+      throw Standard_Failure("Volume needs a valid shape");
+    }
+    GProp_GProps properties;
+    BRepGProp::VolumeProperties(shape->shape, properties);
+    return properties.Mass();
+  } OCCT_BRIDGE_TRY("Unknown volume failure")
+  return -1.0;
+}
+
 void occt_bridge_free_shape(void* handle) {
   delete static_cast<ShapeHandle*>(handle);
 }
@@ -1068,6 +1182,7 @@ void occt_bridge_free_shape(void* handle) {
 void* occt_bridge_mesh_shape(void* shapeHandle, double linearDeflection) {
   gLastError.clear();
   try {
+    std::unique_lock<std::shared_mutex> exclusive(gTopologyLock);
     const ShapeHandle* shape = static_cast<const ShapeHandle*>(shapeHandle);
     if (shape == nullptr || shape->shape.IsNull()) {
       throw Standard_Failure("Tessellation requires a valid shape handle");

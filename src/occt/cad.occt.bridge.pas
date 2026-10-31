@@ -34,6 +34,11 @@ type
     FMakePrism: function(AWidth, ADepth, AHeight: Double): Pointer; cdecl;
     FCutCylinder: function(ABase: Pointer; ARadius, ACenterX, ACenterY: Double): Pointer; cdecl;
     FFreeShape: procedure(AShape: Pointer); cdecl;
+    FMakeBox: function(X, Y, Z, DX, DY, DZ: Double): Pointer; cdecl;
+    FMakeCylinder: function(X, Y, Z, ARadius, AHeight: Double): Pointer; cdecl;
+    FBoolean: function(AOp: LongInt; AObject, ATool: Pointer): Pointer; cdecl;
+    FShapeVolume: function(AShape: Pointer): Double; cdecl;
+    FOptions: TCADPerformanceOptions;
     FMeshShape: function(AShape: Pointer; ALinearDeflection: Double): Pointer; cdecl;
     FFreeMesh: procedure(AMesh: Pointer); cdecl;
     FVertexCount: function(AMesh: Pointer): LongInt; cdecl;
@@ -62,6 +67,16 @@ type
     function ReadOptions(out AOptions: TOCCTBridgeOptions): Boolean;
     function BridgeOptionsSize: Integer;
 
+    { The options last sent with ApplyOptions (features read MeshInRecompute). }
+    property Options: TCADPerformanceOptions read FOptions;
+    { Box with its minimum corner at (X, Y, Z). }
+    function MakeBox(X, Y, Z, DX, DY, DZ: Double): TOCCTShapeHandle;
+    { Cylinder along +Z, bottom centre at (X, Y, Z). }
+    function MakeCylinder(X, Y, Z, ARadius, AHeight: Double): TOCCTShapeHandle;
+    { AOp: 0 cut (object - tool), 1 fuse, 2 common. }
+    function BooleanOp(AOp: Integer; AObject, ATool: TOCCTShapeHandle): TOCCTShapeHandle;
+    { Exact B-rep volume, -1 on error. }
+    function ShapeVolume(AShape: TOCCTShapeHandle): Double;
     function MakePrism(AWidth, ADepth, AHeight: Double): TOCCTShapeHandle;
     function CutCylinder(ABase: TOCCTShapeHandle; ARadius, ACenterX, ACenterY: Double): TOCCTShapeHandle;
     procedure FreeShape(AShape: TOCCTShapeHandle);
@@ -84,7 +99,28 @@ type
 { Platform file name: libocct_bridge.so / occt_bridge.dll / libocct_bridge.dylib }
 function OCCTBridgeFileName: string;
 
+{ The process-wide bridge used by the OCCT features. The application creates,
+  loads and frees it (SetOCCT before the first recompute, SetOCCT(nil) after
+  the last document is freed). }
+function OCCT: TOCCTLibrary;
+procedure SetOCCT(ALibrary: TOCCTLibrary);
+
 implementation
+
+var
+  GOCCT: TOCCTLibrary = nil;
+
+function OCCT: TOCCTLibrary;
+begin
+  if GOCCT = nil then
+    raise Exception.Create('OCCT bridge not set: call SetOCCT after TOCCTLibrary.Load');
+  Result := GOCCT;
+end;
+
+procedure SetOCCT(ALibrary: TOCCTLibrary);
+begin
+  GOCCT := ALibrary;
+end;
 
 function OCCTBridgeFileName: string;
 begin
@@ -139,6 +175,7 @@ begin
   if FHandle <> NilHandle then
     Exit;
   if APath <> '' then FPath := APath else FPath := DefaultBridgePath;
+  FOptions := DefaultPerformanceOptions;
   FHandle := LoadLibrary(FPath);
   if FHandle = NilHandle then
     raise Exception.CreateFmt('Cannot load OCCT bridge "%s": %s', [FPath, GetLoadErrorStr]);
@@ -150,6 +187,10 @@ begin
   Pointer(FMakePrism) := Sym('occt_bridge_create_rectangle_prism_shape');
   Pointer(FCutCylinder) := Sym('occt_bridge_cut_cylinder_shape');
   Pointer(FFreeShape) := Sym('occt_bridge_free_shape');
+  Pointer(FMakeBox) := Sym('occt_bridge_make_box');
+  Pointer(FMakeCylinder) := Sym('occt_bridge_make_cylinder');
+  Pointer(FBoolean) := Sym('occt_bridge_boolean');
+  Pointer(FShapeVolume) := Sym('occt_bridge_shape_volume');
   Pointer(FMeshShape) := Sym('occt_bridge_mesh_shape');
   Pointer(FFreeMesh) := Sym('occt_bridge_free_demo_mesh');
   Pointer(FVertexCount) := Sym('occt_bridge_mesh_vertex_count');
@@ -187,6 +228,8 @@ end;
 function TOCCTLibrary.ApplyOptions(const AOptions: TCADPerformanceOptions): Boolean;
 begin
   Result := SetBridgeOptions(OCCTOptionsFromPerformance(AOptions));
+  if Result then
+    FOptions := AOptions;
 end;
 
 function TOCCTLibrary.SetBridgeOptions(const AOptions: TOCCTBridgeOptions): Boolean;
@@ -201,6 +244,26 @@ function TOCCTLibrary.ReadOptions(out AOptions: TOCCTBridgeOptions): Boolean;
 begin
   FillChar(AOptions, SizeOf(AOptions), 0);
   Result := FGetOptions(@AOptions) = 1;
+end;
+
+function TOCCTLibrary.MakeBox(X, Y, Z, DX, DY, DZ: Double): TOCCTShapeHandle;
+begin
+  Result := FMakeBox(X, Y, Z, DX, DY, DZ);
+end;
+
+function TOCCTLibrary.MakeCylinder(X, Y, Z, ARadius, AHeight: Double): TOCCTShapeHandle;
+begin
+  Result := FMakeCylinder(X, Y, Z, ARadius, AHeight);
+end;
+
+function TOCCTLibrary.BooleanOp(AOp: Integer; AObject, ATool: TOCCTShapeHandle): TOCCTShapeHandle;
+begin
+  Result := FBoolean(AOp, AObject, ATool);
+end;
+
+function TOCCTLibrary.ShapeVolume(AShape: TOCCTShapeHandle): Double;
+begin
+  Result := FShapeVolume(AShape);
 end;
 
 function TOCCTLibrary.MakePrism(AWidth, ADepth, AHeight: Double): TOCCTShapeHandle;

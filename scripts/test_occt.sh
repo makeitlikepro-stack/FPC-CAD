@@ -9,11 +9,16 @@ FPC="${FPC:-$(command -v fpc || true)}"
 [[ -n "$FPC" ]] || { echo "BLOCKED: fpc not found (set FPC=/path/to/fpc)" >&2; exit 2; }
 bash "$ROOT/external/occt_bridge/build.sh"
 OUT="${OUTDIR:-$(mktemp -d "${TMPDIR:-/tmp}/fpccad-occt.XXXXXX")}"
-if ! "$FPC" -Mobjfpc -Sa -gl -O2 \
-    "-Fu$ROOT/src/core" "-Fu$ROOT/src/config" "-Fu$ROOT/src/occt" \
-    "-FU$OUT" "-FE$OUT" "$ROOT/tests/occt/occt_bridge_tests.lpr" > "$OUT/build.log" 2>&1; then
-  echo "BUILD FAILED (log: $OUT/build.log)" >&2
-  grep -E "Error|Fatal" "$OUT/build.log" | head -20 >&2
-  exit 2
-fi
-OCCT_BRIDGE_LIB="$ROOT/external/occt_bridge/libocct_bridge.so" "$OUT/occt_bridge_tests"
+export OCCT_BRIDGE_LIB="$ROOT/external/occt_bridge/libocct_bridge.so"
+RC=0
+for PROG in occt_bridge_tests occt_features_tests; do
+  if ! "$FPC" -Mobjfpc -Sa -gl -O2 \
+      "-Fu$ROOT/src/core" "-Fu$ROOT/src/config" "-Fu$ROOT/src/occt" "-Fu$ROOT/src/features" \
+      "-FU$OUT" "-FE$OUT" "$ROOT/tests/occt/$PROG.lpr" > "$OUT/build-$PROG.log" 2>&1; then
+    echo "BUILD FAILED: $PROG (log: $OUT/build-$PROG.log)" >&2
+    grep -E "Error|Fatal" "$OUT/build-$PROG.log" | head -20 >&2
+    exit 2
+  fi
+  "$OUT/$PROG" || RC=$?
+done
+exit $RC

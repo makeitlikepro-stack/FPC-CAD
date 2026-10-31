@@ -696,6 +696,31 @@ begin
   end;
 end;
 
+procedure TestInvisibleCurveIsNotBoundary;
+var
+  S: TCADSketch;
+  Circle, Line: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Circle := S.AddCircle(S.AddPoint(0, 0), 5);
+    S.AddLineXY(-10, 0, 10, 0);
+    Check(CADPlanSketchTrim(S, Circle, 0, 5, Plan, Err) and
+      CADApplySketchTrim(S, Plan, Err),
+      'curve trim: prepare an inactive original circle');
+    { At y=4 the *old* circle crossed x=-3,3; the retained bottom arc
+      does not. A second Trim must ignore that invisible old circle. }
+    Line := S.AddLineXY(-10, 4, 10, 4);
+    Check(CADPlanSketchTrim(S, Line, 0, 4, Plan, Err) and
+      Near(Plan.FromT, 0) and Near(Plan.ToT, 1),
+      'curve trim: retired circle cannot act as an invisible boundary');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestCircleWithOneCrossing;
 var
   S: TCADSketch;
@@ -735,6 +760,7 @@ begin
   TestCircleTrimmedByLongArc;
   TestRadiusAndConstraintGuard;
   TestCircleWithOneCrossing;
+  TestInvisibleCurveIsNotBoundary;
   TestArcMiddleSegment;
   TestWholeCircleAndArcDeletion;
   if Failures = 0 then

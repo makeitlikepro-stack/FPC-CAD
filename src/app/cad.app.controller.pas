@@ -31,7 +31,7 @@ uses
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
-  CAD.App.FeatureTree, CAD.App.Chrome;
+  CAD.App.FeatureTree, CAD.App.Chrome, CAD.App.SketchContext;
 
 type
   { Menu commands (the ribbon buttons are bound directly). }
@@ -67,6 +67,7 @@ type
     FSketchToolbar: TCADSketchToolbar;
     FTyped: TCADTypedValueBox;            { typed values while drawing }
     FChrome: TCADChrome;
+    FContext: TCADSketchContextMenu;
     FTree: TCADFeatureTree;
     FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
     FLastSketch: TCADId;
@@ -91,6 +92,8 @@ type
     procedure DiscardClick(Sender: TObject);
     procedure NormalToClick(Sender: TObject);
     function DofText: string;
+    procedure SmartDimension(Sender: TObject);
+    procedure ContextMenu(Sender: TObject; AX, AY: Integer);
   public
     { ARoot: the design's root; ALookup: TUIForm.Widget; AOverlayOrder: first
       paint order above the design (Design.MaxDocumentRenderOrder + 1). }
@@ -158,6 +161,7 @@ end;
 
 destructor TCADAppController.Destroy;
 begin
+  FreeAndNil(FContext);
   FreeAndNil(FTree);
   FreeAndNil(FChrome);
   FreeAndNil(FTyped);
@@ -237,6 +241,13 @@ begin
   FTree := TCADFeatureTree.Create(FLookup, ExtractFilePath(ExpandFileName(ParamStr(0))) +
     'assets' + PathDelim + 'icons' + PathDelim + 'png' + PathDelim + '20' + PathDelim);
   FTree.OnEditFeature := @EditFeature;
+  FContext := TCADSketchContextMenu.Create(UI, FSketchMode, FSketchPanel,
+    ExtractFilePath(ExpandFileName(ParamStr(0))) + 'assets' + PathDelim + 'icons' + PathDelim +
+    'png' + PathDelim + '20' + PathDelim);
+  FContext.OnDimension := @SmartDimension;
+  FContext.OnExitSketch := @FinishClick;
+  FSketchMode.OnSmartDimension := @SmartDimension;
+  FSketchMode.OnContextMenu := @ContextMenu;
   ModeChanged;
   Layout;
   Err := LoadOCCT;
@@ -324,6 +335,31 @@ begin
     cadNewSketch: NewSketch(nil);
     cadEditSketch: EditSketchClick(nil);
   end;
+end;
+
+{ Smart Dimension: the picked items get their dimension and its value opens
+  in place for typing. }
+procedure TCADAppController.SmartDimension(Sender: TObject);
+var
+  C: Integer;
+  Err: string;
+begin
+  Err := FSketchMode.ApplyCommand(sccDimension, C);
+  if (Err = '') and (C >= 0) then
+  begin
+    FSketchDims.EditDimension(C);
+    Exit;
+  end;
+  FSketchMode.ClearSelection;
+  if Err <> '' then
+    W.Status.Text := Err;
+end;
+
+{ AX, AY: view pixels -> window pixels (the design root is at the window's
+  top-left). }
+procedure TCADAppController.ContextMenu(Sender: TObject; AX, AY: Integer);
+begin
+  FContext.ShowAt(Round(W.View.Left) + AX, Round(W.View.Top) + AY, FHost.Width, FHost.Height);
 end;
 
 procedure TCADAppController.NormalToClick(Sender: TObject);
@@ -490,9 +526,13 @@ begin
       VK_DELETE: FSketchPanel.DeleteSelected;
       VK_ESCAPE:
         begin
-          { first Esc drops the shape being drawn, the next one goes to Select }
+          { first Esc drops the shape being drawn (Smart Dimension: the
+            picked items), the next one goes to Select }
           if FSketchMode.Editor.Busy then
             FSketchToolbar.Run(ctaCancel)
+          else if FSketchMode.SmartDimension and
+            (Length(FSketchMode.Editor.Selection.Points) + Length(FSketchMode.Editor.Selection.Entities) > 0) then
+            FSketchMode.ClearSelection
           else
             FSketchToolbar.Run(ctaSelect);
         end;

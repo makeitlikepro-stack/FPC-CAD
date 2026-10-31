@@ -33,6 +33,8 @@ const
 
 type
   TCADEntityEvent = procedure(Sender: TObject; AEntity: Integer) of object;
+  { right click in the view (local pixels, top-left origin) }
+  TCADViewPointEvent = procedure(Sender: TObject; AX, AY: Integer) of object;
 
   TCADSketchMode = class
   private
@@ -43,6 +45,11 @@ type
     FDownX, FDownY: Integer;
     FOnChanged: TNotifyEvent;
     FOnEntityDoubleClick: TCADEntityEvent;
+    FSmartDim: Boolean;                  { Smart Dimension tool: clicks pick, then dimension }
+    FOnSmartDimension: TNotifyEvent;
+    FOnContextMenu: TCADViewPointEvent;
+    procedure SmartClick(U, V: Double);
+    function SmartReady: Boolean;
     { sketch undo: texts of the sketch after each change }
     FUndo: array of string;
     FUndoPos: Integer;
@@ -96,6 +103,19 @@ type
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;
     { Select tool: double click on a line / circle / arc (dimension it). }
     property OnEntityDoubleClick: TCADEntityEvent read FOnEntityDoubleClick write FOnEntityDoubleClick;
+    { Smart Dimension (SolidWorks): the Select tool picks; one circle / arc,
+      or two items (points, lines), or a picked line / point and a click on
+      empty space fire OnSmartDimension with the picked items selected. }
+    procedure SetSmartDimension(AOn: Boolean);
+    property SmartDimension: Boolean read FSmartDim;
+    property OnSmartDimension: TNotifyEvent read FOnSmartDimension write FOnSmartDimension;
+    { Right click when no shape is being drawn: the item under the cursor
+      is selected (unless it already is), then this event (the menu). }
+    property OnContextMenu: TCADViewPointEvent read FOnContextMenu write FOnContextMenu;
+    { Construction geometry on / off for the selected entities (undo step). }
+    procedure ToggleConstruction;
+    { Clears the picked items (Esc in Smart Dimension, a failed dimension). }
+    procedure ClearSelection;
     { Pixel of a sketch point in the viewport (top-left origin). }
     function SketchToScreen(U, V: Double; out AX, AY: Double): Boolean;
     { Sketch mm per screen pixel at the current zoom. }
@@ -232,6 +252,7 @@ var
   L: TCADSketchLayer;
 begin
   FActive := False;
+  FSmartDim := False;
   FView.OnMouseDown := nil;
   FView.OnMouseUp := nil;
   FView.OnMouseMove := nil;
@@ -259,6 +280,7 @@ procedure TCADSketchMode.SetTool(ATool: TCADSketchTool);
 begin
   if not FActive then
     Exit;
+  FSmartDim := False;
   FEditor.SetTool(ATool);
   RefreshPreview;
   Changed;
@@ -489,6 +511,8 @@ procedure TCADSketchMode.MouseUp(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
 var
   U, V: Double;
+  K: TCADHitKind;
+  Index: Integer;
 begin
   if not FActive then
     Exit;
@@ -500,13 +524,30 @@ begin
   end;
   if Button = mbRight then
   begin
-    Cancel;
+    { drawing: right click ends the shape; else the context menu }
+    if FEditor.Busy or not Assigned(FOnContextMenu) or not ToSketch(X, Y, U, V) then
+    begin
+      Cancel;
+      Exit;
+    end;
+    FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
+    K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
+    if (K <> chkNone) and not FEditor.IsSelected(K, Index) then
+    begin
+      FEditor.ClearSelection;
+      FEditor.SelectItem(K, Index);
+    end;
+    RefreshPreview;
+    Changed;
+    FOnContextMenu(Self, X, Y);
     Exit;
   end;
   if (Button <> mbLeft) or not ToSketch(X, Y, U, V) then
     Exit;
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
-  if FEditor.Tool = sktSelect then
+  if FSmartDim then
+    SmartClick(U, V)
+  else if FEditor.Tool = sktSelect then
     FEditor.SelectAt(U, V, ssShift in Shift)
   else if FEditor.Click(U, V) then
     RefreshSketch;
@@ -593,12 +634,89 @@ begin
   Changed;
 end;
 
+procedure TCADSketchMode.SetSmartDimension(AOn: Boolean);
+begin
+  if not FActive then
+    Exit;
+  FEditor.SetTool(sktSelect);
+  FEditor.ClearSelection;
+  FSmartDim := AOn;
+  RefreshPreview;
+  Changed;
+end;
+
+{ One circle / arc, or two picked items, are a dimension already. }
+function TCADSketchMode.SmartReady: Boolean;
+var
+  Sel: TCADSketchSelection;
+begin
+  Sel := FEditor.Selection;
+  Result := (Length(Sel.Points) + Length(Sel.Entities) = 2) or
+    ((Length(Sel.Points) = 0) and (Length(Sel.Entities) = 1) and
+     (FSketch.Entities[Sel.Entities[0]].Kind in [sekCircle, sekArc]));
+end;
+
+procedure TCADSketchMode.SmartClick(U, V: Double);
+var
+  K: TCADHitKind;
+  Index: Integer;
+  Sel: TCADSketchSelection;
+begin
+  K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
+  Sel := FEditor.Selection;
+  if K = chkNone then
+  begin
+    { empty space: a picked line gets its length, a point / pair its distance }
+    if (Length(Sel.Points) + Length(Sel.Entities) > 0) and Assigned(FOnSmartDimension) then
+      FOnSmartDimension(Self);
+    Exit;
+  end;
+  if not FEditor.IsSelected(K, Index) then
+    FEditor.SelectItem(K, Index);
+  if SmartReady and Assigned(FOnSmartDimension) then
+    FOnSmartDimension(Self);
+end;
+
+procedure TCADSketchMode.ClearSelection;
+begin
+  if not FActive then
+    Exit;
+  FEditor.ClearSelection;
+  RefreshPreview;
+  Changed;
+end;
+
+procedure TCADSketchMode.ToggleConstruction;
+var
+  Sel: TCADSketchSelection;
+  I: Integer;
+  AllOn: Boolean;
+begin
+  if not FActive then
+    Exit;
+  Sel := FEditor.Selection;
+  if Length(Sel.Entities) = 0 then
+    Exit;
+  AllOn := True;
+  for I := 0 to High(Sel.Entities) do
+    AllOn := AllOn and FSketch.Entities[Sel.Entities[I]].Construction;
+  for I := 0 to High(Sel.Entities) do
+    FSketch.SetConstruction(Sel.Entities[I], not AllOn);
+  FEditor.Resolve;
+  RefreshSketch;
+  RefreshPreview;
+  Changed;
+end;
+
 function TCADSketchMode.StatusText: string;
 var
   R: TCADSketchSolveResult;
 begin
   if not FActive then
     Exit('');
+  if FSmartDim then
+    Exit('Smart Dimension: click a line, circle or arc (two items: distance or angle; ' +
+      'a line then empty space: its length) | Esc: clear / Select');
   R := FEditor.LastSolve;
   if R.DOF < 0 then
     Result := FEditor.Prompt

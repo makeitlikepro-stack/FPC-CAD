@@ -599,7 +599,14 @@ begin
         end;
       end
       else if (NP = 0) and (NE = 2) and (KindOf(S, E0) = sekLine) and (KindOf(S, E1) = sekLine) then
-        Result := S.Angle(E0, E1, LineAngle(S, E0, E1))
+      begin
+        { parallel lines: their distance (SolidWorks), else the angle }
+        if Abs(Sin(LineAngle(S, E0, E1))) < 1e-6 then
+          Result := S.PointLineDistance(S.Entities[E1].P1, E0,
+            PointLineDist(S, S.Entities[E1].P1, E0))
+        else
+          Result := S.Angle(E0, E1, LineAngle(S, E0, E1));
+      end
       else if (NP = 1) and (NE = 1) and (KindOf(S, E0) = sekLine) then
         Result := S.PointLineDistance(P0, E0, PointLineDist(S, P0, E0));
     sccDistX, sccDistY:

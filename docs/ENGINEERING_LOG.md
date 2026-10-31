@@ -182,3 +182,10 @@
   - Tests: 120 / reversed line 36.87 between the sides, set 45, 0 and 200 refused, arc inside the corner.
 - 2026-11-01 user: angle dimension between the sides: correct (GUI PASS).
 - 2026-11-01 user: merge into dev and main. Engine 910d08c released to main (pin branch=main); FPC Visual IDE main 7afcd3a.
+
+## 2026-11-01 — Stage 5 step 5d: Smart Dimension and the sketch context menu (Candidate)
+- Smart Dimension (ribbon Smart Dim, D, context menu): a tool on the Select tool (`TCADSketchMode.SetSmartDimension`); clicks pick items; one circle / arc, or two items, fire the dimension at once; a picked line / point then a click on empty space fires it (line: its length). Fired = `sccDimension` on the picks, then the value opens in place (`TCADSketchDims.EditDimension`); a combination that has no dimension clears the picks with the reason in the status line. Esc: first the picks, then Select. The active-tool mark sits under Smart Dim. With a fitting selection already made, Smart Dim dimensions it directly (old behaviour).
+- Two parallel lines get their distance (point of line 2 to line 1), two crossing lines the angle between them.
+- Context menu (`src/app/cad.app.sketchcontext.pas`, engine TUIContextMenu): right click with no shape being drawn selects the item under the cursor (unless already selected) and opens: the relations that fit (each tried on a copy of the sketch), Smart Dimension, Construction geometry (on / off for the picked entities, `TCADSketchMode.ToggleConstruction`, undo step), Select, Exit Sketch. Right click while drawing still ends the shape.
+- Tests: `TestSmartDimension` (parallel lines -> distance 5, crossing lines -> 45 between them). NOT RUN here; menu and picking are GUI checks.
+- Note: `cad.app.controller.pas` 686 and `cad.app.sketchmode.pas` 728 lines: candidates for a split (command routing / smart dimension) in a later step.

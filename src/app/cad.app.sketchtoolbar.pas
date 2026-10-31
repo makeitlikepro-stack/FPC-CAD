@@ -113,7 +113,7 @@ begin
   if not FMode.Active or (FMode.Editor = nil) then
     Exit;
   case FMode.Editor.Tool of
-    sktSelect: A := ctaSelect;
+    sktSelect: if FMode.SmartDimension then A := ctaDimension else A := ctaSelect;
     sktLine: A := ctaLine;
     sktRectangle: A := ctaRect;
     sktCircle: A := ctaCircle;
@@ -139,7 +139,13 @@ begin
     ctaArc: FMode.SetTool(sktArc);
     ctaArc3: FMode.SetTool(sktArc3);
     ctaPoint: FMode.SetTool(sktPoint);
-    ctaDimension: FPanel.RunCommand(sccDimension);
+    ctaDimension:
+      { a selection that fits: dimension it now; else the Smart Dimension tool }
+      if (Length(FMode.Editor.Selection.Points) + Length(FMode.Editor.Selection.Entities) > 0) and
+         not FMode.SmartDimension then
+        FPanel.RunCommand(sccDimension)
+      else
+        FMode.SetSmartDimension(True);
     ctaDistX: FPanel.RunCommand(sccDistX);
     ctaDistY: FPanel.RunCommand(sccDistY);
     ctaUndo: FMode.Undo;

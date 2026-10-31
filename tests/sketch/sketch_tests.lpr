@@ -1102,6 +1102,28 @@ begin
   end;
 end;
 
+procedure TestSmartDimension;
+var
+  S: TCADSketch;
+  L1, L2, C: Integer;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    L1 := S.AddLineXY(0, 0, 10, 0);
+    L2 := S.AddLineXY(0, 5, 10, 5);
+    Check(CADApplyCommand(S, Sel([], [L1, L2]), sccDimension, C, Err) and
+      (S.Constraints[C].Kind = sckPointLineDist) and Near(S.Constraints[C].Value, 5),
+      'smart dimension: two parallel lines get their distance (' + Err + ')');
+    L2 := S.AddLineXY(0, 0, 10, 10);
+    Check(CADApplyCommand(S, Sel([], [L1, L2]), sccDimension, C, Err) and
+      (S.Constraints[C].Kind = sckAngle) and Near(CADDimensionShownIn(S, C), 45, 1e-6),
+      'smart dimension: two crossing lines get the angle between them, 45');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -1118,6 +1140,7 @@ begin
   TestStatus;
   TestTypedInput;
   TestDimGraphic;
+  TestSmartDimension;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

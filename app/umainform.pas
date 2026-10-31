@@ -21,9 +21,36 @@ uses
 
 type
   TMainForm = class(TUIForm)
-    View: TUIViewport3D;
-    SketchToolbar: TUIPanel;
+    TitleBar: TUIPanel;
+    AppNameLabel: TUILabel;
+    MainMenu: TUIMenuBar;
+    DocLabel: TUILabel;
+    Ribbon: TUITabs;
+    FeaturesPage: TUIPanel;
+    NewSketchButton: TUIButton;
+    EditSketchButton: TUIButton;
+    FeatSketchGroupLabel: TUILabel;
+    FeatSketchGroupLabelLine: TUIPanel;
+    ExtrudeButton: TUIButton;
+    RevolveButton: TUIButton;
+    CutButton: TUIButton;
+    FilletButton: TUIButton;
+    ChamferButton: TUIButton;
+    PatternButton: TUIButton;
+    MirrorButton: TUIButton;
+    HoleButton: TUIButton;
+    FeatGroupLabel: TUILabel;
+    FeatGroupLabelLine: TUIPanel;
+    PlaneButton: TUIButton;
+    AxisButton: TUIButton;
+    FeatRefGroupLabel: TUILabel;
+    SketchPage: TUIPanel;
     FinishButton: TUIButton;
+    DimensionButton: TUIButton;
+    DistXButton: TUIButton;
+    DistYButton: TUIButton;
+    SkSketchGroupLabel: TUILabel;
+    SkSketchGroupLabelLine: TUIPanel;
     SelectButton: TUIButton;
     LineButton: TUIButton;
     RectButton: TUIButton;
@@ -31,13 +58,17 @@ type
     ArcButton: TUIButton;
     Arc3Button: TUIButton;
     PointButton: TUIButton;
-    DimensionButton: TUIButton;
-    DistXButton: TUIButton;
-    DistYButton: TUIButton;
-    UndoButton: TUIButton;
-    RedoButton: TUIButton;
-    NormalViewButton: TUIButton;
-    CancelButton: TUIButton;
+    SlotButton: TUIButton;
+    PolygonButton: TUIButton;
+    SkDrawGroupLabel: TUILabel;
+    SkDrawGroupLabelLine: TUIPanel;
+    TrimButton: TUIButton;
+    ExtendButton: TUIButton;
+    OffsetButton: TUIButton;
+    SketchMirrorButton: TUIButton;
+    SketchFilletButton: TUIButton;
+    SkModifyGroupLabel: TUILabel;
+    SkModifyGroupLabelLine: TUIPanel;
     HorizontalButton: TUIButton;
     VerticalButton: TUIButton;
     CoincidentButton: TUIButton;
@@ -50,9 +81,24 @@ type
     OnObjectButton: TUIButton;
     SymmetricButton: TUIButton;
     FixButton: TUIButton;
+    SkRelGroupLabel: TUILabel;
+    SkRelGroupLabelLine: TUIPanel;
+    UndoButton: TUIButton;
+    RedoButton: TUIButton;
+    CancelButton: TUIButton;
+    NormalViewButton: TUIButton;
+    SkEditGroupLabel: TUILabel;
     ActiveToolMark: TUIPanel;
-    DrawValueEdit: TUIEdit;
-    SidePanel: TUIPanel;
+    ViewPage: TUIPanel;
+    ZoomFitButton: TUIButton;
+    NormalToButton: TUIButton;
+    EdgesButton: TUIButton;
+    ViewGroupLabel: TUILabel;
+    LeftTabs: TUITabs;
+    ModelPage: TUIPanel;
+    FeatureTree: TUITreeView;
+    PropertiesPage: TUIPanel;
+    PartGroup: TUIGroupBox;
     TitleLabel: TUILabel;
     RadiusLabel: TUILabel;
     RadiusSlider: TUISlider;
@@ -63,18 +109,37 @@ type
     MeshesLabel: TUILabel;
     SyncLabel: TUILabel;
     SketchGroup: TUIGroupBox;
-    NewSketchButton: TUIButton;
-    EditSketchButton: TUIButton;
     RelationsLabel: TUILabel;
     ConstraintList: TUIListBox;
     ValueEdit: TUIEdit;
     SetButton: TUIButton;
     DeleteButton: TUIButton;
     DofLabel: TUILabel;
+    View: TUIViewport3D;
+    ViewToolbar: TUIPanel;
+    VtZoomFitButton: TUIButton;
+    VtNormalButton: TUIButton;
+    VtEdgesButton: TUIButton;
+    ConfirmCorner: TUIPanel;
+    ExitSketchCornerButton: TUIButton;
+    DiscardSketchButton: TUIButton;
+    DrawValueEdit: TUIEdit;
+    StatusBar: TUIPanel;
     StatusLabel: TUILabel;
+    ModeLabel: TUILabel;
+    DofStatusLabel: TUILabel;
+    UnitsLabel: TUILabel;
     procedure FormCreate(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure RadiusSliderChange(Sender: TObject);
+    procedure MenuExitClick(Sender: TObject);
+    procedure MenuUndoClick(Sender: TObject);
+    procedure MenuRedoClick(Sender: TObject);
+    procedure MenuZoomFitClick(Sender: TObject);
+    procedure MenuNormalToClick(Sender: TObject);
+    procedure MenuEdgesClick(Sender: TObject);
+    procedure MenuSketchClick(Sender: TObject);
+    procedure MenuEditSketchClick(Sender: TObject);
   private
     FApp: TCADAppController;
     procedure LayoutLater(Data: PtrInt);
@@ -101,7 +166,7 @@ end;
 
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
-  CADUseEngineStyleSheet(Host);
+  CADUseStyleSheet(Host);
 end;
 
 { After GPU setup: the widgets of the design exist and are bound; the
@@ -139,6 +204,53 @@ procedure TMainForm.RadiusSliderChange(Sender: TObject);
 begin
   if FApp <> nil then
     FApp.RadiusChanged;
+end;
+
+procedure TMainForm.MenuExitClick(Sender: TObject);
+begin
+  Close;
+end;
+
+procedure TMainForm.MenuUndoClick(Sender: TObject);
+begin
+  if FApp <> nil then
+    FApp.Run(cadUndo);
+end;
+
+procedure TMainForm.MenuRedoClick(Sender: TObject);
+begin
+  if FApp <> nil then
+    FApp.Run(cadRedo);
+end;
+
+procedure TMainForm.MenuZoomFitClick(Sender: TObject);
+begin
+  if FApp <> nil then
+    FApp.Run(cadZoomFit);
+end;
+
+procedure TMainForm.MenuNormalToClick(Sender: TObject);
+begin
+  if FApp <> nil then
+    FApp.Run(cadNormalTo);
+end;
+
+procedure TMainForm.MenuEdgesClick(Sender: TObject);
+begin
+  if FApp <> nil then
+    FApp.Run(cadToggleEdges);
+end;
+
+procedure TMainForm.MenuSketchClick(Sender: TObject);
+begin
+  if FApp <> nil then
+    FApp.Run(cadNewSketch);
+end;
+
+procedure TMainForm.MenuEditSketchClick(Sender: TObject);
+begin
+  if FApp <> nil then
+    FApp.Run(cadEditSketch);
 end;
 
 destructor TMainForm.Destroy;

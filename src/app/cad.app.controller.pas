@@ -4,12 +4,13 @@ unit CAD.App.Controller;
 
 { ROLE:      the FPC-CAD application behind the designed main window: OCCT,
              document, viewport sync, the demo plate, sketch mode with its
-             panel, toolbar and dimension chips, keyboard shortcuts, and the
-             window-edge layout (the design has no anchors yet). Every widget
-             is designed in FPC Visual IDE (app/MainForm.fvform) and found by
-             id; only the dimension chips are made here (one per dimension).
+             panel, ribbon page and dimension chips, the feature tree, the
+             window chrome (ribbon / left tabs / view toolbar / status) and
+             keyboard shortcuts. Every widget is designed in FPC Visual IDE
+             (app/MainForm.fvform, window edges by anchors=) and found by id;
+             only the dimension chips are made here (one per dimension).
   CALLED BY: UMainForm (app/umainform.pas): Create + Start after GPU setup,
-             Layout on resize, KeyDown, RadiusChanged.
+             Layout on resize, KeyDown, RadiusChanged, Run (menu).
   CALLS:     OCCT bridge (load + options), CAD.Core.Document (Recompute),
              CAD.View.Sync + CAD.View.ViewportTarget + MeshConvert (filler),
              CAD.App.DemoScene, CAD.App.Sketch* (code-built sketch UI).
@@ -27,16 +28,20 @@ uses
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
-  CAD.Sketch.Commands, CAD.Features.Sketch, CAD.Features.Extrude,
+  CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
-  CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue;
+  CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
+  CAD.App.FeatureTree, CAD.App.Chrome;
 
 type
+  { Menu commands (the ribbon buttons are bound directly). }
+  TCADAppCommand = (cadUndo, cadRedo, cadZoomFit, cadNormalTo, cadToggleEdges,
+    cadNewSketch, cadEditSketch);
+
   { The widgets of app/MainForm.fvform the application uses. }
   TCADAppWidgets = record
     Root: TUIWidget;
     View: TUIViewport3D;
-    SidePanel: TUIPanel;
     RadiusLabel: TUILabel;
     Radius: TUISlider;
     Selected, Hover, Recompute, Computed, Meshes, Sync: TUILabel;
@@ -61,6 +66,8 @@ type
     FSketchDims: TCADSketchDims;
     FSketchToolbar: TCADSketchToolbar;
     FTyped: TCADTypedValueBox;            { typed values while drawing }
+    FChrome: TCADChrome;
+    FTree: TCADFeatureTree;
     FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
     FLastSketch: TCADId;
     FSketchCount: Integer;
@@ -78,6 +85,12 @@ type
     procedure Rebuild(AFit: Boolean);
     function Describe(const AId: TPick3DId): string;
     procedure ModeChanged;
+    procedure OpenSketchOf(const AId: TCADId);
+    procedure DiscardSketch;
+    procedure EditFeature(Sender: TObject; const AId: TCADId);
+    procedure DiscardClick(Sender: TObject);
+    procedure NormalToClick(Sender: TObject);
+    function DofText: string;
   public
     { ARoot: the design's root; ALookup: TUIForm.Widget; AOverlayOrder: first
       paint order above the design (Design.MaxDocumentRenderOrder + 1). }
@@ -86,17 +99,18 @@ type
     destructor Destroy; override;
     { OCCT, document, demo scene, sketch UI; once, after GPU setup. }
     procedure Start;
-    { Window edges: view fills the left, side panel keeps its designed width
-      on the right, status line at the bottom. Everything inside keeps its
-      designed place. }
+    { The chip overlay follows the view (the designed widgets follow the
+      window by their anchors). }
     procedure Layout;
+    procedure Run(ACommand: TCADAppCommand);
     { SolidWorks-like shortcuts while a sketch is open. }
     procedure KeyDown(var Key: Word; Shift: TShiftState);
     procedure RadiusChanged;
   end;
 
-{ The engine demo style sheet when FPC_OPENGL_UI_ENGINE names the engine. }
-procedure CADUseEngineStyleSheet(AHost: TUIHostControl);
+{ The FPC-CAD light theme (assets/styles/cad-light.css, built by
+  tools/theme/build_theme.py) next to the program. }
+procedure CADUseStyleSheet(AHost: TUIHostControl);
 
 implementation
 
@@ -104,13 +118,14 @@ const
   StartRadius = 4.0;
   NavigationHint = 'left drag: orbit, middle/right: pan, wheel: zoom, click: select';
 
-procedure CADUseEngineStyleSheet(AHost: TUIHostControl);
+procedure CADUseStyleSheet(AHost: TUIHostControl);
 var
-  EngineDir: string;
+  F: string;
 begin
-  EngineDir := GetEnvironmentVariable('FPC_OPENGL_UI_ENGINE');
-  if EngineDir <> '' then
-    AHost.StyleSheetFile := IncludeTrailingPathDelimiter(EngineDir) + 'demo/styles/ui.css';
+  F := ExtractFilePath(ExpandFileName(ParamStr(0))) + 'assets' + PathDelim + 'styles' +
+    PathDelim + 'cad-light.css';
+  if FileExists(F) then
+    AHost.StyleSheetFile := F;
 end;
 
 constructor TCADAppController.Create(AHost: TUIHostControl; ARoot: TUIWidget;
@@ -128,7 +143,6 @@ begin
   FOverlayOrder := AOverlayOrder;
   W.Root := ARoot;
   W.View := TUIViewport3D(CADDesignWidget(ALookup, 'View', TUIViewport3D));
-  W.SidePanel := TUIPanel(CADDesignWidget(ALookup, 'SidePanel', TUIPanel));
   W.RadiusLabel := L('RadiusLabel');
   W.Radius := TUISlider(CADDesignWidget(ALookup, 'RadiusSlider', TUISlider));
   W.Selected := L('SelectedLabel');
@@ -144,6 +158,8 @@ end;
 
 destructor TCADAppController.Destroy;
 begin
+  FreeAndNil(FTree);
+  FreeAndNil(FChrome);
   FreeAndNil(FTyped);
   FreeAndNil(FSketchToolbar);
   FreeAndNil(FSketchDims);
@@ -213,6 +229,15 @@ begin
   FSketchDims.OnConstraintClick := @RelationClick;
   FTyped := TCADTypedValueBox.Create(UI, FLookup, FSketchMode, W.View);
   FTyped.OnStatus := @SketchStatus;
+  FChrome := TCADChrome.Create(FLookup, W.View);
+  FChrome.OnExtrude := @NewSketch;
+  FChrome.OnExitSketch := @FinishClick;
+  FChrome.OnDiscardSketch := @DiscardClick;
+  FChrome.OnNormalTo := @NormalToClick;
+  FTree := TCADFeatureTree.Create(FLookup, ExtractFilePath(ExpandFileName(ParamStr(0))) +
+    'assets' + PathDelim + 'icons' + PathDelim + 'png' + PathDelim + '20' + PathDelim);
+  FTree.OnEditFeature := @EditFeature;
+  ModeChanged;
   Layout;
   Err := LoadOCCT;
   FDoc := TCADDocument.Create;
@@ -235,37 +260,75 @@ end;
   centre offsets of the children, so a widget with designed children is
   resized with ResizeWidgetKeepingChildren. }
 procedure TCADAppController.Layout;
-var
-  RW, RH, PW, SH, VW, VH: Double;
 begin
-  if (FSketchPanel = nil) or (W.Root = nil) then
+  if (FOverlay = nil) or (W.Root = nil) then
     Exit;
-  RW := Max(1, W.Root.Width);
-  RH := Max(1, W.Root.Height);
-  PW := W.SidePanel.Width;
-  SH := W.Status.Height;
-  VW := Max(1, RW - PW);
-  VH := Max(1, RH - SH);
-  W.View.Width := VW;
-  W.View.Height := VH;
-  W.View.Left := 0;
-  W.View.Top := 0;
-  FHost.UI.ResizeWidgetKeepingChildren(FOverlay, VW, VH);
-  FOverlay.Left := 0;
-  FOverlay.Top := 0;
-  FHost.UI.ResizeWidgetKeepingChildren(W.SidePanel, PW, VH);
-  W.SidePanel.Left := VW;
-  W.SidePanel.Top := 0;
-  W.Status.Width := Max(1, RW - 2 * W.Status.Left);
-  W.Status.Top := VH;
+  { the design root sits at the host root's top-left: same coordinates }
+  FHost.UI.ResizeWidgetKeepingChildren(FOverlay, Max(1, W.View.Width), Max(1, W.View.Height));
+  FOverlay.Left := W.View.Left;
+  FOverlay.Top := W.View.Top;
 end;
 
-{ Sketch opened or closed: toolbar shown / hidden, panel parts enabled. }
+{ Sketch opened or closed: ribbon / left tab / corner, sketch buttons
+  enabled, panel parts enabled. }
 procedure TCADAppController.ModeChanged;
+var
+  F: TCADFeature;
+  Doc: string;
 begin
+  Doc := 'Part1';
+  if FSketchMode.Active then
+  begin
+    F := nil;
+    if CADIdValid(FEditSketch) and (FDoc <> nil) then
+      F := FDoc.Find(FEditSketch);
+    if F <> nil then
+      Doc := 'Editing ' + F.Name
+    else
+      Doc := Format('Editing Sketch %d', [FSketchCount + 1]);
+  end;
+  FChrome.SetSketchMode(FSketchMode.Active, Doc);
+  FChrome.SetDof(DofText);
   FSketchToolbar.UpdateVisible;
   FSketchPanel.UpdateEnabled;
   FTyped.Hide;
+end;
+
+function TCADAppController.DofText: string;
+var
+  R: TCADSketchSolveResult;
+begin
+  Result := '';
+  if not FSketchMode.Active or (FSketchMode.Editor = nil) then
+    Exit;
+  R := FSketchMode.Editor.LastSolve;
+  if R.DOF = 0 then
+    Result := 'Fully defined · DOF 0'
+  else if R.DOF > 0 then
+    Result := Format('Under defined · DOF %d', [R.DOF]);
+end;
+
+procedure TCADAppController.Run(ACommand: TCADAppCommand);
+begin
+  if FSketchMode = nil then
+    Exit;
+  case ACommand of
+    cadUndo: if FSketchMode.Active then FSketchToolbar.Run(ctaUndo);
+    cadRedo: if FSketchMode.Active then FSketchToolbar.Run(ctaRedo);
+    cadZoomFit: FChrome.ZoomFit;
+    cadNormalTo: NormalToClick(nil);
+    cadToggleEdges: FChrome.ToggleEdges;
+    cadNewSketch: NewSketch(nil);
+    cadEditSketch: EditSketchClick(nil);
+  end;
+end;
+
+procedure TCADAppController.NormalToClick(Sender: TObject);
+begin
+  if FSketchMode.Active then
+    FSketchMode.NormalView
+  else
+    W.Status.Text := 'Normal To works on the open sketch';
 end;
 
 procedure TCADAppController.Rebuild(AFit: Boolean);
@@ -291,6 +354,8 @@ begin
     W.Status.Text := 'Error: ' + Err;
   if AFit then
     W.View.FitAll;
+  if FTree <> nil then
+    FTree.Refresh(FDoc);
 end;
 
 { Feature objects (not the sketch-mode ones) on or off. Off keeps the sketch
@@ -380,9 +445,17 @@ procedure TCADAppController.KeyDown(var Key: Word; Shift: TShiftState);
 var
   Handled: Boolean;
 begin
-  if (FSketchMode = nil) or not FSketchMode.Active then
+  if FSketchMode = nil then
     Exit;
   if (FHost.UI <> nil) and (FHost.UI.FocusedWidget is TUIEdit) then
+    Exit;
+  if (Key = VK_F) and (Shift * [ssCtrl, ssAlt, ssShift] = []) then
+  begin
+    FChrome.ZoomFit;                       { F: zoom to fit, in any mode }
+    Key := 0;
+    Exit;
+  end;
+  if not FSketchMode.Active then
     Exit;
   { a digit starts a typed value (its character goes into the box) }
   if FTyped.KeyStarts(Key, Shift) then
@@ -430,7 +503,6 @@ end;
 procedure TCADAppController.EditSketchClick(Sender: TObject);
 var
   Id: TCADId;
-  S: TCADSketch;
 begin
   if (FDoc = nil) or FSketchMode.Active then
     Exit;
@@ -440,6 +512,32 @@ begin
     W.Status.Text := 'Select a body made from a sketch first (click it), then Edit sketch';
     Exit;
   end;
+  OpenSketchOf(Id);
+end;
+
+{ Feature tree: double click / Enter on a sketch or an extrude edits its
+  sketch. }
+procedure TCADAppController.EditFeature(Sender: TObject; const AId: TCADId);
+var
+  F: TCADFeature;
+begin
+  if (FDoc = nil) or FSketchMode.Active then
+    Exit;
+  F := FDoc.Find(AId);
+  if (F is TCADExtrudeFeature) and (Length(F.Inputs) > 0) then
+    F := FDoc.Find(F.Inputs[0]);
+  if F is TCADSketchFeature then
+    OpenSketchOf(F.Id)
+  else if F <> nil then
+    W.Status.Text := F.Name + ': no sketch to edit (only sketches and extrudes for now)';
+end;
+
+procedure TCADAppController.OpenSketchOf(const AId: TCADId);
+var
+  Id: TCADId;
+  S: TCADSketch;
+begin
+  Id := AId;
   S := TCADSketch.Create;
   try
     CADSketchFromText(FDoc.Find(Id).GetParamValue('geometry').S, S);
@@ -455,6 +553,23 @@ begin
   FEditSketch := Id;
   FSketchMode.EnterSketch(S);
   ModeChanged;
+end;
+
+{ Confirmation corner X: leave the sketch, the document keeps the old one. }
+procedure TCADAppController.DiscardSketch;
+begin
+  if not FSketchMode.Active then
+    Exit;
+  FSketchMode.Leave;
+  FEditSketch := CADNoId;
+  ShowDocumentObjects(True);
+  ModeChanged;
+  W.Status.Text := 'Sketch changes discarded';
+end;
+
+procedure TCADAppController.DiscardClick(Sender: TObject);
+begin
+  DiscardSketch;
 end;
 
 procedure TCADAppController.FinishClick(Sender: TObject);
@@ -483,6 +598,8 @@ begin
     FSketchToolbar.Refresh;
   if FTyped <> nil then
     FTyped.HideIfUnfocused;
+  if FChrome <> nil then
+    FChrome.SetDof(DofText);
   if FSketchMode.Active then
     W.Status.Text := FSketchMode.StatusText
   else

@@ -11,7 +11,7 @@
 | `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`, `Sketch`, `Extrude`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
 | `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`), `CAD.View.Sync` (shown results -> viewport objects), `CAD.View.ViewportTarget` (sync target on `TUIViewport3D`), `CAD.View.SketchDraw` (pixel -> sketch ray, camera square to the plane, stroke meshes) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
-| `src/app/` | application: `CAD.App.Controller` (the app behind the designed main window: OCCT, document, sync, sketch UI, shortcuts, window-edge layout), `CAD.App.DemoScene` (plate + 6 holes), `CAD.App.SketchMode` (viewport mouse -> editor, sketch objects), `CAD.App.SketchPanel` (sketch tools, constraint buttons, list, dimension edit), `CAD.App.SketchDims` (dimension chips and relation glyphs in the view, in-place edit), `CAD.App.SketchToolbar` (icon toolbar over the view, shortcuts via the main form), `CAD.App.TypedValue` (typed-value box next to the cursor), `CAD.App.DesignLookup` (designed widgets by id); `app/fpc_cad.lpi` builds `./fpc_cad`; `app/MainForm.fvform` + `app/umainform.pas` = main window designed in FPC Visual IDE | everything |
+| `src/app/` | application: `CAD.App.Controller` (the app behind the designed main window: OCCT, document, sync, sketch UI, shortcuts, window-edge layout), `CAD.App.DemoScene` (plate + 6 holes), `CAD.App.SketchMode` (viewport mouse -> editor, sketch objects), `CAD.App.SketchPanel` (sketch tools, constraint buttons, list, dimension edit), `CAD.App.SketchDims` (dimension chips and relation glyphs in the view, in-place edit), `CAD.App.SketchToolbar` (icon toolbar over the view, shortcuts via the main form), `CAD.App.TypedValue` (typed-value box next to the cursor), `CAD.App.DesignLookup` (designed widgets by id), `CAD.App.Chrome` (ribbon / left tabs / view toolbar / confirmation corner / status fields), `CAD.App.FeatureTree` (feature tree); `app/fpc_cad.lpi` builds `./fpc_cad`; `app/MainForm.fvform` + `app/umainform.pas` = main window designed in FPC Visual IDE | everything |
 
 No unit in `src/core` uses LCL, OpenGL or OCCT.
 
@@ -20,11 +20,13 @@ No unit in `src/core` uses LCL, OpenGL or OCCT.
 - Open Project: `app/fpc_cad.lpi`. The main window opens in the designer
   (`app/MainForm.fvform`); its unit is `app/umainform.pas` (`TMainForm =
   class(TUIForm)`, one field per widget, handlers by name).
-- Every widget of the window is in the design: viewport, sketch toolbar
-  (icon buttons with `iconFile`, `hint`; `ActiveToolMark`), side panel
-  (model lines, radius slider, `SketchGroup` with New / Edit sketch, relation
-  list, value edit, Set, Delete, DOF line), status line. Only the dimension
-  chips are made in code (one per dimension, on an overlay above the design).
+- Every widget of the window is in the design (SolidWorks-like, approved
+  mockup): title bar with the menu, ribbon `Ribbon` (pages Features /
+  Sketch / View, big icon buttons, groups; not-yet tools are disabled),
+  left tabs `LeftTabs` (Model: `FeatureTree`; Properties: demo plate and
+  sketch relations), `View` with `ViewToolbar` and `ConfirmCorner`,
+  `DrawValueEdit`, status bar. Window edges follow `anchors=`. Only the
+  dimension chips are made in code (one per dimension, overlay over the view).
 - The form unit only wires: `DesignLoaded` creates `TCADAppController`
   (`src/app/cad.app.controller.pas`), which finds its widgets by id
   (`CAD.App.DesignLookup`; a renamed or deleted widget gives a clear error
@@ -32,9 +34,9 @@ No unit in `src/core` uses LCL, OpenGL or OCCT.
   `CAD.App.SketchToolbar`, the constructor of `CAD.App.SketchPanel` and of
   the controller.
 - Icons: `iconFile="../assets/icons/png/24/<key>.png"` (relative to `app/`).
-- No anchors in the design yet: the controller keeps the window edges
-  (view fills the left, `SidePanel` keeps its designed width, `StatusLabel`
-  at the bottom). Everything inside a panel stays where it was designed.
+- Theme: `assets/styles/cad-light.css` from `tools/theme/build_theme.py`
+  (FPC Visual IDE template + Light palette + `cad.css.tpl`); inline colours
+  in the design win over it.
 - The exe is built into the repo root (OCCT bridge next to it); the form
   finds its design in `app/` (`TMainForm.DesignFileName`).
 

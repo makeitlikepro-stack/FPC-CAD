@@ -1,12 +1,11 @@
 unit CAD.App.SketchToolbar;
 {$mode objfpc}{$H+}
 
-{ ROLE:      SolidWorks-style sketch toolbar over the viewport while a sketch
-             is open. The toolbar is designed in FPC Visual IDE
-             (app/MainForm.fvform: panel SketchToolbar with its icon
-             buttons and the ActiveToolMark bar); this class binds the
-             buttons by id to the actions and moves the mark under the
-             active tool.
+{ ROLE:      the Sketch page of the ribbon (SolidWorks CommandManager),
+             designed in FPC Visual IDE (app/MainForm.fvform: SketchPage with
+             its icon buttons and the ActiveToolMark bar); this class binds
+             the buttons by id to the actions, enables them only while a
+             sketch is open and moves the mark under the active tool.
   CALLED BY: CAD.App.Controller (create, show / hide, refresh, shortcuts).
   CALLS:     CAD.App.SketchMode (tools, undo / redo, view), the panel
              (RunCommand: relation / dimension buttons).
@@ -29,16 +28,16 @@ type
   private
     FMode: TCADSketchMode;
     FPanel: TCADSketchPanel;
-    FBar: TUIPanel;
     FMark: TUIPanel;
     FButtons: array[TCADToolbarAction] of TUIButton;
+    FRelations: array of TUIButton;
     FOnFinish: TNotifyEvent;
     procedure ActionClick(Sender: TObject);
     procedure RelationClick(Sender: TObject);
   public
     constructor Create(ALookup: TCADWidgetLookup; AMode: TCADSketchMode;
       APanel: TCADSketchPanel);
-    { Shown only while a sketch is open; the place is the designed one. }
+    { Buttons enabled and the mark shown only while a sketch is open. }
     procedure UpdateVisible;
     { Active tool mark. }
     procedure Refresh;
@@ -72,7 +71,6 @@ begin
   inherited Create;
   FMode := AMode;
   FPanel := APanel;
-  FBar := TUIPanel(CADDesignWidget(ALookup, 'SketchToolbar', TUIPanel));
   FMark := TUIPanel(CADDesignWidget(ALookup, 'ActiveToolMark', TUIPanel));
   FMark.InputTransparent := True;
   for A := Low(TCADToolbarAction) to High(TCADToolbarAction) do
@@ -87,13 +85,22 @@ begin
       B := TUIButton(CADDesignWidget(ALookup, RelationId[C], TUIButton));
       B.Tag := RelationBase + Ord(C);
       B.OnClick := @RelationClick;
+      SetLength(FRelations, Length(FRelations) + 1);
+      FRelations[High(FRelations)] := B;
     end;
   UpdateVisible;
 end;
 
 procedure TCADSketchToolbar.UpdateVisible;
+var
+  A: TCADToolbarAction;
+  I: Integer;
 begin
-  FBar.Visible := FMode.Active;
+  for A := Low(TCADToolbarAction) to High(TCADToolbarAction) do
+    FButtons[A].Enabled := FMode.Active;
+  for I := 0 to High(FRelations) do
+    FRelations[I].Enabled := FMode.Active;
+  FMark.Visible := FMode.Active;
   if FMode.Active then
     Refresh;
 end;

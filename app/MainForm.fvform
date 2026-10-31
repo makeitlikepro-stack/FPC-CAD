@@ -1,59 +1,143 @@
 <?xml version="1.0" encoding="utf-8"?>
 <UI caption="FPC-CAD" version="1" position="screenCenter" borderStyle="sizeable" formOnCreate="FormCreate" formOnKeyDown="FormKeyDown">
-  <Panel id="root" class="ui-form" width="1200" height="760">
-    <Viewport3D id="View" top="0" left="0" width="872" height="734" edgeWidth="1.20000004768372" showEdges="true"/>
-    <Panel id="SketchToolbar" top="6" left="163" width="614" height="77" borderRadius="6" backgroundColor="#EDF0F5">
-      <Button id="FinishButton" top="3" hint="Finish sketch (Ctrl+Enter)" left="3" text="" width="34" height="34" iconFile="../assets/icons/png/24/finish.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="SelectButton" top="3" hint="Select (S)" left="54" text="" width="34" height="34" iconFile="../assets/icons/png/24/select.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="LineButton" top="3" hint="Line (L)" left="91" text="" width="34" height="34" iconFile="../assets/icons/png/24/line.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="RectButton" top="3" hint="Rectangle (R)" left="128" text="" width="34" height="34" iconFile="../assets/icons/png/24/rect.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="CircleButton" top="3" hint="Circle (C)" left="165" text="" width="34" height="34" iconFile="../assets/icons/png/24/circle.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="ArcButton" top="3" hint="Centre arc (A)" left="202" text="" width="34" height="34" iconFile="../assets/icons/png/24/arc.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="Arc3Button" top="3" hint="3-point arc (T)" left="239" text="" width="34" height="34" iconFile="../assets/icons/png/24/arc3.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="PointButton" top="3" hint="Point (P)" left="276" text="" width="34" height="34" iconFile="../assets/icons/png/24/point.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="DimensionButton" top="3" hint="Dimension (D)" left="327" text="" width="34" height="34" iconFile="../assets/icons/png/24/dimension.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="DistXButton" top="3" hint="Horizontal distance (X)" left="364" text="" width="34" height="34" iconFile="../assets/icons/png/24/dist-x.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="DistYButton" top="3" hint="Vertical distance (Y)" left="401" text="" width="34" height="34" iconFile="../assets/icons/png/24/dist-y.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="UndoButton" top="3" hint="Undo (Ctrl+Z)" left="452" text="" width="34" height="34" iconFile="../assets/icons/png/24/undo.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="RedoButton" top="3" hint="Redo (Ctrl+Y)" left="489" text="" width="34" height="34" iconFile="../assets/icons/png/24/redo.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="NormalViewButton" top="3" hint="Normal to sketch (N)" left="540" text="" width="34" height="34" iconFile="../assets/icons/png/24/normal-view.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="CancelButton" top="3" hint="Cancel (Esc)" left="577" text="" width="34" height="34" iconFile="../assets/icons/png/24/cancel.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="HorizontalButton" top="40" hint="Horizontal (H)" left="3" text="" width="34" height="34" iconFile="../assets/icons/png/24/horizontal.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="VerticalButton" top="40" hint="Vertical (V)" left="40" text="" width="34" height="34" iconFile="../assets/icons/png/24/vertical.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="CoincidentButton" top="40" hint="Coincident" left="77" text="" width="34" height="34" iconFile="../assets/icons/png/24/coincident.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="ParallelButton" top="40" hint="Parallel" left="114" text="" width="34" height="34" iconFile="../assets/icons/png/24/parallel.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="PerpendicularButton" top="40" hint="Perpendicular" left="151" text="" width="34" height="34" iconFile="../assets/icons/png/24/perpendicular.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="EqualButton" top="40" hint="Equal" left="188" text="" width="34" height="34" iconFile="../assets/icons/png/24/equal.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="TangentButton" top="40" hint="Tangent" left="225" text="" width="34" height="34" iconFile="../assets/icons/png/24/tangent.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="ConcentricButton" top="40" hint="Concentric" left="262" text="" width="34" height="34" iconFile="../assets/icons/png/24/concentric.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="MidpointButton" top="40" hint="Midpoint" left="299" text="" width="34" height="34" iconFile="../assets/icons/png/24/midpoint.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="OnObjectButton" top="40" hint="On object" left="336" text="" width="34" height="34" iconFile="../assets/icons/png/24/on-object.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="SymmetricButton" top="40" hint="Symmetric" left="373" text="" width="34" height="34" iconFile="../assets/icons/png/24/symmetric.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Button id="FixButton" top="40" hint="Fix" left="410" text="" width="34" height="34" iconFile="../assets/icons/png/24/fix.png" iconSize="24" iconPosition="center" backgroundColor="#EEEEEE"/>
-      <Panel id="ActiveToolMark" top="33" left="58" width="26" height="3" borderRadius="1" backgroundColor="#0078D6"/>
+  <Panel id="root" width="1440" height="900" backgroundColor="#F3F4F6">
+    <Panel id="TitleBar" left="0" top="0" width="1440" height="34" backgroundColor="#FFFFFF" anchors="left,top,right">
+      <Label id="AppNameLabel" left="14" top="7" width="76" height="20" text="FPC-CAD" fontSize="13" textColor="#1565C0"/>
+      <MenuBar id="MainMenu" left="92" top="2" width="330" height="30">
+      <MenuItem caption="File">
+        <MenuItem caption="Exit" command="MenuExitClick"/>
+      </MenuItem>
+      <MenuItem caption="Edit">
+        <MenuItem caption="Undo" shortcut="Ctrl+Z" command="MenuUndoClick"/>
+        <MenuItem caption="Redo" shortcut="Ctrl+Y" command="MenuRedoClick"/>
+      </MenuItem>
+      <MenuItem caption="View">
+        <MenuItem caption="Zoom to fit" shortcut="F" command="MenuZoomFitClick"/>
+        <MenuItem caption="Normal to sketch" shortcut="N" command="MenuNormalToClick"/>
+        <MenuItem caption="Show edges" command="MenuEdgesClick"/>
+      </MenuItem>
+      <MenuItem caption="Insert">
+        <MenuItem caption="Sketch" command="MenuSketchClick"/>
+        <MenuItem caption="Edit sketch" command="MenuEditSketchClick"/>
+      </MenuItem>
+      </MenuBar>
+      <Label id="DocLabel" left="620" top="7" width="200" height="20" text="Part1" textColor="#5B6470" anchors="top"/>
     </Panel>
-    <Edit id="DrawValueEdit" top="120" left="300" width="170" height="28" placeholder="length, angle, Enter"/>
-    <Panel id="SidePanel" top="0" left="872" width="328" height="734" backgroundColor="#292B30">
-      <Label id="TitleLabel" top="10" left="12" text="Plate with 6 holes" width="236" height="26"/>
-      <Label id="RadiusLabel" top="44" left="12" text="Hole radius: 4.00 mm" width="236" height="24"/>
-      <Slider id="RadiusSlider" top="70" left="12" value="4" width="236" height="28" maximum="7" minimum="1" eventOnChange="RadiusSliderChange"/>
-      <Label id="SelectedLabel" top="108" left="12" text="Selected: -" width="236" height="24"/>
-      <Label id="HoverLabel" top="132" left="12" text="Hover: -" width="236" height="24"/>
-      <Label id="RecomputeLabel" top="166" left="12" text="Recompute: -" width="236" height="24"/>
-      <Label id="ComputedLabel" top="190" left="12" text="" width="236" height="24"/>
-      <Label id="MeshesLabel" top="202" left="12" text="" width="236" height="24"/>
-      <Label id="SyncLabel" top="238" left="12" text="" width="236" height="24"/>
-      <GroupBox id="SketchGroup" top="276" left="8" width="312" height="310" caption="Sketch">
-        <Button id="NewSketchButton" top="8" hint="New sketch on the XY plane" left="8" text="New sketch" width="134" height="30" iconFile="../assets/icons/png/20/new-sketch.png" iconSize="20" textColor="#434343" backgroundColor="#FFFFFF"/>
-        <Button id="EditSketchButton" top="8" hint="Edit the sketch of the selected body (or the last one)" left="152" text="Edit sketch" width="130" height="30" iconFile="../assets/icons/png/20/edit-sketch.png" iconSize="20" textColor="#434343" backgroundColor="#FFFFFF"/>
-        <Label id="RelationsLabel" top="48" left="8" text="Relations and dimensions" width="224" height="22"/>
-        <ListBox id="ConstraintList" top="70" left="8" width="274" height="120"/>
-        <Edit id="ValueEdit" top="200" left="8" width="100" height="30" placeholder="value, Enter = set"/>
-        <Button id="SetButton" top="200" hint="Set the dimension to the value" left="114" text="Set" width="56" height="30"/>
-        <Button id="DeleteButton" top="200" hint="Delete the selected relation (Delete)" left="176" text="Delete" width="56" height="30"/>
-        <Label id="DofLabel" top="238" left="8" text="DOF -" width="224" height="24"/>
-      </GroupBox>
+    <Tabs id="Ribbon" left="0" top="34" width="1440" height="124" backgroundColor="#FFFFFF" anchors="left,top,right" selectedIndex="0">
+      <TabPage id="FeaturesPage" caption="Features" backgroundColor="#F3F6FA">
+        <Button id="NewSketchButton" left="6" top="4" width="58" height="62" text="Sketch" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/new-sketch.png" iconSize="28" iconPosition="top" hint="New sketch on the XY plane"/>
+        <Button id="EditSketchButton" left="66" top="4" width="62" height="62" text="Edit Sketch" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/edit-sketch.png" iconSize="28" iconPosition="top" hint="Edit the sketch of the selected body (or the last one)"/>
+        <Label id="FeatSketchGroupLabel" left="6" top="68" width="124" height="16" text="Sketch" fontSize="10" textColor="#5B6470"/>
+        <Panel id="FeatSketchGroupLabelLine" left="133" top="6" width="1" height="76" backgroundColor="#D5D9E0"/>
+        <Button id="ExtrudeButton" left="140" top="4" width="58" height="62" text="Extrude" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/extrude.png" iconSize="28" iconPosition="top" hint="Extruded boss: sketch a profile, Exit Sketch extrudes it 10 mm"/>
+        <Button id="RevolveButton" left="200" top="4" width="56" height="62" text="Revolve" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/revolve.png" iconSize="28" iconPosition="top" hint="Revolved boss (not yet)" enabled="false"/>
+        <Button id="CutButton" left="258" top="4" width="56" height="62" text="Cut" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/cut.png" iconSize="28" iconPosition="top" hint="Extruded cut (not yet)" enabled="false"/>
+        <Button id="FilletButton" left="316" top="4" width="56" height="62" text="Fillet" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/fillet.png" iconSize="28" iconPosition="top" hint="Fillet (not yet)" enabled="false"/>
+        <Button id="ChamferButton" left="374" top="4" width="56" height="62" text="Chamfer" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/chamfer.png" iconSize="28" iconPosition="top" hint="Chamfer (not yet)" enabled="false"/>
+        <Button id="PatternButton" left="432" top="4" width="56" height="62" text="Pattern" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/pattern.png" iconSize="28" iconPosition="top" hint="Linear pattern (not yet)" enabled="false"/>
+        <Button id="MirrorButton" left="490" top="4" width="56" height="62" text="Mirror" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/mirror.png" iconSize="28" iconPosition="top" hint="Mirror (not yet)" enabled="false"/>
+        <Button id="HoleButton" left="548" top="4" width="56" height="62" text="Hole" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/hole.png" iconSize="28" iconPosition="top" hint="Hole wizard (not yet)" enabled="false"/>
+        <Label id="FeatGroupLabel" left="140" top="68" width="466" height="16" text="Features" fontSize="10" textColor="#5B6470"/>
+        <Panel id="FeatGroupLabelLine" left="609" top="6" width="1" height="76" backgroundColor="#D5D9E0"/>
+        <Button id="PlaneButton" left="616" top="4" width="56" height="62" text="Plane" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/plane.png" iconSize="28" iconPosition="top" hint="Reference plane (not yet)" enabled="false"/>
+        <Button id="AxisButton" left="674" top="4" width="56" height="62" text="Axis" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/axis.png" iconSize="28" iconPosition="top" hint="Reference axis (not yet)" enabled="false"/>
+        <Label id="FeatRefGroupLabel" left="616" top="68" width="116" height="16" text="Reference" fontSize="10" textColor="#5B6470"/>
+      </TabPage>
+      <TabPage id="SketchPage" caption="Sketch" backgroundColor="#F3F6FA">
+        <Button id="FinishButton" left="6" top="4" width="62" height="62" text="Exit Sketch" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/exit-sketch.png" iconSize="28" iconPosition="top" hint="Exit sketch (Ctrl+Enter)"/>
+        <Button id="DimensionButton" left="70" top="4" width="62" height="62" text="Smart Dim" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/smart-dim.png" iconSize="28" iconPosition="top" hint="Smart dimension on the selection (D)"/>
+        <Button id="DistXButton" left="134" top="4" width="62" height="62" text="Horiz. Dim" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/dist-x.png" iconSize="28" iconPosition="top" hint="Horizontal distance (X)"/>
+        <Button id="DistYButton" left="198" top="4" width="62" height="62" text="Vert. Dim" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/dist-y.png" iconSize="28" iconPosition="top" hint="Vertical distance (Y)"/>
+        <Label id="SkSketchGroupLabel" left="6" top="68" width="256" height="16" text="Sketch" fontSize="10" textColor="#5B6470"/>
+        <Panel id="SkSketchGroupLabelLine" left="265" top="6" width="1" height="76" backgroundColor="#D5D9E0"/>
+        <Button id="SelectButton" left="272" top="4" width="56" height="62" text="Select" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/select.png" iconSize="28" iconPosition="top" hint="Select (S)"/>
+        <Button id="LineButton" left="330" top="4" width="56" height="62" text="Line" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/line.png" iconSize="28" iconPosition="top" hint="Line (L)"/>
+        <Button id="RectButton" left="388" top="4" width="56" height="62" text="Rectangle" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/rect.png" iconSize="28" iconPosition="top" hint="Rectangle (R)"/>
+        <Button id="CircleButton" left="446" top="4" width="56" height="62" text="Circle" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/circle.png" iconSize="28" iconPosition="top" hint="Circle (C)"/>
+        <Button id="ArcButton" left="504" top="4" width="56" height="62" text="Arc" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/arc.png" iconSize="28" iconPosition="top" hint="Centre arc (A)"/>
+        <Button id="Arc3Button" left="562" top="4" width="56" height="62" text="3-Pt Arc" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/arc3.png" iconSize="28" iconPosition="top" hint="3-point arc (T)"/>
+        <Button id="PointButton" left="620" top="4" width="56" height="62" text="Point" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/point.png" iconSize="28" iconPosition="top" hint="Point (P)"/>
+        <Button id="SlotButton" left="678" top="4" width="56" height="62" text="Slot" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/slot.png" iconSize="28" iconPosition="top" hint="Slot (not yet)" enabled="false"/>
+        <Button id="PolygonButton" left="736" top="4" width="56" height="62" text="Polygon" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/polygon.png" iconSize="28" iconPosition="top" hint="Polygon (not yet)" enabled="false"/>
+        <Label id="SkDrawGroupLabel" left="272" top="68" width="522" height="16" text="Draw" fontSize="10" textColor="#5B6470"/>
+        <Panel id="SkDrawGroupLabelLine" left="797" top="6" width="1" height="76" backgroundColor="#D5D9E0"/>
+        <Button id="TrimButton" left="804" top="4" width="56" height="62" text="Trim" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/trim.png" iconSize="28" iconPosition="top" hint="Trim entities (not yet)" enabled="false"/>
+        <Button id="ExtendButton" left="862" top="4" width="56" height="62" text="Extend" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/extend.png" iconSize="28" iconPosition="top" hint="Extend entities (not yet)" enabled="false"/>
+        <Button id="OffsetButton" left="920" top="4" width="56" height="62" text="Offset" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/offset.png" iconSize="28" iconPosition="top" hint="Offset entities (not yet)" enabled="false"/>
+        <Button id="SketchMirrorButton" left="978" top="4" width="56" height="62" text="Mirror" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/mirror.png" iconSize="28" iconPosition="top" hint="Mirror entities (not yet)" enabled="false"/>
+        <Button id="SketchFilletButton" left="1036" top="4" width="56" height="62" text="Fillet" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/fillet.png" iconSize="28" iconPosition="top" hint="Sketch fillet (not yet)" enabled="false"/>
+        <Label id="SkModifyGroupLabel" left="804" top="68" width="290" height="16" text="Modify" fontSize="10" textColor="#5B6470"/>
+        <Panel id="SkModifyGroupLabelLine" left="1097" top="6" width="1" height="76" backgroundColor="#D5D9E0"/>
+        <Button id="HorizontalButton" left="1104" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/horizontal.png" iconSize="20" iconPosition="center" hint="Horizontal (H)"/>
+        <Button id="VerticalButton" left="1136" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/vertical.png" iconSize="20" iconPosition="center" hint="Vertical (V)"/>
+        <Button id="CoincidentButton" left="1168" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/coincident.png" iconSize="20" iconPosition="center" hint="Coincident"/>
+        <Button id="ParallelButton" left="1200" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/parallel.png" iconSize="20" iconPosition="center" hint="Parallel"/>
+        <Button id="PerpendicularButton" left="1232" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/perpendicular.png" iconSize="20" iconPosition="center" hint="Perpendicular"/>
+        <Button id="EqualButton" left="1264" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/equal.png" iconSize="20" iconPosition="center" hint="Equal"/>
+        <Button id="TangentButton" left="1104" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/tangent.png" iconSize="20" iconPosition="center" hint="Tangent"/>
+        <Button id="ConcentricButton" left="1136" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/concentric.png" iconSize="20" iconPosition="center" hint="Concentric"/>
+        <Button id="MidpointButton" left="1168" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/midpoint.png" iconSize="20" iconPosition="center" hint="Midpoint"/>
+        <Button id="OnObjectButton" left="1200" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/on-object.png" iconSize="20" iconPosition="center" hint="On object"/>
+        <Button id="SymmetricButton" left="1232" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/symmetric.png" iconSize="20" iconPosition="center" hint="Symmetric"/>
+        <Button id="FixButton" left="1264" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/fix.png" iconSize="20" iconPosition="center" hint="Fix"/>
+        <Label id="SkRelGroupLabel" left="1104" top="68" width="192" height="16" text="Relations" fontSize="10" textColor="#5B6470"/>
+        <Panel id="SkRelGroupLabelLine" left="1299" top="6" width="1" height="76" backgroundColor="#D5D9E0"/>
+        <Button id="UndoButton" left="1306" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/undo.png" iconSize="20" iconPosition="center" hint="Undo (Ctrl+Z)"/>
+        <Button id="RedoButton" left="1338" top="4" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/redo.png" iconSize="20" iconPosition="center" hint="Redo (Ctrl+Y)"/>
+        <Button id="CancelButton" left="1306" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/cancel.png" iconSize="20" iconPosition="center" hint="Cancel the shape being drawn (Esc)"/>
+        <Button id="NormalViewButton" left="1338" top="36" width="30" height="30" text="" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/20/normal-view.png" iconSize="20" iconPosition="center" hint="Normal to sketch (N)"/>
+        <Label id="SkEditGroupLabel" left="1306" top="68" width="64" height="16" text="Edit" fontSize="10" textColor="#5B6470"/>
+        <Panel id="ActiveToolMark" left="286" top="63" width="28" height="3" backgroundColor="#1565C0" borderRadius="1"/>
+      </TabPage>
+      <TabPage id="ViewPage" caption="View" backgroundColor="#F3F6FA">
+        <Button id="ZoomFitButton" left="6" top="4" width="58" height="62" text="Zoom Fit" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/zoom-fit.png" iconSize="28" iconPosition="top" hint="Zoom to fit (F)"/>
+        <Button id="NormalToButton" left="66" top="4" width="62" height="62" text="Normal To" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/normal-view.png" iconSize="28" iconPosition="top" hint="Normal to the sketch plane (N)"/>
+        <Button id="EdgesButton" left="130" top="4" width="58" height="62" text="Edges" fontSize="11" textColor="#1F2329" backgroundColor="#F3F6FA" iconFile="../assets/icons/png/32/display-style.png" iconSize="28" iconPosition="top" hint="Show / hide edges"/>
+        <Label id="ViewGroupLabel" left="6" top="68" width="184" height="16" text="View" fontSize="10" textColor="#5B6470"/>
+      </TabPage>
+    </Tabs>
+    <Tabs id="LeftTabs" left="0" top="158" width="300" height="716" backgroundColor="#FFFFFF" anchors="left,top,bottom" selectedIndex="0">
+      <TabPage id="ModelPage" caption="Model" backgroundColor="#FFFFFF">
+        <TreeView id="FeatureTree" left="0" top="0" width="300" height="680" anchors="left,top,right,bottom"/>
+      </TabPage>
+      <TabPage id="PropertiesPage" caption="Properties" backgroundColor="#FFFFFF">
+        <GroupBox id="PartGroup" left="8" top="8" width="284" height="250" caption="Demo plate" textColor="#1F2329">
+          <Label id="TitleLabel" left="8" top="4" width="260" height="22" text="Plate with 6 holes" textColor="#1F2329"/>
+          <Label id="RadiusLabel" left="8" top="30" width="260" height="20" text="Hole radius: 4.00 mm" textColor="#1F2329"/>
+          <Slider id="RadiusSlider" left="8" top="54" width="260" height="28" minimum="1" maximum="7" value="4" eventOnChange="RadiusSliderChange"/>
+          <Label id="SelectedLabel" left="8" top="90" width="260" height="20" text="Selected: -" textColor="#5B6470"/>
+          <Label id="HoverLabel" left="8" top="112" width="260" height="20" text="Hover: -" textColor="#5B6470"/>
+          <Label id="RecomputeLabel" left="8" top="140" width="260" height="20" text="Recompute: -" textColor="#5B6470"/>
+          <Label id="ComputedLabel" left="8" top="160" width="260" height="20" text="" textColor="#5B6470"/>
+          <Label id="MeshesLabel" left="8" top="180" width="260" height="20" text="" textColor="#5B6470"/>
+          <Label id="SyncLabel" left="8" top="200" width="260" height="20" text="" textColor="#5B6470"/>
+        </GroupBox>
+        <GroupBox id="SketchGroup" left="8" top="268" width="284" height="270" caption="Sketch relations" textColor="#1F2329">
+          <Label id="RelationsLabel" left="8" top="4" width="260" height="20" text="Relations and dimensions" textColor="#5B6470"/>
+          <ListBox id="ConstraintList" left="8" top="28" width="260" height="144"/>
+          <Edit id="ValueEdit" left="8" top="180" width="124" height="28" placeholder="value, Enter = set"/>
+          <Button id="SetButton" left="138" top="180" width="62" height="28" text="Set" textColor="#1F2329" backgroundColor="#E3EFFC" hint="Set the dimension to the value"/>
+          <Button id="DeleteButton" left="206" top="180" width="62" height="28" text="Delete" textColor="#1F2329" backgroundColor="#FCEFEF" hint="Delete the selected relation (Delete)"/>
+          <Label id="DofLabel" left="8" top="216" width="260" height="22" text="No sketch open" textColor="#1F2329"/>
+        </GroupBox>
+      </TabPage>
+    </Tabs>
+    <Viewport3D id="View" left="300" top="158" width="1140" height="716" showEdges="true" edgeWidth="1.2" background="#E8EDF4" anchors="left,top,right,bottom"/>
+    <Panel id="ViewToolbar" left="819" top="168" width="102" height="36" backgroundColor="#FFFFFFEB" borderColor="#D5D9E0" borderWidth="1" borderRadius="7" anchors="top">
+      <Button id="VtZoomFitButton" left="3" top="3" width="30" height="30" text="" backgroundColor="#FFFFFF00" iconFile="../assets/icons/png/20/zoom-fit.png" iconSize="20" iconPosition="center" hint="Zoom to fit (F)"/>
+      <Button id="VtNormalButton" left="35" top="3" width="30" height="30" text="" backgroundColor="#FFFFFF00" iconFile="../assets/icons/png/20/normal-view.png" iconSize="20" iconPosition="center" hint="Normal to sketch (N)"/>
+      <Button id="VtEdgesButton" left="67" top="3" width="30" height="30" text="" backgroundColor="#FFFFFF00" iconFile="../assets/icons/png/20/display-style.png" iconSize="20" iconPosition="center" hint="Show / hide edges"/>
     </Panel>
-    <Label id="StatusLabel" top="734" left="8" text="" width="1184" height="26" textColor="#D9DEE6"/>
+    <Panel id="ConfirmCorner" left="1348" top="168" width="80" height="38" backgroundColor="#00000000" anchors="top,right">
+      <Button id="ExitSketchCornerButton" left="0" top="0" width="38" height="38" text="" backgroundColor="#FFF4E5" borderColor="#F0B36A" borderWidth="1" borderRadius="6" iconFile="../assets/icons/png/24/exit-sketch.png" iconSize="24" iconPosition="center" hint="Exit sketch and keep it (Ctrl+Enter)"/>
+      <Button id="DiscardSketchButton" left="42" top="0" width="38" height="38" text="" backgroundColor="#FCEFEF" borderColor="#F1CFCF" borderWidth="1" borderRadius="6" iconFile="../assets/icons/png/24/cancel.png" iconSize="24" iconPosition="center" hint="Exit sketch and discard its changes"/>
+    </Panel>
+    <Edit id="DrawValueEdit" left="760" top="360" width="170" height="28" placeholder="length, angle, Enter" borderColor="#1565C0" borderWidth="1"/>
+    <Panel id="StatusBar" left="0" top="874" width="1440" height="26" backgroundColor="#FFFFFF" anchors="left,right,bottom">
+      <Label id="StatusLabel" left="12" top="3" width="880" height="20" text="" textColor="#4A5260" anchors="left,top,right"/>
+      <Label id="ModeLabel" left="920" top="3" width="220" height="20" text="Part1" textColor="#4A5260" anchors="top,right"/>
+      <Label id="DofStatusLabel" left="1150" top="3" width="200" height="20" text="" textColor="#4A5260" anchors="top,right"/>
+      <Label id="UnitsLabel" left="1370" top="3" width="60" height="20" text="MMGS" textColor="#4A5260" anchors="top,right"/>
+    </Panel>
   </Panel>
 </UI>

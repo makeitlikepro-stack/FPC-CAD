@@ -691,6 +691,7 @@ var
   K: TCADHitKind;
   Index: Integer;
   Plan: TCADLineEditPlan;
+  TrimPlan: TCADTrimPlan;
   Err: string;
 begin
   K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
@@ -698,13 +699,27 @@ begin
     FLineEditMessage := 'Trim / Extend: click the body of a straight line'
   else if FSketch.Entities[Index].Kind <> sekLine then
     FLineEditMessage := 'Trim / Extend: circles and arcs are not supported yet'
-  else if not CADPlanLineEdit(FSketch, Index, U, V, FLineEditMode, Plan, Err) then
+  else if FLineEditMode = lemTrim then
+  begin
+    if not CADPlanLineTrim(FSketch, Index, U, V, TrimPlan, Err) then
+      FLineEditMessage := Err
+    else if not CADApplyLineTrim(FSketch, TrimPlan, Err) then
+      FLineEditMessage := Err
+    else
+    begin
+      FLineEditMessage := 'Segment removed. Click another segment or press Esc';
+      FEditor.ClearSelection;
+      FEditor.Resolve;
+      RefreshSketch;
+    end;
+  end
+  else if not CADPlanLineEdit(FSketch, Index, U, V, lemExtend, Plan, Err) then
     FLineEditMessage := Err
   else if not CADApplyLineEdit(FSketch, Plan, Err) then
     FLineEditMessage := Err
   else
   begin
-    FLineEditMessage := 'Line endpoint updated. Click another line, or press Esc to Select';
+    FLineEditMessage := 'Line endpoint extended. Click another line or press Esc';
     FEditor.ClearSelection;
     FEditor.Resolve;
     RefreshSketch;
@@ -796,7 +811,7 @@ begin
     if FLineEditMessage <> '' then
       Exit(FLineEditMessage);
     if FLineEditMode = lemTrim then
-      Exit('Trim: click an outer line segment between the end and a crossing | Esc: Select')
+      Exit('Trim: click any unwanted line segment (including between crossings) | Esc: Select')
     else
       Exit('Extend: click near a line end to reach a boundary | Esc: Select');
   end;

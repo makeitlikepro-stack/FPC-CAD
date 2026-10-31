@@ -7,6 +7,7 @@
 | `src/config/` | settings records only (performance knobs) | RTL |
 | `src/core/` | the model and the recompute machinery | RTL, `src/config` |
 | `src/occt/` | OCCT adapter: `CAD.OCCT.Bridge` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
+| `src/sketch/` | 2D sketch: `CAD.Sketch.Model` (numbers, entities, constraints, plane), `CAD.Sketch.Constraints` (residuals), `CAD.Sketch.Solver` (LM, DOF, redundant/conflicting) | RTL only |
 | `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
 | `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`), `CAD.View.Sync` (shown results -> viewport objects), `CAD.View.ViewportTarget` (sync target on `TUIViewport3D`) | occt, engine `src/rendering` + `src/ui` (no GL calls) |

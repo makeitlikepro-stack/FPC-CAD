@@ -1013,6 +1013,36 @@ begin
   end;
 end;
 
+procedure TestSequentialCircleThenLineTrim;
+var
+  S: TCADSketch;
+  Circle, Line, Arc, EndLine: Integer;
+  First, Second: TCADTrimPlan;
+  Err: string;
+  A: TCADSketchEntity;
+begin
+  S := TCADSketch.Create;
+  try
+    Circle := S.AddCircle(S.AddPoint(0, 0), 5);
+    Line := S.AddLineXY(-10, 0, 10, 0);
+    Check(CADPlanSketchTrim(S, Circle, 0, 5, First, Err) and
+      CADApplySketchTrim(S, First, Err),
+      'consecutive screenshot circle: cut away top circle half first');
+    Arc := S.EntityCount - 1;
+    Check(CADPlanSketchTrim(S, Line, 8, 0, Second, Err) and
+      CADApplySketchTrim(S, Second, Err),
+      'consecutive screenshot circle: trim line outside remaining arc (' + Err + ')');
+    EndLine := S.EntityCount - 1;
+    A := S.Entities[Arc];
+    Check(S.Entities[EndLine].Active and S.Entities[Arc].Active and
+      S.Entities[EndLine].P2 = A.P2 and
+      Near(S.PointX(S.Entities[EndLine].P2), 5),
+      'consecutive screenshot circle: line and surviving arc keep shared endpoint');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestSequentialCircleToCircleTrim;
 var
   S: TCADSketch;
@@ -1143,6 +1173,7 @@ begin
   TestWholeCircleAndArcDeletion;
   TestSequentialLineToLineTrim;
   TestSequentialLineToCircleTrim;
+  TestSequentialCircleThenLineTrim;
   TestSequentialCircleToCircleTrim;
   TestIncomingPointsOnSurvivingSections;
   TestSequentialArcToLineTrim;

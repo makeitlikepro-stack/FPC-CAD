@@ -488,7 +488,12 @@ begin
     Exit;
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
   FEditor.Move(U, V);
-  if FEditor.UpdateHover(U, V) then
+  if FLineEditActive then
+  begin
+    if FEditor.UpdateEntityHover(U, V) then
+      RefreshSketch;
+  end
+  else if FEditor.UpdateHover(U, V) then
     RefreshSketch;                       { hover colour }
   RefreshPreview;
 end;

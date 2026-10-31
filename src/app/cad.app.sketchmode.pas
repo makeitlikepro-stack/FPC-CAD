@@ -932,13 +932,13 @@ begin
     else
       Exit('Extend: click near a line end to reach a boundary | Esc: Select');
   end;
+  if FSmartDim then
+    Exit('Smart Dimension: click a line, circle or arc (two items: distance or angle; ' +
+      'a line then empty space: its length) | Esc: clear / Select');
   if Length(FContourSeeds)>0 then
     Exit(Format('Selected contours: %d | Shift+click another region to add/remove | ' +
       'Click inside a region to replace selection | Exit Sketch: Extrude selected',
       [FContourCount]));
-  if FSmartDim then
-    Exit('Smart Dimension: click a line, circle or arc (two items: distance or angle; ' +
-      'a line then empty space: its length) | Esc: clear / Select');
   R := FEditor.LastSolve;
   if R.DOF < 0 then
     Result := FEditor.Prompt

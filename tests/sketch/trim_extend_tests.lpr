@@ -724,16 +724,31 @@ end;
 procedure TestCircleWithOneCrossing;
 var
   S: TCADSketch;
-  Circle: Integer;
+  Circle, Other: Integer;
   Plan: TCADTrimPlan;
   Err: string;
 begin
   S := TCADSketch.Create;
   try
     Circle := S.AddCircle(S.AddPoint(0, 0), 5);
-    S.AddLineXY(0, 5, 0, 10);          { tangent line: only one crossing }
-    Check(not CADPlanSketchTrim(S, Circle, 5, 0, Plan, Err) and (Err <> ''),
-      'curve trim: a single tangent touch cannot define a circular cut');
+    S.AddLineXY(0, 5, 0, 10); { only the line endpoint touches the circle }
+    Check(CADPlanSketchTrim(S, Circle, 5, 0, Plan, Err) and
+      Near(Plan.FromT, 0) and Near(Plan.ToT, 1) and
+      CADApplySketchTrim(S, Plan, Err) and (not S.Entities[Circle].Active),
+      'curve trim: one endpoint contact leaves one closed removable circle');
+  finally
+    S.Free;
+  end;
+  S := TCADSketch.Create;
+  try
+    Circle := S.AddCircle(S.AddPoint(0, 0), 5);
+    Other := S.AddCircle(S.AddPoint(10, 0), 5);
+    Check(CADPlanSketchTrim(S, Circle, 0, 5, Plan, Err) and
+      Near(Plan.FromT, 0) and Near(Plan.ToT, 1),
+      'curve trim: true circle-circle tangency is one contact, not two cuts');
+    Check(CADApplySketchTrim(S, Plan, Err) and
+      (not S.Entities[Circle].Active) and S.Entities[Other].Active,
+      'curve trim: true tangency removes only selected closed circle');
   finally
     S.Free;
   end;

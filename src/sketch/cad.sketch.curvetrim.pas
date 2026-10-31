@@ -123,20 +123,22 @@ var
   AX, AY, DX, DY, BX, BY, EX, EY: Double;
   C1X, C1Y, R1, C2X, C2Y, R2: Double;
   D2, D, Den, T, Disc, BB, CC, H2, H, U, BaseX, BaseY, VX, VY: Double;
+  Found: Integer;
 
   procedure Add(X, Y: Double);
   begin
     if not OnEntity(S, A, X, Y) or not OnEntity(S, B, X, Y) then Exit;
-    if (Result > 0) and
+    if (Found > 0) and
        (Hypot(Points[0].X - X, Points[0].Y - Y) <= 1e-7) then Exit;
-    if Result >= 2 then Exit;
-    Points[Result].X := X;
-    Points[Result].Y := Y;
-    Inc(Result);
+    if Found >= 2 then Exit;
+    Points[Found].X := X;
+    Points[Found].Y := Y;
+    Inc(Found);
   end;
 
 begin
   Result := 0;
+  Found := 0;
   EA := S.Entities[A];
   EB := S.Entities[B];
   if (not EA.Active) or (not EB.Active) then Exit;
@@ -155,6 +157,7 @@ begin
     if Abs(Den) <= 1e-12 * Hypot(DX, DY) * Hypot(EX, EY) then Exit;
     T := Cross(BX - AX, BY - AY, EX, EY) / Den;
     Add(AX + T * DX, AY + T * DY);
+    Result := Found;
     Exit;
   end;
 
@@ -193,6 +196,7 @@ begin
       T := (-BB + Sqrt(Disc)) / (2 * D2);
       Add(AX + T * DX, AY + T * DY);
     end;
+    Result := Found;
     Exit;
   end;
 
@@ -216,6 +220,7 @@ begin
   VY := DX * H / D;
   Add(BaseX + VX, BaseY + VY);
   if H > GeoEpsilon then Add(BaseX - VX, BaseY - VY);
+  Result := Found;
 end;
 
 function EntityParameter(S: TCADSketch; AEntity: Integer;

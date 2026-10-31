@@ -101,7 +101,7 @@
         <TreeView id="FeatureTree" left="0" top="0" width="300" height="680" anchors="left,top,right,bottom"/>
       </TabPage>
       <TabPage id="PropertiesPage" caption="Properties" backgroundColor="#FFFFFF">
-        <GroupBox id="PartGroup" left="8" top="8" width="284" height="250" caption="Demo plate" textColor="#1F2329">
+        <GroupBox id="PartGroup" left="8" top="8" width="284" height="272" caption="Demo plate">
           <Label id="TitleLabel" left="8" top="4" width="260" height="22" text="Plate with 6 holes" textColor="#1F2329"/>
           <Label id="RadiusLabel" left="8" top="30" width="260" height="20" text="Hole radius: 4.00 mm" textColor="#1F2329"/>
           <Slider id="RadiusSlider" left="8" top="54" width="260" height="28" minimum="1" maximum="7" value="4" eventOnChange="RadiusSliderChange"/>
@@ -112,7 +112,7 @@
           <Label id="MeshesLabel" left="8" top="180" width="260" height="20" text="" textColor="#5B6470"/>
           <Label id="SyncLabel" left="8" top="200" width="260" height="20" text="" textColor="#5B6470"/>
         </GroupBox>
-        <GroupBox id="SketchGroup" left="8" top="268" width="284" height="270" caption="Sketch relations" textColor="#1F2329">
+        <GroupBox id="SketchGroup" left="8" top="290" width="284" height="296" caption="Sketch relations">
           <Label id="RelationsLabel" left="8" top="4" width="260" height="20" text="Relations and dimensions" textColor="#5B6470"/>
           <ListBox id="ConstraintList" left="8" top="28" width="260" height="144"/>
           <Edit id="ValueEdit" left="8" top="180" width="124" height="28" placeholder="value, Enter = set"/>
@@ -132,7 +132,7 @@
       <Button id="ExitSketchCornerButton" left="0" top="0" width="38" height="38" text="" backgroundColor="#FFF4E5" borderColor="#F0B36A" borderWidth="1" borderRadius="6" iconFile="../assets/icons/png/24/exit-sketch.png" iconSize="24" iconPosition="center" hint="Exit sketch and keep it (Ctrl+Enter)"/>
       <Button id="DiscardSketchButton" left="42" top="0" width="38" height="38" text="" backgroundColor="#FCEFEF" borderColor="#F1CFCF" borderWidth="1" borderRadius="6" iconFile="../assets/icons/png/24/cancel.png" iconSize="24" iconPosition="center" hint="Exit sketch and discard its changes"/>
     </Panel>
-    <Edit id="DrawValueEdit" left="760" top="360" width="170" height="28" placeholder="length, angle, Enter" borderColor="#1565C0" borderWidth="1"/>
+    <Edit id="DrawValueEdit" left="760" top="360" width="170" height="28" placeholder="length, angle, Enter"/>
     <Panel id="StatusBar" left="0" top="874" width="1440" height="26" backgroundColor="#FFFFFF" anchors="left,right,bottom">
       <Label id="StatusLabel" left="12" top="3" width="880" height="20" text="" textColor="#4A5260" anchors="left,top,right"/>
       <Label id="ModeLabel" left="920" top="3" width="220" height="20" text="Part1" textColor="#4A5260" anchors="top,right"/>

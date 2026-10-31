@@ -99,8 +99,8 @@ type
     destructor Destroy; override;
     { OCCT, document, demo scene, sketch UI; once, after GPU setup. }
     procedure Start;
-    { The chip overlay follows the view (the designed widgets follow the
-      window by their anchors). }
+    { The chip overlay covers the design root (the designed widgets follow
+      the window by their anchors). }
     procedure Layout;
     procedure Run(ACommand: TCADAppCommand);
     { SolidWorks-like shortcuts while a sketch is open. }
@@ -263,10 +263,13 @@ procedure TCADAppController.Layout;
 begin
   if (FOverlay = nil) or (W.Root = nil) then
     Exit;
-  { the design root sits at the host root's top-left: same coordinates }
-  FHost.UI.ResizeWidgetKeepingChildren(FOverlay, Max(1, W.View.Width), Max(1, W.View.Height));
-  FOverlay.Left := W.View.Left;
-  FOverlay.Top := W.View.Top;
+  { The overlay covers the whole design root at its top-left, so its
+    children use the root's coordinates: the chips are placed at
+    View.Left + pixel (an overlay at the view's corner added the view offset
+    twice: user screenshot, texts right / below their dimensions). }
+  FHost.UI.ResizeWidgetKeepingChildren(FOverlay, Max(1, W.Root.Width), Max(1, W.Root.Height));
+  FOverlay.Left := W.Root.Left;
+  FOverlay.Top := W.Root.Top;
 end;
 
 { Sketch opened or closed: ribbon / left tab / corner, sketch buttons

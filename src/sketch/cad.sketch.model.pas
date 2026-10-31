@@ -478,11 +478,11 @@ begin
     raise ECADSketch.Create('sketch: cannot assign a nil sketch');
   if Self = ASource then
     Exit;
-  FParams := Copy(ASource.FParams, 0, Length(ASource.FParams));
-  FFixed := Copy(ASource.FFixed, 0, Length(ASource.FFixed));
-  FPoints := Copy(ASource.FPoints, 0, Length(ASource.FPoints));
-  FEntities := Copy(ASource.FEntities, 0, Length(ASource.FEntities));
-  FConstraints := Copy(ASource.FConstraints, 0, Length(ASource.FConstraints));
+  FParams := Copy(ASource.FParams, 0, System.Length(ASource.FParams));
+  FFixed := Copy(ASource.FFixed, 0, System.Length(ASource.FFixed));
+  FPoints := Copy(ASource.FPoints, 0, System.Length(ASource.FPoints));
+  FEntities := Copy(ASource.FEntities, 0, System.Length(ASource.FEntities));
+  FConstraints := Copy(ASource.FConstraints, 0, System.Length(ASource.FConstraints));
   FParamCount := ASource.FParamCount;
   FPointCount := ASource.FPointCount;
   FEntityCount := ASource.FEntityCount;

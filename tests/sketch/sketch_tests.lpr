@@ -14,7 +14,7 @@ program sketch_tests;
      conflicting constraints taken back, dimensions edited, labels.
   9. Typed values while drawing: prompts, parsing, line / rectangle /
      circle / arcs at exact sizes with their dimensions.
- 10. Drafting dimension graphics: sides, segments, text places. }
+ 10. Drafting dimension graphics: sides, segments, text places, angle arc. }
 
 uses
   {$ifdef unix}cthreads,{$endif}
@@ -1051,7 +1051,11 @@ begin
     Check(CADDimensionGraphic(S, Dx, 0.1, G) and Near(G.TextX, 50) and (G.TextY > 3),
       'dim: distance X above the points');
     A2 := S.Angle(B, L2, Pi / 2);
-    Check(not CADDimensionGraphic(S, A2, 0.1, G), 'dim: angle keeps the text marker');
+    Check(CADDimensionGraphic(S, A2, 0.1, G) and (Length(G.Segments) >= 18 + 6),
+      Format('dim: angle arc (18 x 5 deg) with two arrows (%d segments)', [Length(G.Segments)]));
+    Check((G.TextX > 0) and (G.TextY > 0) and Near(Hypot(G.TextX, G.TextY), 4.6 + 1.54, 1e-6),
+      Format('dim: angle text at the middle of the arc (%.3f, %.3f)', [G.TextX, G.TextY]));
+    Check(Pos('90', CADDimensionChipText(S, A2)) = 1, 'dim: angle text 90 degrees');
     Check(CADDimensionChipText(S, Dx) = '100', 'dim: distance X shows the number');
   finally
     S.Free;

@@ -235,7 +235,7 @@ begin
       dimension line tells the direction) }
     sckRadius: Result := 'R' + V;
     sckDiameter: Result := #$C3#$98 + V;
-    sckAngle: Result := V + #$C2#$B0;
+    sckAngle: Result := FormatFloat('0.##', Abs(CADDimensionShown(C))) + #$C2#$B0;
   else
     Result := V;
   end;

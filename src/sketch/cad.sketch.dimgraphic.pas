@@ -14,7 +14,13 @@ unit CAD.Sketch.DimGraphic;
                                    (45 deg, an arc: its middle), arrow on it
                diameter            line across the circle, arrows both ends
                point-line distance perpendicular line, arrows both ends
-             Angles keep the old text-only marker (False).
+               angle               arc between the two lines around their
+                                   crossing, arrows at both ends, value at
+                                   its middle; the angle is the directed
+                                   one of the constraint (line 1 -> line 2),
+                                   a ray that leaves its segment gets an
+                                   extension line
+             Parallel lines (no crossing) give False.
   CALLED BY: CAD.App.SketchMode (dimension layer, chip places).
   CALLS:     CAD.Sketch.Model, CAD.Sketch.Commands (CADIsDimension).
   THREADS:   any (pure).
@@ -43,6 +49,7 @@ const
   CAD_DIM_ARROW_HALF_PX = 3.5; { arrow half width }
   CAD_DIM_TEXT_PX = 11;        { text centre from the dimension line }
   CAD_DIM_LEADER_PX = 26;      { radius / diameter leader past the circle }
+  CAD_DIM_ANGLE_PX = 46;       { angle arc radius }
 
 { The graphic of constraint AIndex; AMMPerPixel = sketch mm per screen pixel.
   False for constraints that are not drawn this way (angle, inactive, not a
@@ -271,6 +278,94 @@ begin
   G.TextY := 0.5 * (PY + FY) + DY / Sqrt(L) * CAD_DIM_TEXT_PX * MM;
 end;
 
+{ Angle arc from line ALine1 to line ALine2 by ASweep radians (the
+  constraint's directed angle). }
+function AngleDim(S: TCADSketch; ALine1, ALine2: Integer; ASweep, MM: Double;
+  var G: TCADDimGraphic): Boolean;
+var
+  E1, E2: TCADSketchEntity;
+  AX, AY, BX, BY, CX, CY, DX, DY, D1X, D1Y, D2X, D2Y, Den, T, VX, VY: Double;
+  R1X, R1Y, R2X, R2Y, L, Sg, R, A0, A, A1, Step, Over: Double;
+  I, N: Integer;
+
+  { extension along the ray (RX, RY) when its segment ends before the arc }
+  procedure Extend(PX, PY, QX, QY, RX, RY: Double);
+  var
+    TMax: Double;
+  begin
+    TMax := Max((PX - VX) * RX + (PY - VY) * RY, (QX - VX) * RX + (QY - VY) * RY);
+    if TMax < R + Over then
+      Seg(G, VX + RX * Max(TMax, 0), VY + RY * Max(TMax, 0), VX + RX * (R + Over), VY + RY * (R + Over));
+  end;
+
+begin
+  Result := False;
+  E1 := S.Entities[ALine1];
+  E2 := S.Entities[ALine2];
+  if (E1.Kind <> sekLine) or (E2.Kind <> sekLine) or (Abs(ASweep) < 1e-9) then
+    Exit;
+  AX := S.PointX(E1.P1);
+  AY := S.PointY(E1.P1);
+  BX := S.PointX(E1.P2);
+  BY := S.PointY(E1.P2);
+  CX := S.PointX(E2.P1);
+  CY := S.PointY(E2.P1);
+  DX := S.PointX(E2.P2);
+  DY := S.PointY(E2.P2);
+  D1X := BX - AX;
+  D1Y := BY - AY;
+  D2X := DX - CX;
+  D2Y := DY - CY;
+  Den := D1X * D2Y - D1Y * D2X;
+  if Abs(Den) < 1e-12 * Max(1e-12, Hypot(D1X, D1Y) * Hypot(D2X, D2Y)) then
+    Exit;                                  { parallel: no crossing }
+  T := ((CX - AX) * D2Y - (CY - AY) * D2X) / Den;
+  VX := AX + T * D1X;
+  VY := AY + T * D1Y;
+  { rays along the line directions, both turned so that line 1's ray runs
+    over its segment (the directed angle between them stays ASweep) }
+  L := Hypot(D1X, D1Y);
+  R1X := D1X / L;
+  R1Y := D1Y / L;
+  L := Hypot(D2X, D2Y);
+  R2X := D2X / L;
+  R2Y := D2Y / L;
+  if (0.5 * (AX + BX) - VX) * R1X + (0.5 * (AY + BY) - VY) * R1Y < 0 then
+    Sg := -1
+  else
+    Sg := 1;
+  R1X := Sg * R1X;
+  R1Y := Sg * R1Y;
+  { line 2's ray = line 1's ray turned by the angle (equal to Sg * its
+    direction once the constraint is solved) }
+  R2X := R1X * Cos(ASweep) - R1Y * Sin(ASweep);
+  R2Y := R1X * Sin(ASweep) + R1Y * Cos(ASweep);
+  R := CAD_DIM_ANGLE_PX * MM;
+  Over := CAD_DIM_OVER_PX * MM;
+  Extend(AX, AY, BX, BY, R1X, R1Y);
+  Extend(CX, CY, DX, DY, R2X, R2Y);
+  A0 := ArcTan2(R1Y, R1X);
+  N := Max(8, Ceil(Abs(ASweep) / DegToRad(5)));
+  Step := ASweep / N;
+  for I := 0 to N - 1 do
+  begin
+    A := A0 + I * Step;
+    Seg(G, VX + R * Cos(A), VY + R * Sin(A), VX + R * Cos(A + Step), VY + R * Sin(A + Step));
+  end;
+  A1 := A0 + ASweep;
+  { arrows tangent to the arc, pointing out of it at both ends }
+  if ASweep > 0 then
+    Sg := 1
+  else
+    Sg := -1;
+  Arrow(G, VX + R * Cos(A0), VY + R * Sin(A0), Sg * Sin(A0), -Sg * Cos(A0), MM);
+  Arrow(G, VX + R * Cos(A1), VY + R * Sin(A1), -Sg * Sin(A1), Sg * Cos(A1), MM);
+  A := A0 + 0.5 * ASweep;
+  G.TextX := VX + (R + CAD_DIM_TEXT_PX * MM * 1.4) * Cos(A);
+  G.TextY := VY + (R + CAD_DIM_TEXT_PX * MM * 1.4) * Sin(A);
+  Result := True;
+end;
+
 function CADDimensionGraphic(S: TCADSketch; AIndex: Integer; AMMPerPixel: Double;
   out G: TCADDimGraphic): Boolean;
 var
@@ -298,6 +393,7 @@ begin
     sckRadius: Result := RadialDim(S, C.A, False, AMMPerPixel, G);
     sckDiameter: Result := RadialDim(S, C.A, True, AMMPerPixel, G);
     sckPointLineDist: Result := PointLineDim(S, C.A, C.B, AMMPerPixel, G);
+    sckAngle: Result := AngleDim(S, C.A, C.B, C.Value, AMMPerPixel, G);
   end;
   if not Result then
     G.Segments := nil;

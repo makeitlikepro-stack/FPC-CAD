@@ -865,6 +865,38 @@ begin
   end;
 end;
 
+{ Different survivor entities that meet at the same boundary intersection
+  must not end up with two independent coincident-looking endpoints. }
+procedure TestRepeatedIntersectionReusesPoint;
+var
+  S: TCADSketch;
+  Boundary, P1, P2, I, N: Integer;
+begin
+  S := TCADSketch.Create;
+  try
+    Boundary := S.AddLineXY(0, -10, 0, 10);
+    P1 := CADAddTrimIntersectionPoint(S, Boundary, 0, 0);
+    P2 := CADAddTrimIntersectionPoint(S, Boundary, 0, 0);
+    Check(P1 = P2,
+      'trim binding: repeated cuts at one intersection use the same vertex ID');
+    N := 0;
+    for I := 0 to S.ConstraintCount - 1 do
+      if S.Constraints[I].Active and
+         (S.Constraints[I].Kind = sckPointOnLine) and
+         (S.Constraints[I].A = P1) and
+         (S.Constraints[I].B = Boundary) then Inc(N);
+    Check(N = 1,
+      'trim binding: repeated joined vertex does not duplicate PointOnLine');
+    S.AddLine(P1, S.AddPoint(6, 0));
+    S.AddLine(P2, S.AddPoint(-6, 0));
+    S.MovePoint(P1, 0, 2);
+    Check(Near(S.PointY(P2), 2),
+      'trim binding: both survivor lines follow one shared node');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestTrueTangencyOnLineBoundary;
 var
   S: TCADSketch;
@@ -920,6 +952,7 @@ begin
   TestTrimAtArcEndpointAndEntityPicking;
   TestCircleConnectionAndNearTangentCrossings;
   TestTrueTangencyOnLineBoundary;
+  TestRepeatedIntersectionReusesPoint;
   if Failures = 0 then
     WriteLn(Format('PASS  trim/extend planning: %d checks', [Checks]))
   else

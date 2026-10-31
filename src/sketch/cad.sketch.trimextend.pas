@@ -328,4 +328,184 @@ begin
   Result := True;
 end;
 
+
+{ Return the interval between the nearest crossings around the click.
+  The boundary lines are finite segments, but the target is treated as
+  one segment of a larger infinite straight line. }
+function CADPlanLineTrim(ASketch: TCADSketch; ALine: Integer;
+  AClickX, AClickY: Double; out APlan: TCADTrimPlan; out AError: string): Boolean;
+var
+  Target, Boundary: TCADSketchEntity;
+  AX, AY, RX, RY, CX, CY, SX, SY, Den, T, U: Double;
+  ClickT, L2, Tol: Double;
+  I: Integer;
+begin
+  Result := False;
+  AError := '';
+  APlan := Default(TCADTrimPlan);
+  APlan.TargetEntity := ALine;
+  APlan.FromT := 0;
+  APlan.ToT := 1;
+  APlan.LeftBoundary := -1;
+  APlan.RightBoundary := -1;
+  if (ASketch = nil) or (ALine < 0) then
+  begin
+    AError := 'no target line';
+    Exit;
+  end;
+  if ALine >= ASketch.EntityCount then
+  begin
+    AError := 'invalid target line index';
+    Exit;
+  end;
+  Target := ASketch.Entities[ALine];
+  if (not Target.Active) or (Target.Kind <> sekLine) then
+  begin
+    AError := 'Trim currently supports active straight lines';
+    Exit;
+  end;
+  AX := ASketch.PointX(Target.P1);
+  AY := ASketch.PointY(Target.P1);
+  RX := ASketch.PointX(Target.P2) - AX;
+  RY := ASketch.PointY(Target.P2) - AY;
+  L2 := RX * RX + RY * RY;
+  if L2 <= 1e-20 then
+  begin
+    AError := 'zero-length target line';
+    Exit;
+  end;
+  ClickT := EnsureRange(((AClickX - AX) * RX + (AClickY - AY) * RY) / L2, 0.0, 1.0);
+  Tol := Max(ParamEpsilon, 1e-6 / Sqrt(L2));
+  for I := 0 to ASketch.EntityCount - 1 do
+  begin
+    if I = ALine then Continue;
+    Boundary := ASketch.Entities[I];
+    if (not Boundary.Active) or (Boundary.Kind <> sekLine) then Continue;
+    CX := ASketch.PointX(Boundary.P1);
+    CY := ASketch.PointY(Boundary.P1);
+    SX := ASketch.PointX(Boundary.P2) - CX;
+    SY := ASketch.PointY(Boundary.P2) - CY;
+    Den := Cross(RX, RY, SX, SY);
+    if Abs(Den) <= 1e-12 * Sqrt(L2 * (SX * SX + SY * SY)) then Continue;
+    T := Cross(CX - AX, CY - AY, SX, SY) / Den;
+    U := Cross(CX - AX, CY - AY, RX, RY) / Den;
+    if (U < -ParamEpsilon) or (U > 1 + ParamEpsilon) then Continue;
+    if (T <= Tol) or (T >= 1 - Tol) then Continue;
+    if Abs(T - ClickT) <= Tol then
+    begin
+      AError := 'click inside a segment, not exactly at the intersection';
+      Exit;
+    end;
+    if (T < ClickT) and (T > APlan.FromT) then
+    begin
+      APlan.FromT := T;
+      APlan.LeftBoundary := I;
+    end;
+    if (T > ClickT) and (T < APlan.ToT) then
+    begin
+      APlan.ToT := T;
+      APlan.RightBoundary := I;
+    end;
+  end;
+  Result := APlan.ToT - APlan.FromT > Tol;
+  if not Result then AError := 'selected piece is too short to trim';
+end;
+
+{ Trim must not silently reattach length/angle constraints to a different
+  segment. Only horizontal/vertical are copied to each survivor. }
+function CADApplyLineTrim(ASketch: TCADSketch; const APlan: TCADTrimPlan;
+  out AError: string): Boolean;
+var
+  Trial: TCADSketch;
+  Target: TCADSketchEntity;
+  C: TCADSketchConstraint;
+  I, L, P: Integer;
+  AX, AY, DX, DY: Double;
+  Horizontal, Vertical: Boolean;
+  SolveResult: TCADSketchSolveResult;
+
+  procedure AddPiece(P1, P2: Integer);
+  begin
+    L := Trial.AddLine(P1, P2);
+    Trial.SetConstruction(L, Target.Construction);
+    if Horizontal then Trial.Horizontal(L);
+    if Vertical then Trial.Vertical(L);
+  end;
+
+begin
+  Result := False;
+  AError := '';
+  if (ASketch = nil) or (APlan.TargetEntity < 0) then
+  begin
+    AError := 'no sketch or trim target';
+    Exit;
+  end;
+  if APlan.TargetEntity >= ASketch.EntityCount then
+  begin
+    AError := 'invalid target line index';
+    Exit;
+  end;
+  Target := ASketch.Entities[APlan.TargetEntity];
+  if (not Target.Active) or (Target.Kind <> sekLine) then
+  begin
+    AError := 'the target is not an active line';
+    Exit;
+  end;
+  if (APlan.FromT < 0) or (APlan.ToT > 1) or
+     (APlan.ToT - APlan.FromT < ParamEpsilon) then
+  begin
+    AError := 'invalid trim interval';
+    Exit;
+  end;
+  Horizontal := False;
+  Vertical := False;
+  for I := 0 to ASketch.ConstraintCount - 1 do
+  begin
+    C := ASketch.Constraints[I];
+    if not C.Active or not UsesLine(C, APlan.TargetEntity) then Continue;
+    case C.Kind of
+      sckHorizontal: Horizontal := True;
+      sckVertical: Vertical := True;
+    else
+      begin
+        AError := 'cannot trim a line with dimensions or relations that require remapping';
+        Exit;
+      end;
+    end;
+  end;
+
+  Trial := TCADSketch.Create;
+  try
+    CADSketchFromText(CADSketchToText(ASketch), Trial);
+    Target := Trial.Entities[APlan.TargetEntity];
+    AX := Trial.PointX(Target.P1);
+    AY := Trial.PointY(Target.P1);
+    DX := Trial.PointX(Target.P2) - AX;
+    DY := Trial.PointY(Target.P2) - AY;
+    { Keep original end point indices on the survivors. If the click is
+      between two crossings, two pieces are retained, with a real gap. }
+    if APlan.FromT > ParamEpsilon then
+    begin
+      P := Trial.AddPoint(AX + APlan.FromT * DX, AY + APlan.FromT * DY);
+      AddPiece(Target.P1, P);
+    end;
+    if APlan.ToT < 1 - ParamEpsilon then
+    begin
+      P := Trial.AddPoint(AX + APlan.ToT * DX, AY + APlan.ToT * DY);
+      AddPiece(P, Target.P2);
+    end;
+    Trial.RemoveEntity(APlan.TargetEntity);
+    SolveResult := CADSolveSketch(Trial);
+    if SolveResult.Status <> cssSolved then
+    begin
+      AError := 'trim conflicts with remaining constraints; nothing changed';
+      Exit;
+    end;
+    ASketch.AssignFrom(Trial);
+    Result := True;
+  finally
+    Trial.Free;
+  end;
+end;
+
 end.

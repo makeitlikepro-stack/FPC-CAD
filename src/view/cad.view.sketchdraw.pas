@@ -23,6 +23,10 @@ uses
   coordinates on S's plane. False when the view ray is parallel to it. }
 function CADScreenToSketch(ACamera: TViewport3DCamera; AWidth, AHeight: Double;
   AX, AY: Double; S: TCADSketch; out U, V: Double): Boolean;
+{ Sketch point -> pixel of a AWidth x AHeight viewport (top-left origin).
+  False when it is behind the camera. }
+function CADSketchToScreen(ACamera: TViewport3DCamera; AWidth, AHeight: Double;
+  S: TCADSketch; U, V: Double; out AX, AY: Double): Boolean;
 { Looks straight at the plane from the normal side, sketch X to the right
   where the camera allows it (its up axis is model Z). Keeps the distance. }
 procedure CADCameraToSketch(ACamera: TViewport3DCamera; S: TCADSketch);
@@ -112,6 +116,35 @@ begin
   Hit := V3Sub(V3Add(O, V3Scale(D, T)), PO);
   U := V3Dot(Hit, PlaneVec(S.Plane.XDir));
   V := V3Dot(Hit, PlaneVec(S.Plane.YDir));
+  Result := True;
+end;
+
+function CADSketchToScreen(ACamera: TViewport3DCamera; AWidth, AHeight: Double;
+  S: TCADSketch; U, V: Double; out AX, AY: Double): Boolean;
+var
+  M, P: TV3Mat4;
+  W: TV3Vec;
+  VX, VY, VZ, VW, CX, CY, CW: Double;
+begin
+  AX := 0;
+  AY := 0;
+  Result := False;
+  if (AWidth <= 0) or (AHeight <= 0) then
+    Exit;
+  W := P3(S, U, V);
+  M := ACamera.ViewMatrix;                      { column-major: M[col * 4 + row] }
+  P := ACamera.ProjectionMatrix(AWidth / AHeight);
+  VX := M[0] * W.X + M[4] * W.Y + M[8] * W.Z + M[12];
+  VY := M[1] * W.X + M[5] * W.Y + M[9] * W.Z + M[13];
+  VZ := M[2] * W.X + M[6] * W.Y + M[10] * W.Z + M[14];
+  VW := M[3] * W.X + M[7] * W.Y + M[11] * W.Z + M[15];
+  CX := P[0] * VX + P[4] * VY + P[8] * VZ + P[12] * VW;
+  CY := P[1] * VX + P[5] * VY + P[9] * VZ + P[13] * VW;
+  CW := P[3] * VX + P[7] * VY + P[11] * VZ + P[15] * VW;
+  if CW <= 1e-12 then
+    Exit;
+  AX := (CX / CW * 0.5 + 0.5) * AWidth;
+  AY := (1 - (CY / CW * 0.5 + 0.5)) * AHeight;
   Result := True;
 end;
 

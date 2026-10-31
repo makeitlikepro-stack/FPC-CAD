@@ -26,7 +26,7 @@ type
 
   TCADSketchCommand = (sccHorizontal, sccVertical, sccCoincident, sccParallel,
     sccPerpendicular, sccEqual, sccTangent, sccConcentric, sccMidpoint, sccOnObject,
-    sccSymmetric, sccFix, sccDimension);
+    sccSymmetric, sccFix, sccDimension, sccDistX, sccDistY);
 
   TCADHitKind = (chkNone, chkPoint, chkEntity);
 
@@ -44,19 +44,125 @@ function CADApplyCommand(S: TCADSketch; const ASel: TCADSketchSelection;
 { New value for a dimension; reverted (with AError) when it cannot be solved. }
 function CADSetDimension(S: TCADSketch; AConstraint: Integer; AValue: Double;
   out AError: string): Boolean;
+function CADOriginPoint(S: TCADSketch): Integer;
+var
+  I: Integer;
+begin
+  for I := 0 to S.PointCount - 1 do
+    if S.Fixed[S.Points[I].XParam] and (S.PointX(I) = 0) and (S.PointY(I) = 0) then
+      Exit(I);
+  Result := S.AddPoint(0, 0);
+  S.FixPoint(Result);
+end;
+
+function CADDimensionChipText(S: TCADSketch; AIndex: Integer): string;
+var
+  C: TCADSketchConstraint;
+  V: string;
+begin
+  C := S.Constraints[AIndex];
+  V := FormatFloat('0.##', CADDimensionShown(C));
+  case C.Kind of
+    sckRadius: Result := 'R ' + V;
+    sckDiameter: Result := 'D ' + V;
+    sckAngle: Result := 'A ' + V;
+    sckDistanceX: Result := 'X ' + V;
+    sckDistanceY: Result := 'Y ' + V;
+  else
+    Result := V;
+  end;
+end;
+
+function CADDimensionAnchor(S: TCADSketch; AIndex: Integer; out U, V: Double): Boolean;
+var
+  C: TCADSketchConstraint;
+  E: TCADSketchEntity;
+  R, DX, DY, L, T: Double;
+begin
+  C := S.Constraints[AIndex];
+  Result := C.Active and CADIsDimension(C.Kind);
+  U := 0;
+  V := 0;
+  if not Result then
+    Exit;
+  case C.Kind of
+    sckDistance:
+      begin
+        U := 0.5 * (S.PointX(C.A) + S.PointX(C.B));
+        V := 0.5 * (S.PointY(C.A) + S.PointY(C.B));
+      end;
+    sckDistanceX:
+      begin
+        U := 0.5 * (S.PointX(C.A) + S.PointX(C.B));
+        V := S.PointY(C.B);
+      end;
+    sckDistanceY:
+      begin
+        U := S.PointX(C.B);
+        V := 0.5 * (S.PointY(C.A) + S.PointY(C.B));
+      end;
+    sckLength, sckAngle:
+      begin
+        E := S.Entities[C.A];
+        U := 0.5 * (S.PointX(E.P1) + S.PointX(E.P2));
+        V := 0.5 * (S.PointY(E.P1) + S.PointY(E.P2));
+      end;
+    sckRadius, sckDiameter:
+      begin
+        E := S.Entities[C.A];
+        R := S.EntityRadius(C.A);
+        U := S.PointX(E.Center) + R * 0.7071;
+        V := S.PointY(E.Center) + R * 0.7071;
+      end;
+    sckPointLineDist:
+      begin
+        E := S.Entities[C.B];
+        DX := S.PointX(E.P2) - S.PointX(E.P1);
+        DY := S.PointY(E.P2) - S.PointY(E.P1);
+        L := Max(DX * DX + DY * DY, 1e-24);
+        T := ((S.PointX(C.A) - S.PointX(E.P1)) * DX + (S.PointY(C.A) - S.PointY(E.P1)) * DY) / L;
+        U := 0.5 * (S.PointX(C.A) + S.PointX(E.P1) + T * DX);
+        V := 0.5 * (S.PointY(C.A) + S.PointY(E.P1) + T * DY);
+      end;
+  end;
+end;
+
+function CADFindDimension(S: TCADSketch; AEntity: Integer): Integer;
+var
+  I: Integer;
+  C: TCADSketchConstraint;
+begin
+  for I := 0 to S.ConstraintCount - 1 do
+  begin
+    C := S.Constraints[I];
+    if C.Active and (C.Kind in [sckLength, sckRadius, sckDiameter]) and (C.A = AEntity) then
+      Exit(I);
+  end;
+  Result := -1;
+end;
+
 function CADIsDimension(AKind: TCADSketchConstraintKind): Boolean;
 { '#4 length 60' etc. Angles in degrees. }
 function CADConstraintLabel(S: TCADSketch; AIndex: Integer): string;
 { Value shown and edited for a dimension (degrees for angles). }
 function CADDimensionShown(const C: TCADSketchConstraint): Double;
 function CADCommandName(ACommand: TCADSketchCommand): string;
+{ The fixed point at (0, 0); made when the sketch has none. }
+function CADOriginPoint(S: TCADSketch): Integer;
+{ Short text for a dimension chip in the view: '60', 'R 5', 'D 10',
+  'A 90', 'X 20', 'Y 15'. }
+function CADDimensionChipText(S: TCADSketch; AIndex: Integer): string;
+{ Where the chip of a dimension sits (sketch mm). }
+function CADDimensionAnchor(S: TCADSketch; AIndex: Integer; out U, V: Double): Boolean;
+{ Active length / radius / diameter dimension on an entity, -1 = none. }
+function CADFindDimension(S: TCADSketch; AEntity: Integer): Integer;
 
 implementation
 
 const
   CommandNames: array[TCADSketchCommand] of string = ('Horizontal', 'Vertical', 'Coincident',
     'Parallel', 'Perpendicular', 'Equal', 'Tangent', 'Concentric', 'Midpoint', 'On object',
-    'Symmetric', 'Fix', 'Dimension');
+    'Symmetric', 'Fix', 'Dimension', 'Distance X', 'Distance Y');
 
 function CADCommandName(ACommand: TCADSketchCommand): string;
 begin
@@ -344,6 +450,22 @@ begin
         Result := S.Angle(E0, E1, LineAngle(S, E0, E1))
       else if (NP = 1) and (NE = 1) and (KindOf(S, E0) = sekLine) then
         Result := S.PointLineDistance(P0, E0, PointLineDist(S, P0, E0));
+    sccDistX, sccDistY:
+      if (NE = 0) and (NP in [1, 2]) then
+      begin
+        if NP = 1 then
+        begin
+          P1 := P0;                         { one point: measured from the origin }
+          P0 := CADOriginPoint(S);
+        end;
+        if P0 <> P1 then
+        begin
+          if ACommand = sccDistX then
+            Result := S.DistanceX(P0, P1, S.PointX(P1) - S.PointX(P0))
+          else
+            Result := S.DistanceY(P0, P1, S.PointY(P1) - S.PointY(P0));
+        end;
+      end;
   end;
   if Result < 0 then
     AError := Format('%s does not fit the selection (%s)', [CommandNames[ACommand],

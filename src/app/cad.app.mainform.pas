@@ -23,7 +23,7 @@ uses
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Sketch.Editor, CAD.Features.Sketch, CAD.Features.Extrude,
-  CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel;
+  CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims;
 
 type
   TCADMainForm = class(TForm)
@@ -42,6 +42,7 @@ type
     FRadius: TUISlider;
     FSketchMode: TCADSketchMode;
     FSketchPanel: TCADSketchPanel;
+    FSketchDims: TCADSketchDims;
     FSketchCount: Integer;
     procedure HostSetupUI(Sender: TObject);
     procedure NewSketch(Sender: TObject);
@@ -94,6 +95,7 @@ end;
 
 destructor TCADMainForm.Destroy;
 begin
+  FreeAndNil(FSketchDims);
   FreeAndNil(FSketchPanel);
   FreeAndNil(FSketchMode);
   { Sync and target point at the viewport; the document's cache frees OCCT
@@ -157,6 +159,8 @@ begin
   FSketchPanel.OnNewSketch := @NewSketch;
   FSketchPanel.OnFinish := @FinishClick;
   FSketchPanel.OnStatus := @SketchStatus;
+  FSketchDims := TCADSketchDims.Create(UI, FHost.Root, FView, FSketchMode);
+  FSketchDims.OnStatus := @SketchStatus;
   FStatus := UI.CreateLabel(FHost.Root, 100, StatusHeight);
   FStatus.TextColor := tColor4.Create(0.85, 0.87, 0.9, 1);
   FRadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
@@ -336,6 +340,8 @@ procedure TCADMainForm.SketchChanged(Sender: TObject);
 begin
   if FSketchPanel <> nil then
     FSketchPanel.Refresh;
+  if FSketchDims <> nil then
+    FSketchDims.Refresh;
   if FSketchMode.Active then
     FStatus.Text := FSketchMode.StatusText
   else

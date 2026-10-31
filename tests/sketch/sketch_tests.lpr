@@ -784,7 +784,7 @@ var
   P0, P1, P2, P3, L0, L1, L2, L3, Cir, C, Idx: Integer;
   Err: string;
   Sl: TCADSketchSelection;
-  X1: Double;
+  X1, Idx_Y: Double;
   R: TCADSketchSolveResult;
 begin
   S := TCADSketch.Create;
@@ -844,6 +844,24 @@ begin
       Near(S.Constraints[C].Value, 10), 'circle dimension is its diameter');
     Check(CADApplyCommand(S, Sel([], [L2, Cir]), sccTangent, C, Err) and
       Near(Abs(S.PointY(S.Entities[Cir].Center) - 50), 5), 'tangent: circle touches the top line');
+  finally
+    S.Free;
+  end;
+
+  { distance X / Y of one point from the origin, chips, anchors }
+  S := TCADSketch.Create;
+  try
+    P0 := S.AddPoint(30, 40);
+    L0 := S.AddLineXY(0, 60, 20, 60);
+    Check(CADApplyCommand(S, Sel([P0], []), sccDistX, C, Err) and (S.Constraints[C].Kind = sckDistanceX),
+      'dist X of one point: from the origin (' + Err + ')');
+    Check(CADDimensionChipText(S, C) = 'X 30', 'chip text X 30: ' + CADDimensionChipText(S, C));
+    Check(CADDimensionAnchor(S, C, X1, Idx_Y) and Near(X1, 15) and Near(Idx_Y, 40), 'X chip halfway at the point height');
+    Check(CADSetDimension(S, C, 12, Err) and Near(S.PointX(P0), 12) and Near(S.PointY(P0), 40), 'set X 12');
+    Check(CADApplyCommand(S, Sel([P0], []), sccDistY, C, Err) and (CADDimensionChipText(S, C) = 'Y 40'), 'dist Y 40');
+    Check(CADFindDimension(S, L0) = -1, 'no dimension on the line yet');
+    Check(CADApplyCommand(S, Sel([], [L0]), sccDimension, C, Err) and (CADFindDimension(S, L0) = C) and
+      (CADDimensionChipText(S, C) = '20'), 'line dimension found, chip 20');
   finally
     S.Free;
   end;

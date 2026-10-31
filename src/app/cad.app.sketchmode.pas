@@ -27,6 +27,8 @@ const
   CAD_SKETCH_PREVIEW_ID = 900002;
 
 type
+  TCADEntityEvent = procedure(Sender: TObject; AEntity: Integer) of object;
+
   TCADSketchMode = class
   private
     FView: TUIViewport3D;
@@ -35,6 +37,7 @@ type
     FActive: Boolean;
     FDownX, FDownY: Integer;
     FOnChanged: TNotifyEvent;
+    FOnEntityDoubleClick: TCADEntityEvent;
     procedure MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -61,12 +64,19 @@ type
       message for the status line. }
     function ApplyCommand(ACommand: TCADSketchCommand; out AConstraint: Integer): string;
     function SetDimension(AConstraint: Integer; AValue: Double): string;
+    { The command on one entity alone (the selection is replaced). }
+    function ApplyCommandOn(AEntity: Integer; ACommand: TCADSketchCommand;
+      out AConstraint: Integer): string;
     function RemoveConstraint(AConstraint: Integer): string;
     property Active: Boolean read FActive;
     property Sketch: TCADSketch read FSketch;
     property Editor: TCADSketchEditor read FEditor;
     { After every change the panel shows (prompt, DOF). }
     property OnChanged: TNotifyEvent read FOnChanged write FOnChanged;
+    { Select tool: double click on a line / circle / arc (dimension it). }
+    property OnEntityDoubleClick: TCADEntityEvent read FOnEntityDoubleClick write FOnEntityDoubleClick;
+    { Pixel of a sketch point in the viewport (top-left origin). }
+    function SketchToScreen(U, V: Double; out AX, AY: Double): Boolean;
   end;
 
 implementation
@@ -210,9 +220,22 @@ end;
 
 procedure TCADSketchMode.MouseDown(Sender: TObject; Button: TMouseButton;
   Shift: TShiftState; X, Y: Integer);
+var
+  U, V: Double;
+  Index: Integer;
 begin
   FDownX := X;
   FDownY := Y;
+  if FActive and (Button = mbLeft) and (ssDouble in Shift) and (FEditor.Tool = sktSelect) and
+     ToSketch(X, Y, U, V) and
+     (CADSketchHit(FSketch, U, V, SnapPixels * WorldPerPixel, Index) = chkEntity) and
+     Assigned(FOnEntityDoubleClick) then
+    FOnEntityDoubleClick(Self, Index);
+end;
+
+function TCADSketchMode.SketchToScreen(U, V: Double; out AX, AY: Double): Boolean;
+begin
+  Result := FActive and CADSketchToScreen(FView.Camera, FView.Width, FView.Height, FSketch, U, V, AX, AY);
 end;
 
 procedure TCADSketchMode.MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -300,6 +323,17 @@ begin
   RefreshSketch;
   RefreshPreview;
   Changed;
+end;
+
+function TCADSketchMode.ApplyCommandOn(AEntity: Integer; ACommand: TCADSketchCommand;
+  out AConstraint: Integer): string;
+begin
+  AConstraint := -1;
+  if not FActive then
+    Exit('no sketch');
+  FEditor.ClearSelection;
+  FEditor.SelectItem(chkEntity, AEntity);
+  Result := ApplyCommand(ACommand, AConstraint);
 end;
 
 function TCADSketchMode.SetDimension(AConstraint: Integer; AValue: Double): string;

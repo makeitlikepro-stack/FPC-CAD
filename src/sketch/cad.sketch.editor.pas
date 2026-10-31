@@ -112,6 +112,7 @@ type
       space clears it. }
     procedure SelectAt(X, Y: Double; AAdd: Boolean);
     procedure ClearSelection;
+    procedure SelectItem(AKind: TCADHitKind; AIndex: Integer);
     { Constraint button on the selection (CAD.Sketch.Commands); clears the
       selection on success and refreshes LastSolve. }
     function Apply(ACommand: TCADSketchCommand; out AConstraint: Integer; out AError: string): Boolean;
@@ -166,6 +167,11 @@ end;
 procedure TCADSketchEditor.ClearSelection;
 begin
   CADSelectionClear(FSelection);
+end;
+
+procedure TCADSketchEditor.SelectItem(AKind: TCADHitKind; AIndex: Integer);
+begin
+  CADSelectionToggle(FSelection, AKind, AIndex);
 end;
 
 procedure TCADSketchEditor.SelectAt(X, Y: Double; AAdd: Boolean);
@@ -364,15 +370,8 @@ begin
 end;
 
 function TCADSketchEditor.OriginPoint: Integer;
-var
-  I: Integer;
 begin
-  for I := 0 to FSketch.PointCount - 1 do
-    if FSketch.Fixed[FSketch.Points[I].XParam] and (FSketch.PointX(I) = 0) and
-       (FSketch.PointY(I) = 0) then
-      Exit(I);
-  Result := FSketch.AddPoint(0, 0);
-  FSketch.FixPoint(Result);
+  Result := CADOriginPoint(FSketch);
 end;
 
 { Point index for a snap: the snapped point, the origin, or a new point

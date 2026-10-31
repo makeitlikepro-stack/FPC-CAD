@@ -66,7 +66,8 @@ const
   ToolText: array[0..10] of string = ('New sketch (XY)', 'Select', 'Line', 'Rect',
     'Circle', 'Arc', 'Arc 3pt', 'Point', 'Cancel', 'Normal view', 'Finish + Extrude 10');
   CommandText: array[TCADSketchCommand] of string = ('Horiz', 'Vert', 'Coinc', 'Parallel',
-    'Perp', 'Equal', 'Tangent', 'Concentric', 'Midpoint', 'On obj', 'Symm', 'Fix', 'Dimension');
+    'Perp', 'Equal', 'Tangent', 'Concentric', 'Midpoint', 'On obj', 'Symm', 'Fix', 'Dimension',
+    'Dist X', 'Dist Y');
   RowH = 30;
   Gap = 6;
   ListRows = 5;

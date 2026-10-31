@@ -103,3 +103,10 @@
 - 2026-10-31 user run: `bash scripts/test_sketch.sh` 142/143. The failure was the test: the sketch also holds a free circle (centre + radius = 3 DOF), so DOF after the square is 3, not 0. Expectation fixed.
 - 2026-10-31 user GUI check of 4c: constraints work. Issues: the constraint list grew with every constraint and did not scroll; editing a dimension was not discoverable.
 - Fix: list `MaxVisibleItems = 5`, `ItemHeight = 24` (fixed height, wheel scrolls; the list sets its own height from these). After the Dimension button the new dimension is selected in the list, its value loaded and the edit focused ("type the new value and press Enter"); Enter in the edit = Set (placeholder says so). Selecting a line / circle / arc (or 2 points) that carries a dimension loads that dimension the same way.
+
+## 2026-10-31 — Stage 5 step 4d: dimensions on the drawing, distance X / Y (Candidate)
+- User: wants X / Y position dimensions and a more interactive viewer, like professional sketchers.
+- Commands: `sccDistX`, `sccDistY` (two points, or one point measured from the fixed origin point, made when missing; `CADOriginPoint` shared with the editor); `CADDimensionChipText` ('60', 'R 5', 'D 10', 'A 90', 'X 20', 'Y 15'), `CADDimensionAnchor`, `CADFindDimension`. Panel buttons Dist X / Dist Y.
+- `CAD.View.SketchDraw.CADSketchToScreen` (view + projection matrices, top-left pixels).
+- `src/app/cad.app.sketchdims.pas`: a chip (small button) per dimension at its place in the view, moved by a 40 ms timer only when the camera / view size changed; click a chip -> edit box in place (Enter sets, Esc closes); double click a line / circle / arc with Select -> edits its dimension, or adds one and edits it. Sketch mode: `OnEntityDoubleClick`, `SketchToScreen`, `ApplyCommandOn`; editor `SelectItem`.
+- Tests: dist X of one point from the origin (chip 'X 30', anchor, set 12), dist Y, line dimension found with chip '20'. NOT RUN here; chips and in-place edit are a GUI check.

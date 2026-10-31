@@ -36,7 +36,7 @@ type
     FSceneOk: Boolean;
     FView: TUIViewport3D;
     FPanel: TUIPanel;
-    FRadiusLabel, FStatus: TUILabel;
+    FTitle, FRadiusLabel, FStatus: TUILabel;
     FLines: array[0..5] of TUILabel;   { 0..1 pick, 2..5 timing (labels are one line) }
     FRadius: TUISlider;
     procedure HostSetupUI(Sender: TObject);
@@ -117,7 +117,6 @@ end;
 procedure TCADMainForm.BuildUI;
 var
   UI: TUIWidgetFactory;
-  Title: TUILabel;
   I: Integer;
 begin
   UI := FHost.UI;
@@ -128,21 +127,18 @@ begin
 
   FPanel := UI.CreatePanel(FHost.Root, 0, 0, PanelWidth, 100, 0,
     tColor4.Create(0.16, 0.17, 0.19, 1));
-  Title := UI.CreateLabel(FPanel, 12, 10, PanelWidth - 24, 26);
-  Title.Text := 'Plate with 6 holes';
-  FRadiusLabel := UI.CreateLabel(FPanel, 12, 44, PanelWidth - 24, 24);
+  FTitle := UI.CreateLabel(FPanel, PanelWidth - 24, 26);
+  FTitle.Text := 'Plate with 6 holes';
+  FRadiusLabel := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
   FRadius := UI.CreateSlider(FPanel, PanelWidth - 24, 28);
-  FRadius.Left := 12;
-  FRadius.Top := 70;
   FRadius.Minimum := CAD_DEMO_MIN_RADIUS;
   FRadius.Maximum := CAD_DEMO_MAX_RADIUS;
   FRadius.Step := 0.25;
   FRadius.Value := StartRadius;
   FRadius.OnChange := @RadiusChanged;
   for I := 0 to High(FLines) do
-    FLines[I] := UI.CreateLabel(FPanel, 12, 112 + I * 24 + Ord(I >= 2) * 16,
-      PanelWidth - 24, 24);
-  FStatus := UI.CreateLabel(FHost.Root, 8, 0, 100, StatusHeight);
+    FLines[I] := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
+  FStatus := UI.CreateLabel(FHost.Root, 100, StatusHeight);
   FStatus.TextColor := tColor4.Create(0.85, 0.87, 0.9, 1);
   FRadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
   FLines[0].Text := 'Selected: -';
@@ -171,23 +167,40 @@ begin
       [FOCCT.OcctVersion]);
 end;
 
+{ Engine geometry: X/Y are the centre offset from the parent centre (Y up);
+  Left/Top are the top-left corner in the parent. A parent resize keeps the
+  centre offsets, so every child is placed again here, after its parent. }
 procedure TCADMainForm.Layout;
 var
-  W, H: Integer;
+  W, H, VW, VH, I, Y: Integer;
+
+  procedure Place(AWidget: TUIWidget; ALeft, ATop, AWidth, AHeight: Double);
+  begin
+    AWidget.Width := AWidth;
+    AWidget.Height := AHeight;
+    AWidget.Left := ALeft;
+    AWidget.Top := ATop;
+  end;
+
 begin
   W := Max(1, FHost.Width);
   H := Max(1, FHost.Height);
-  FPanel.Left := Max(0, W - PanelWidth);
-  FPanel.Top := 0;
-  FPanel.Width := Min(W, PanelWidth);
-  FPanel.Height := Max(1, H - StatusHeight);
-  FView.X := 0;
-  FView.Y := 0;
-  FView.Width := Max(1, W - PanelWidth);
-  FView.Height := Max(1, H - StatusHeight);
-  FStatus.Left := 8;
-  FStatus.Top := H - StatusHeight;
-  FStatus.Width := Max(1, W - 16);
+  VW := Max(1, W - PanelWidth);
+  VH := Max(1, H - StatusHeight);
+  Place(FView, 0, 0, VW, VH);
+  Place(FPanel, VW, 0, Max(1, W - VW), VH);
+  Place(FStatus, 8, VH, Max(1, W - 16), StatusHeight);
+  Place(FTitle, 12, 10, PanelWidth - 24, 26);
+  Place(FRadiusLabel, 12, 44, PanelWidth - 24, 24);
+  Place(FRadius, 12, 70, PanelWidth - 24, 28);
+  Y := 112;
+  for I := 0 to High(FLines) do
+  begin
+    if I = 2 then
+      Inc(Y, 16);
+    Place(FLines[I], 12, Y, PanelWidth - 24, 24);
+    Inc(Y, 24);
+  end;
 end;
 
 procedure TCADMainForm.HostResize(Sender: TObject);

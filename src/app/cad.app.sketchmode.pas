@@ -22,13 +22,14 @@ uses
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
   CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.Sketch.DimGraphic, CAD.View.SketchDraw,
   OpenGL.Render.Material, CAD.App.SketchFill, CAD.Sketch.TrimExtend,
-  CAD.Sketch.CurveTrim;
+  CAD.Sketch.CurveTrim, CAD.Sketch.Regions, CAD.Sketch.ContourSelection;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
   CAD_SKETCH_LAYER_ID = 900010;        { + Ord(TCADSketchLayer) }
   CAD_SKETCH_FILL_ID = 900030;         { closed regions, light fill }
   CAD_SKETCH_DIM_ID = 900031;          { drafting dimensions }
+  CAD_SKETCH_SELECTED_ID = 900032;     { selected contour fill overlay }
   { every sketch-mode object id is at or above this }
   CAD_SKETCH_FIRST_ID = 900000;
 
@@ -50,6 +51,8 @@ type
     FLineEditActive: Boolean;            { active Trim (lines/arcs/circles) or Extend }
     FLineEditMode: TCADLineEditMode;
     FLineEditMessage: string;
+    FContourSeeds: TCADContourSeeds;      { selected region interior points }
+    FContourCount: Integer;              { last resolved selections }
     FOnSmartDimension: TNotifyEvent;
     FOnContextMenu: TCADViewPointEvent;
     { sketch undo: texts of the sketch after each change }
@@ -58,6 +61,7 @@ type
     FRestoring: Boolean;
     procedure SmartClick(U, V: Double);
     procedure LineEditClick(U, V: Double);
+    function SelectContourAt(U,V:Double; AAdd:Boolean):Boolean;
     function SmartReady: Boolean;
     procedure Restore(const AText: string);
     procedure MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -114,6 +118,12 @@ type
     procedure SetSmartDimension(AOn: Boolean);
     { Trim: click any line / arc / circle segment; Extend: line endpoints. }
     procedure SetLineEdit(AMode: TCADLineEditMode);
+    { The selected regions are separate from sketch constraints and persist
+      in the Sketch feature's 'contours' parameter. Empty = all regions. }
+    function ContoursText: string;
+    procedure LoadContours(const AText:string);
+    procedure ClearContours;
+    property ContourCount:Integer read FContourCount;
     property LineEditActive: Boolean read FLineEditActive;
     property LineEditMode: TCADLineEditMode read FLineEditMode;
     property SmartDimension: Boolean read FSmartDim;
@@ -188,6 +198,8 @@ begin
   FLineEditActive := False;
   FLineEditMessage := '';
   FSmartDim := False;
+  SetLength(FContourSeeds,0);
+  FContourCount:=0;
   FEditor.Resolve;                         { states and DOF of a loaded sketch }
   SetLength(FUndo, 1);
   FUndo[0] := CADSketchToText(FSketch);
@@ -286,6 +298,9 @@ begin
   O := FView.FindObject(CAD_SKETCH_DIM_ID);
   if O <> nil then
     O.Visible := False;
+  O := FView.FindObject(CAD_SKETCH_SELECTED_ID);
+  if O <> nil then
+    O.Visible := False;
   FView.Invalidate3D;
   Changed;
 end;
@@ -360,7 +375,9 @@ end;
 
 const
   FillMaterial = 'cad-sketch-fill';
+  SelectedFillMaterial = 'cad-sketch-selected-contours';
   FillColor: array[0..2] of Single = (0.82, 0.89, 0.97);      { light blue }
+  SelectedFillColor: array[0..2] of Single = (0.40, 0.78, 0.55); { selected green }
   DimColor: array[0..2] of Single = (0.12, 0.31, 0.61);       { drafting blue }
 
 { Closed regions in a light colour, a hair behind the plane (the sketch lines
@@ -386,6 +403,21 @@ begin
   O.EdgeColor := Viewport3DRGBA(FillColor[0], FillColor[1], FillColor[2], 1.0);
   Behind := Max(1e-3, 2 * WorldPerPixel * 0.05);
   CADBuildSketchFill(FSketch, O.Mesh, Behind);
+
+  if FView.Materials.Find(SelectedFillMaterial) = nil then
+  begin
+    M := TRenderMaterial.Create(SelectedFillMaterial, msFlat);
+    M.BaseColor := MaterialColor(SelectedFillColor[0],
+      SelectedFillColor[1], SelectedFillColor[2], 1.0);
+    if not FView.Materials.Register(M, Err) then M.Free;
+  end;
+  ObjectMesh(CAD_SKETCH_SELECTED_ID,SelectedFillMaterial);
+  O := FView.FindObject(CAD_SKETCH_SELECTED_ID);
+  O.CullBackFaces := False;
+  O.UseEdgeColor := True;
+  O.EdgeColor := Viewport3DRGBA(SelectedFillColor[0],
+    SelectedFillColor[1],SelectedFillColor[2],1.0);
+  CADBuildSelectedContourFill(FSketch,FContourSeeds,O.Mesh,Behind*0.5);
 end;
 
 procedure TCADSketchMode.RefreshDimensions;
@@ -576,6 +608,15 @@ begin
   end;
   if FSmartDim then
     SmartClick(U, V)
+  else if (FEditor.Tool = sktSelect) and
+          (CADSketchEntityHit(FSketch,U,V,FEditor.SnapTolerance)<0) and
+          SelectContourAt(U,V,ssShift in Shift) then
+  begin
+    RefreshSketch;
+    RefreshPreview;
+    Changed;
+    Exit;
+  end
   else if FEditor.Tool = sktSelect then
     FEditor.SelectAt(U, V, ssShift in Shift)
   else if FEditor.Click(U, V) then
@@ -736,6 +777,62 @@ begin
   Changed;
 end;
 
+{ One interior click selects a planar face without altering the sketch.
+  The boundary may contain unsplit intersections and open exterior arms. }
+function TCADSketchMode.SelectContourAt(U,V:Double; AAdd:Boolean):Boolean;
+var
+  P:TCADSketchProfile;
+  Indices:TCADRegionIndices;
+begin
+  Result:=False;
+  if (FSketch=nil) or not CADBuildRegions(FSketch,P) then Exit;
+  Result:=CADClickContour(P,U,V,AAdd,FContourSeeds);
+  if Result then
+  begin
+    Indices:=CADContourIndices(P,FContourSeeds);
+    if Length(FContourSeeds)=0 then FContourCount:=0
+    else FContourCount:=Length(Indices);
+    FEditor.ClearSelection;
+  end;
+end;
+
+function TCADSketchMode.ContoursText:string;
+begin
+  Result:=CADContoursToText(FContourSeeds);
+end;
+
+procedure TCADSketchMode.LoadContours(const AText:string);
+var
+  P:TCADSketchProfile;
+  Indices:TCADRegionIndices;
+begin
+  if not CADContoursFromText(AText,FContourSeeds) then
+    SetLength(FContourSeeds,0);
+  FContourCount:=0;
+  if (Length(FContourSeeds)>0) and (FSketch<>nil) and
+     CADBuildRegions(FSketch,P) then
+  begin
+    Indices:=CADContourIndices(P,FContourSeeds);
+    FContourCount:=Length(Indices);
+  end;
+  if FActive then
+  begin
+    RefreshFill;
+    Changed;
+  end;
+end;
+
+procedure TCADSketchMode.ClearContours;
+begin
+  SetLength(FContourSeeds,0);
+  FContourCount:=0;
+  if FActive then
+  begin
+    RefreshFill;
+    Changed;
+  end;
+end;
+
 { Which selections can sccDimension actually measure? }
 function TCADSketchMode.SmartReady: Boolean;
 var
@@ -823,6 +920,10 @@ begin
     else
       Exit('Extend: click near a line end to reach a boundary | Esc: Select');
   end;
+  if Length(FContourSeeds)>0 then
+    Exit(Format('Selected contours: %d | Shift+click another region to add/remove | ' +
+      'Click inside a region to replace selection | Exit Sketch: Extrude selected',
+      [FContourCount]));
   if FSmartDim then
     Exit('Smart Dimension: click a line, circle or arc (two items: distance or angle; ' +
       'a line then empty space: its length) | Esc: clear / Select');

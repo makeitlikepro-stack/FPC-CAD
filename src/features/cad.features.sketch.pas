@@ -146,23 +146,39 @@ begin
       AError := Format('Sketch: %s (constraints:%s)', [CADSolveStatusText(R.Status), List]);
       Exit(False);
     end;
-    if not CADBuildRegions(S, P) then
-    begin
-      AError := 'Sketch regions: ' + P.Error;
-      Exit(False);
-    end;
     if not CADContoursFromText(GetParamValue('contours').S, Seeds) then
     begin
       AError := 'Sketch: invalid selected contours data';
       Exit(False);
     end;
-    Indices := CADContourIndices(P, Seeds);
-    if Length(Indices)=0 then
+    if Length(Seeds)=0 then
     begin
-      AError := 'Sketch: no selected contour remains after geometry changes';
-      Exit(False);
+      { Preserve old hole semantics: a clean closed sketch with an outer
+        rectangle and circular holes still extrudes AS A PLATE WITH HOLES.
+        Untrimmed intersecting/open-arm geometry falls back to the new
+        planar-region arrangement because the legacy builder rejects it. }
+      if not CADBuildProfile(S, P) then
+        if not CADBuildRegions(S, P) then
+        begin
+          AError := 'Sketch regions: ' + P.Error;
+          Exit(False);
+        end;
+    end
+    else
+    begin
+      if not CADBuildRegions(S, P) then
+      begin
+        AError := 'Sketch regions: ' + P.Error;
+        Exit(False);
+      end;
+      Indices := CADContourIndices(P, Seeds);
+      if Length(Indices)=0 then
+      begin
+        AError := 'Sketch: no selected contour remains after geometry changes';
+        Exit(False);
+      end;
+      P := CADRegionProfileSubset(P, Indices);
     end;
-    P := CADRegionProfileSubset(P, Indices);
     CADProfileArrays(S, P, Plane, Edges, LoopSizes, FaceLoops);
     Result := WrapShape(OCCT.MakePlanarFaces(Plane, Edges, LoopSizes, FaceLoops),
       'Sketch', AResult, AError);

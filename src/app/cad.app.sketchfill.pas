@@ -17,7 +17,8 @@ unit CAD.App.SketchFill;
 interface
 
 uses
-  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Profile, CAD.Features.Sketch,
+  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Profile, CAD.Sketch.Regions,
+  CAD.Sketch.ContourSelection, CAD.Features.Sketch,
   CAD.Core.Values, CAD.OCCT.Bridge, CAD.View.MeshConvert,
   OpenGL.Render.Viewport3DMeshData;
 
@@ -25,10 +26,15 @@ uses
   mm behind the plane. False (AMesh empty) when there is no closed region or
   OCCT is not loaded. }
 function CADBuildSketchFill(S: TCADSketch; AMesh: TV3DMeshData; ABehind: Double): Boolean;
+{ The selected subset is drawn separately above the neutral region fill.
+  Empty selection has no overlay; all regions are selectable independently. }
+function CADBuildSelectedContourFill(S: TCADSketch; const Seeds:TCADContourSeeds;
+  AMesh:TV3DMeshData; ABehind:Double):Boolean;
 
 implementation
 
-function CADBuildSketchFill(S: TCADSketch; AMesh: TV3DMeshData; ABehind: Double): Boolean;
+function CADBuildFillCore(S: TCADSketch; const Seeds:TCADContourSeeds;
+  ASelectedOnly:Boolean; AMesh: TV3DMeshData; ABehind: Double): Boolean;
 var
   P: TCADSketchProfile;
   Plane, Edges: TCADDoubleArray;
@@ -39,13 +45,21 @@ var
   Stats: TCADMeshConvertStats;
   Err: string;
   I: Integer;
+  FaceIndices: TCADRegionIndices;
 begin
   Result := False;
   AMesh.Clear;
   if (OCCT = nil) or (S = nil) or (S.EntityCount = 0) then
     Exit;
-  if not CADBuildProfile(S, P) or (Length(P.Faces) = 0) then
+  if not CADBuildRegions(S, P) or (Length(P.Faces) = 0) then
     Exit;
+  if ASelectedOnly then
+  begin
+    if Length(Seeds)=0 then Exit;
+    FaceIndices := CADContourIndices(P,Seeds);
+    if Length(FaceIndices)=0 then Exit;
+    P := CADRegionProfileSubset(P,FaceIndices);
+  end;
   CADProfileArrays(S, P, Plane, Edges, LoopSizes, FaceLoops);
   for I := 0 to 2 do
     Plane[I] := Plane[I] - Plane[6 + I] * ABehind;   { origin moved against the normal }
@@ -75,6 +89,20 @@ begin
     if Shape <> nil then
       OCCT.FreeShape(Shape);
   end;
+end;
+
+function CADBuildSketchFill(S: TCADSketch; AMesh:TV3DMeshData;
+  ABehind:Double):Boolean;
+var Empty:TCADContourSeeds;
+begin
+  SetLength(Empty,0);
+  Result:=CADBuildFillCore(S,Empty,False,AMesh,ABehind);
+end;
+
+function CADBuildSelectedContourFill(S:TCADSketch;const Seeds:TCADContourSeeds;
+  AMesh:TV3DMeshData;ABehind:Double):Boolean;
+begin
+  Result:=CADBuildFillCore(S,Seeds,True,AMesh,ABehind);
 end;
 
 end.

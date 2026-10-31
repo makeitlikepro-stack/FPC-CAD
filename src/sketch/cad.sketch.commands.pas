@@ -49,6 +49,14 @@ function CADIsDimension(AKind: TCADSketchConstraintKind): Boolean;
 function CADConstraintLabel(S: TCADSketch; AIndex: Integer): string;
 { Value shown and edited for a dimension (degrees for angles). }
 function CADDimensionShown(const C: TCADSketchConstraint): Double;
+{ The value a user sees and types for dimension AIndex. Angles: the angle
+  between the two segments as drawn, 0..180 degrees, the smaller side (the
+  constraint itself keeps the directed angle of the line directions). }
+function CADDimensionShownIn(S: TCADSketch; AIndex: Integer): Double;
+{ Crossing of the two lines of an angle constraint and the unit rays from
+  it towards each segment; False for parallel lines. }
+function CADAngleRays(S: TCADSketch; ALine1, ALine2: Integer;
+  out VX, VY, R1X, R1Y, R2X, R2Y: Double): Boolean;
 function CADCommandName(ACommand: TCADSketchCommand): string;
 { The fixed point at (0, 0); made when the sketch has none. }
 function CADOriginPoint(S: TCADSketch): Integer;
@@ -228,14 +236,14 @@ var
   V: string;
 begin
   C := S.Constraints[AIndex];
-  V := FormatFloat('0.##', CADDimensionShown(C));
+  V := FormatFloat('0.##', CADDimensionShownIn(S, AIndex));
   case C.Kind of
     { drafting style: R5, diameter sign + 10 (UTF-8), 90 + degree sign;
       horizontal / vertical distances show the plain number (the drawn
       dimension line tells the direction) }
     sckRadius: Result := 'R' + V;
     sckDiameter: Result := #$C3#$98 + V;
-    sckAngle: Result := FormatFloat('0.##', Abs(CADDimensionShown(C))) + #$C2#$B0;
+    sckAngle: Result := V + #$C2#$B0;
   else
     Result := V;
   end;
@@ -387,6 +395,80 @@ begin
     Result := C.Value;
 end;
 
+function CADAngleRays(S: TCADSketch; ALine1, ALine2: Integer;
+  out VX, VY, R1X, R1Y, R2X, R2Y: Double): Boolean;
+var
+  E1, E2: TCADSketchEntity;
+  AX, AY, BX, BY, CX, CY, DX, DY, D1X, D1Y, D2X, D2Y, Den, T, L: Double;
+begin
+  VX := 0; VY := 0; R1X := 1; R1Y := 0; R2X := 1; R2Y := 0;
+  E1 := S.Entities[ALine1];
+  E2 := S.Entities[ALine2];
+  Result := False;
+  if (E1.Kind <> sekLine) or (E2.Kind <> sekLine) then
+    Exit;
+  AX := S.PointX(E1.P1); AY := S.PointY(E1.P1);
+  BX := S.PointX(E1.P2); BY := S.PointY(E1.P2);
+  CX := S.PointX(E2.P1); CY := S.PointY(E2.P1);
+  DX := S.PointX(E2.P2); DY := S.PointY(E2.P2);
+  D1X := BX - AX; D1Y := BY - AY;
+  D2X := DX - CX; D2Y := DY - CY;
+  Den := D1X * D2Y - D1Y * D2X;
+  if Abs(Den) < 1e-12 * Max(1e-12, Hypot(D1X, D1Y) * Hypot(D2X, D2Y)) then
+    Exit;                                  { parallel: no crossing }
+  T := ((CX - AX) * D2Y - (CY - AY) * D2X) / Den;
+  VX := AX + T * D1X;
+  VY := AY + T * D1Y;
+  { each ray points from the crossing to the middle of its own segment }
+  L := Hypot(D1X, D1Y);
+  R1X := D1X / L; R1Y := D1Y / L;
+  if (0.5 * (AX + BX) - VX) * R1X + (0.5 * (AY + BY) - VY) * R1Y < 0 then
+  begin
+    R1X := -R1X; R1Y := -R1Y;
+  end;
+  L := Hypot(D2X, D2Y);
+  R2X := D2X / L; R2Y := D2Y / L;
+  if (0.5 * (CX + DX) - VX) * R2X + (0.5 * (CY + DY) - VY) * R2Y < 0 then
+  begin
+    R2X := -R2X; R2Y := -R2Y;
+  end;
+  Result := True;
+end;
+
+{ True when both rays run with their line directions or both against them:
+  then the drawn angle is |directed angle|, else 180 - |directed angle|. }
+function AngleSameSide(S: TCADSketch; const C: TCADSketchConstraint): Boolean;
+var
+  VX, VY, R1X, R1Y, R2X, R2Y, D1X, D1Y, D2X, D2Y: Double;
+  E1, E2: TCADSketchEntity;
+begin
+  Result := True;
+  if not CADAngleRays(S, C.A, C.B, VX, VY, R1X, R1Y, R2X, R2Y) then
+    Exit;
+  E1 := S.Entities[C.A];
+  E2 := S.Entities[C.B];
+  D1X := S.PointX(E1.P2) - S.PointX(E1.P1);
+  D1Y := S.PointY(E1.P2) - S.PointY(E1.P1);
+  D2X := S.PointX(E2.P2) - S.PointX(E2.P1);
+  D2Y := S.PointY(E2.P2) - S.PointY(E2.P1);
+  Result := ((D1X * R1X + D1Y * R1Y) > 0) = ((D2X * R2X + D2Y * R2Y) > 0);
+end;
+
+function CADDimensionShownIn(S: TCADSketch; AIndex: Integer): Double;
+var
+  C: TCADSketchConstraint;
+begin
+  C := S.Constraints[AIndex];
+  Result := CADDimensionShown(C);
+  if C.Kind <> sckAngle then
+    Exit;
+  Result := Abs(Result);
+  if Result > 180 then
+    Result := 360 - Result;
+  if not AngleSameSide(S, C) then
+    Result := 180 - Result;
+end;
+
 function CADConstraintLabel(S: TCADSketch; AIndex: Integer): string;
 var
   C: TCADSketchConstraint;
@@ -394,7 +476,7 @@ begin
   C := S.Constraints[AIndex];
   Result := Format('#%d %s', [AIndex, CADConstraintKindName(C.Kind)]);
   if CADIsDimension(C.Kind) then
-    Result := Result + ' ' + FormatFloat('0.###', CADDimensionShown(C));
+    Result := Result + ' ' + FormatFloat('0.###', CADDimensionShownIn(S, AIndex));
   if not C.Active then
     Result := Result + ' (removed)';
 end;
@@ -615,12 +697,25 @@ begin
     AError := 'a size must be positive';
     Exit(False);
   end;
+  if (C.Kind = sckAngle) and ((AValue <= 0) or (AValue >= 180)) then
+  begin
+    AError := 'an angle between the two sides: more than 0, less than 180';
+    Exit(False);
+  end;
   SetLength(Saved, S.ParamCount);
   for I := 0 to High(Saved) do
     Saved[I] := S.Params[I];
   Old := C.Value;
   if C.Kind = sckAngle then
-    S.SetConstraintValue(AConstraint, DegToRad(AValue))
+  begin
+    { the typed value is the angle between the sides; the constraint keeps
+      the directed angle of the line directions (same turn direction) }
+    if not AngleSameSide(S, C) then
+      AValue := 180 - AValue;
+    if C.Value < 0 then
+      AValue := -AValue;
+    S.SetConstraintValue(AConstraint, DegToRad(AValue));
+  end
   else
     S.SetConstraintValue(AConstraint, AValue);
   R := CADSolveSketch(S);

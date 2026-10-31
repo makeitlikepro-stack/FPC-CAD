@@ -282,7 +282,7 @@ begin
   if not (C.Active and CADIsDimension(C.Kind)) then
     Exit;
   FEditConstraint := AConstraint;
-  FEdit.Text := UTF8String(FormatFloat('0.######', CADDimensionShown(C), FS));
+  FEdit.Text := UTF8String(FormatFloat('0.######', CADDimensionShownIn(FMode.Sketch, AConstraint), FS));
   FEdit.Visible := True;
   PlaceChips;
   FUI.FocusWidget(FEdit);

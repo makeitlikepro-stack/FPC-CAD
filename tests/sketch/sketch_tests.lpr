@@ -1021,8 +1021,23 @@ end;
 procedure TestDimGraphic;
 var
   S: TCADSketch;
-  P0, P1, P2, P3, B, R, Ci, Cr, Dx, A2, L2: Integer;
+  P0, P1, P2, P3, B, R, Ci, Cr, Dx, A2, L2, Q0, Q1, Q2, La, Lb, Lc, An, Ar: Integer;
+  T: TCADSketch;
   G: TCADDimGraphic;
+  Err: string;
+
+  function LineAngleOf(SS: TCADSketch; L1, L2: Integer): Double;
+  var
+    E1, E2: TCADSketchEntity;
+  begin
+    E1 := SS.Entities[L1];
+    E2 := SS.Entities[L2];
+    Result := ArcTan2((SS.PointX(E1.P2) - SS.PointX(E1.P1)) * (SS.PointY(E2.P2) - SS.PointY(E2.P1)) -
+      (SS.PointY(E1.P2) - SS.PointY(E1.P1)) * (SS.PointX(E2.P2) - SS.PointX(E2.P1)),
+      (SS.PointX(E1.P2) - SS.PointX(E1.P1)) * (SS.PointX(E2.P2) - SS.PointX(E2.P1)) +
+      (SS.PointY(E1.P2) - SS.PointY(E1.P1)) * (SS.PointY(E2.P2) - SS.PointY(E2.P1)));
+  end;
+
 begin
   S := TCADSketch.Create;
   try
@@ -1056,6 +1071,31 @@ begin
     Check((G.TextX > 0) and (G.TextY > 0) and Near(Hypot(G.TextX, G.TextY), 4.6 + 1.54, 1e-6),
       Format('dim: angle text at the middle of the arc (%.3f, %.3f)', [G.TextX, G.TextY]));
     Check(Pos('90', CADDimensionChipText(S, A2)) = 1, 'dim: angle text 90 degrees');
+    { an obtuse corner (own sketch): the value between the sides, set by it }
+    T := TCADSketch.Create;
+    try
+      Q0 := T.AddPoint(200, 0);
+      Q1 := T.AddPoint(210, 0);
+      Q2 := T.AddPoint(195, 8.660254);
+      La := T.AddLine(Q0, Q1);
+      Lb := T.AddLine(Q0, Q2);
+      T.FixPoint(Q0);
+      T.FixPoint(Q1);
+      An := T.Angle(La, Lb, DegToRad(120));
+      Check(Near(CADDimensionShownIn(T, An), 120, 1e-4), Format('angle: 120 between the sides (%.4f)', [CADDimensionShownIn(T, An)]));
+      Check(CADDimensionGraphic(T, An, 0.1, G) and (G.TextY > 0), 'angle: arc above the base, inside the corner');
+      Check(CADSetDimension(T, An, 45, Err) and Near(CADDimensionShownIn(T, An), 45, 1e-4) and
+        (T.PointY(Q2) > 0), Format('angle: set 45 between the sides (%s)', [Err]));
+      Check(not CADSetDimension(T, An, 200, Err) and not CADSetDimension(T, An, 0, Err),
+        'angle: 0 and 200 refused (0..180 between the sides)');
+      { reversed second line: the drawn angle stays the one between the segments }
+      Lc := T.AddLine(T.AddPoint(204, 3), Q0);
+      Ar := T.Angle(La, Lc, LineAngleOf(T, La, Lc));
+      Check(Near(CADDimensionShownIn(T, Ar), RadToDeg(ArcTan2(3, 4)), 1e-4),
+        Format('angle: reversed line still shows the inner angle (%.4f)', [CADDimensionShownIn(T, Ar)]));
+    finally
+      T.Free;
+    end;
     Check(CADDimensionChipText(S, Dx) = '100', 'dim: distance X shows the number');
   finally
     S.Free;

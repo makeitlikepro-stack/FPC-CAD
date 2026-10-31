@@ -261,7 +261,7 @@ begin
     Exit;
   K := FMode.Sketch.Constraints[C];
   if CADIsDimension(K.Kind) then
-    FValue.Text := FormatFloat('0.######', CADDimensionShown(K), FS)
+    FValue.Text := FormatFloat('0.######', CADDimensionShownIn(FMode.Sketch, C), FS)
   else
     FValue.Text := '';
 end;

@@ -466,7 +466,8 @@ var
 begin
   FDownX := X;
   FDownY := Y;
-  if FActive and (Button = mbLeft) and (ssDouble in Shift) and (FEditor.Tool = sktSelect) and
+  if FActive and not FLineEditActive and (Button = mbLeft) and
+     (ssDouble in Shift) and (FEditor.Tool = sktSelect) and
      ToSketch(X, Y, U, V) and
      (CADSketchHit(FSketch, U, V, SnapPixels * WorldPerPixel, Index) = chkEntity) and
      Assigned(FOnEntityDoubleClick) then

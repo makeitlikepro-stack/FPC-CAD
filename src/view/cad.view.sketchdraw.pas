@@ -217,6 +217,7 @@ begin
   for I := 0 to S.EntityCount - 1 do
   begin
     E := S.Entities[I];
+    if not E.Active then Continue;
     case E.Kind of
       sekLine:
         AMesh.AddPolylineEdge([P3(S, S.PointX(E.P1), S.PointY(E.P1)),
@@ -243,6 +244,7 @@ var
   CX, CY, A1, A2: Double;
 begin
   E := S.Entities[AEntity];
+  if not E.Active then Exit;
   case E.Kind of
     sekLine:
       AMesh.AddPolylineEdge([P3(S, S.PointX(E.P1), S.PointY(E.P1)),
@@ -287,6 +289,7 @@ begin
   CADSketchStates(S, Ed.LastSolve, EStates, PStates);
   for I := 0 to S.EntityCount - 1 do
   begin
+    if not S.Entities[I].Active then Continue;
     if Ed.IsSelected(chkEntity, I) then
       L := sklSelected
     else if (Ed.HoverKind = chkEntity) and (Ed.HoverIndex = I) then
@@ -300,6 +303,7 @@ begin
   H := 0.5 * APointSize;
   for I := 0 to S.PointCount - 1 do
   begin
+    if not S.Points[I].Active then Continue;
     if Ed.IsSelected(chkPoint, I) then
       L := sklSelected
     else if (Ed.HoverKind = chkPoint) and (Ed.HoverIndex = I) then

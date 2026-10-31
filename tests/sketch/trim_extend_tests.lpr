@@ -177,6 +177,7 @@ var
   Line, I, C: Integer;
   Plan: TCADTrimPlan;
   Err, Before: string;
+  SolveResult: TCADSketchSolveResult;
 begin
   S := TCADSketch.Create;
   try
@@ -205,7 +206,8 @@ begin
       (not S.Points[S.Entities[Line].P1].Active) and
       (not S.Points[S.Entities[Line].P2].Active),
       'power trim: no stray orphan points after deleting whole line');
-    Check(CADSolveSketch(S).Status = cssSolved,
+    SolveResult := CADSolveSketch(S);
+    Check(SolveResult.Status = cssSolved,
       'power trim: empty sketch remains solvable');
   finally
     S.Free;

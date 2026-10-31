@@ -332,13 +332,11 @@ begin
 
   if E.Kind = sekCircle then
   begin
-    if Count = 1 then
-    begin
-      AError := 'a circle needs at least two distinct crossings to trim a portion';
-      Exit;
-    end;
-    if Count = 0 then
-      Exit(True);                             { remove the entire circle }
+    { A closed circle with zero or one distinct intersection still has
+      only one removable piece. A single true tangency cannot delimit
+      an open arc: Power Trim removes the entire selected closed circle. }
+    if Count < 2 then
+      Exit(True);
     LeftT := -1e100;
     RightT := 1e100;
     LeftId := -1;

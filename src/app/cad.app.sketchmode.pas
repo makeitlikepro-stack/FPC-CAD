@@ -7,7 +7,8 @@ unit CAD.App.SketchMode;
              origin) up to date.
   CALLED BY: CAD.App.MainForm (enter, tool buttons, finish).
   CALLS:     CAD.Sketch.Editor / Model / Text, CAD.View.SketchDraw,
-             engine TUIViewport3D (objects, camera, mouse events).
+             engine TUIViewport3D (objects, camera, mouse events, OnPointerDrag:
+             left drags move sketch points instead of orbiting).
   THREADS:   UI thread.
   SPEED:     a mouse move rebuilds only the small preview mesh; the sketch
              mesh is rebuilt after a click that changed the sketch. }
@@ -35,6 +36,8 @@ type
     procedure MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
+    procedure PointerDrag(Sender: TObject; APhase: TViewport3DDragPhase; AX, AY: Integer;
+      var AHandled: Boolean);
     function WorldPerPixel: Double;
     function ToSketch(X, Y: Integer; out U, V: Double): Boolean;
     function ObjectMesh(AId: Cardinal): TV3DMeshData;
@@ -103,6 +106,7 @@ begin
   FView.OnMouseDown := @MouseDown;
   FView.OnMouseUp := @MouseUp;
   FView.OnMouseMove := @MouseMove;
+  FView.OnPointerDrag := @PointerDrag;     { left drags move points, never orbit }
   NormalView;
   RefreshSketch;
   RefreshPreview;
@@ -117,6 +121,7 @@ begin
   FView.OnMouseDown := nil;
   FView.OnMouseUp := nil;
   FView.OnMouseMove := nil;
+  FView.OnPointerDrag := nil;
   O := FView.FindObject(CAD_SKETCH_OBJECT_ID);
   if O <> nil then
     O.Visible := False;
@@ -206,6 +211,37 @@ begin
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
   FEditor.Move(U, V);
   RefreshPreview;
+end;
+
+procedure TCADSketchMode.PointerDrag(Sender: TObject; APhase: TViewport3DDragPhase;
+  AX, AY: Integer; var AHandled: Boolean);
+var
+  U, V: Double;
+begin
+  if not FActive then
+    Exit;
+  AHandled := True;                         { sketch mode: the view does not orbit }
+  if not ToSketch(AX, AY, U, V) then
+    Exit;
+  FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
+  case APhase of
+    vdpBegin:
+      FEditor.BeginDrag(U, V);
+    vdpMove:
+      if FEditor.Dragging and FEditor.DragTo(U, V) then
+      begin
+        RefreshSketch;
+        RefreshPreview;
+      end;
+    vdpEnd:
+      if FEditor.Dragging then
+      begin
+        FEditor.EndDrag;
+        RefreshSketch;
+        RefreshPreview;
+        Changed;
+      end;
+  end;
 end;
 
 procedure TCADSketchMode.MouseUp(Sender: TObject; Button: TMouseButton;

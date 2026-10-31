@@ -719,6 +719,50 @@ begin
   end;
 end;
 
+procedure TestEditorDrag;
+var
+  S: TCADSketch;
+  Ed: TCADSketchEditor;
+  P2, P3: Integer;
+begin
+  S := TCADSketch.Create;
+  Ed := TCADSketchEditor.Create(S);
+  try
+    Ed.SnapTolerance := 0.5;
+    Ed.SetTool(sktRectangle);
+    Ed.Click(0.1, 0.1);                        { origin: fixed corner }
+    Ed.Click(40, 20);
+    P2 := 2;                                   { origin 0, (40,0) 1, (40,20) 2, (0,20) 3 }
+    P3 := 3;
+    Check(Near(S.PointX(P2), 40) and Near(S.PointY(P2), 20), 'drag: rectangle corner at (40, 20)');
+    Ed.SetTool(sktSelect);
+    Check(not Ed.BeginDrag(0, 0), 'drag: the fixed origin cannot be dragged');
+    Check(Ed.BeginDrag(40.2, 19.9) and Ed.Dragging, 'drag: picks the free corner');
+    Check(Ed.DragTo(50, 30), 'drag: moved');
+    Check(Near(S.PointX(P2), 50) and Near(S.PointY(P2), 30) and Near(S.PointX(1), 50) and
+      Near(S.PointY(1), 0) and Near(S.PointX(P3), 0) and Near(S.PointY(P3), 30),
+      'drag: the rectangle stays a rectangle, the origin corner stays');
+    Ed.EndDrag;
+    Check(not Ed.Dragging and (Ed.LastSolve.Status = cssSolved) and (Ed.LastSolve.DOF = 2),
+      Format('drag: end solves with diagnostics, DOF 2, got %d', [Ed.LastSolve.DOF]));
+    { fully constrained: the drag cannot move it }
+    S.Distance(0, 1, 50);
+    S.Distance(1, P2, 30);
+    CADSolveSketch(S);
+    Check(Ed.BeginDrag(50, 30), 'drag: pick the constrained corner');
+    Ed.DragTo(70, 45);
+    Ed.EndDrag;
+    Check(Near(S.PointX(P2), 50) and Near(S.PointY(P2), 30), 'drag: a fully constrained point stays put');
+    { no drag while a shape is being drawn }
+    Ed.SetTool(sktLine);
+    Ed.Click(100, 100);
+    Check(not Ed.BeginDrag(50, 30), 'drag: not while a line chain is open');
+  finally
+    Ed.Free;
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -730,6 +774,7 @@ begin
   TestSpeed;
   TestProfiles;
   TestEditor;
+  TestEditorDrag;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

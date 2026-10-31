@@ -41,7 +41,7 @@ type
     FLines: array[0..5] of TUILabel;   { 0..1 pick, 2..5 timing (labels are one line) }
     FRadius: TUISlider;
     FSketchLabel: TUILabel;
-    FSketchButtons: array[0..9] of TUIButton;
+    FSketchButtons: array[0..10] of TUIButton;
     FSketchMode: TCADSketchMode;
     FSketchCount: Integer;
     procedure HostSetupUI(Sender: TObject);
@@ -68,8 +68,8 @@ var
 implementation
 
 const
-  SketchButtonText: array[0..9] of string = ('New sketch (XY)', 'Line', 'Rect', 'Circle',
-    'Arc', 'Arc 3pt', 'Point', 'Cancel', 'Normal view', 'Finish + Extrude 10');
+  SketchButtonText: array[0..10] of string = ('New sketch (XY)', 'Select', 'Line', 'Rect',
+    'Circle', 'Arc', 'Arc 3pt', 'Point', 'Cancel', 'Normal view', 'Finish + Extrude 10');
   PanelWidth = 260;
   StatusHeight = 26;
   StartRadius = 4.0;
@@ -225,19 +225,16 @@ begin
     Place(FLines[I], 12, Y, PanelWidth - 24, 24);
     Inc(Y, 24);
   end;
-  { sketch: one wide button, 3 x 2 tools, 2 half-width, 1 wide }
+  { sketch: one wide button, 3 x 3 tools, 1 wide }
   Inc(Y, 16);
   Place(FSketchLabel, 12, Y, PanelWidth - 24, 24);
   Inc(Y, 28);
   Place(FSketchButtons[0], 12, Y, PanelWidth - 24, 30);
   Inc(Y, 36);
-  for I := 1 to 6 do
+  for I := 1 to 9 do
     Place(FSketchButtons[I], 12 + ((I - 1) mod 3) * 80, Y + ((I - 1) div 3) * 36, 74, 30);
-  Inc(Y, 72);
-  Place(FSketchButtons[7], 12, Y, 114, 30);
-  Place(FSketchButtons[8], 134, Y, 114, 30);
-  Inc(Y, 36);
-  Place(FSketchButtons[9], 12, Y, PanelWidth - 24, 30);
+  Inc(Y, 108);
+  Place(FSketchButtons[10], 12, Y, PanelWidth - 24, 30);
 end;
 
 procedure TCADMainForm.HostResize(Sender: TObject);
@@ -326,15 +323,16 @@ begin
         ShowDocumentObjects(False);
         FSketchMode.Enter([0, 0, 0], [1, 0, 0], [0, 0, 1]);
       end;
-    1: FSketchMode.SetTool(sktLine);
-    2: FSketchMode.SetTool(sktRectangle);
-    3: FSketchMode.SetTool(sktCircle);
-    4: FSketchMode.SetTool(sktArc);
-    5: FSketchMode.SetTool(sktArc3);
-    6: FSketchMode.SetTool(sktPoint);
-    7: FSketchMode.Cancel;
-    8: FSketchMode.NormalView;
-    9: if FSketchMode.Active then
+    1: FSketchMode.SetTool(sktSelect);
+    2: FSketchMode.SetTool(sktLine);
+    3: FSketchMode.SetTool(sktRectangle);
+    4: FSketchMode.SetTool(sktCircle);
+    5: FSketchMode.SetTool(sktArc);
+    6: FSketchMode.SetTool(sktArc3);
+    7: FSketchMode.SetTool(sktPoint);
+    8: FSketchMode.Cancel;
+    9: FSketchMode.NormalView;
+    10: if FSketchMode.Active then
          FinishSketch;
   end;
 end;

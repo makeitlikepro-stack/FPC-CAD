@@ -63,6 +63,7 @@ type
     FPreviewCount: Integer;
     FLastSolve: TCADSketchSolveResult;
     FCursorX, FCursorY: Double;
+    FDragPoint: Integer;        { -1 = no drag }
     function FindSnap(X, Y: Double; AFromPoint: Integer): TCADSnap;
     function ResolvePoint(const ASnap: TCADSnap): Integer;
     function OriginPoint: Integer;
@@ -96,6 +97,15 @@ type
     property LastSolve: TCADSketchSolveResult read FLastSolve;
     { True while a shape has some clicks (or a line chain is open). }
     function Busy: Boolean;
+    { Point dragging (any tool, when no shape is in progress): True when a
+      free point is within the snap radius. DragTo moves it and solves:
+      first with the point held at the cursor (the rest follows as little
+      as possible); if that cannot be solved, with the point free (it stays
+      as close as the constraints allow); otherwise nothing changes. }
+    function BeginDrag(X, Y: Double): Boolean;
+    function DragTo(X, Y: Double): Boolean;
+    procedure EndDrag;
+    function Dragging: Boolean;
   end;
 
 implementation
@@ -123,6 +133,7 @@ begin
   FChainLast := -1;
   FSnap := NoSnap(0, 0);
   FLastSolve.DOF := -1;
+  FDragPoint := -1;
 end;
 
 procedure TCADSketchEditor.SetTool(ATool: TCADSketchTool);
@@ -536,6 +547,77 @@ begin
     FSketch.AddArc(C, S, E)
   else
     FSketch.AddArc(C, E, S);
+end;
+
+function TCADSketchEditor.Dragging: Boolean;
+begin
+  Result := FDragPoint >= 0;
+end;
+
+function TCADSketchEditor.BeginDrag(X, Y: Double): Boolean;
+var
+  I: Integer;
+  Best, D: Double;
+begin
+  FDragPoint := -1;
+  if Busy then
+    Exit(False);
+  Best := FSnapTolerance;
+  for I := 0 to FSketch.PointCount - 1 do
+  begin
+    if FSketch.Fixed[FSketch.Points[I].XParam] then
+      Continue;
+    D := Hypot(FSketch.PointX(I) - X, FSketch.PointY(I) - Y);
+    if D <= Best then
+    begin
+      Best := D;
+      FDragPoint := I;
+    end;
+  end;
+  Result := FDragPoint >= 0;
+end;
+
+function TCADSketchEditor.DragTo(X, Y: Double): Boolean;
+var
+  Saved: array of Double;
+  I: Integer;
+  Opt: TCADSketchSolveOptions;
+  R: TCADSketchSolveResult;
+begin
+  Result := False;
+  if FDragPoint < 0 then
+    Exit;
+  SetLength(Saved, FSketch.ParamCount);
+  for I := 0 to High(Saved) do
+    Saved[I] := FSketch.Params[I];
+  Opt := CADDefaultSolveOptions;
+  Opt.Diagnose := False;                     { fast while moving; EndDrag reports }
+  Opt.MaxIterations := 30;
+  FSketch.MovePoint(FDragPoint, X, Y);
+  FSketch.FixPoint(FDragPoint);
+  R := CADSolveSketch(FSketch, Opt);
+  FSketch.FixPoint(FDragPoint, False);
+  if R.Status <> cssSolved then
+  begin
+    FSketch.SetParams(Saved);
+    FSketch.MovePoint(FDragPoint, X, Y);
+    R := CADSolveSketch(FSketch, Opt);
+  end;
+  if R.Status <> cssSolved then
+    FSketch.SetParams(Saved)
+  else
+    Result := True;
+  FCursorX := X;
+  FCursorY := Y;
+end;
+
+procedure TCADSketchEditor.EndDrag;
+begin
+  if FDragPoint < 0 then
+    Exit;
+  FDragPoint := -1;
+  Solve;                                     { full report: DOF, redundant }
+  Move(FCursorX, FCursorY);
 end;
 
 function TCADSketchEditor.Click(X, Y: Double): Boolean;

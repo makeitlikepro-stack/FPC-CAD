@@ -645,15 +645,21 @@ begin
   Changed;
 end;
 
-{ One circle / arc, or two picked items, are a dimension already. }
+{ Which selections can sccDimension actually measure? }
 function TCADSketchMode.SmartReady: Boolean;
 var
   Sel: TCADSketchSelection;
 begin
   Sel := FEditor.Selection;
-  Result := (Length(Sel.Points) + Length(Sel.Entities) = 2) or
-    ((Length(Sel.Points) = 0) and (Length(Sel.Entities) = 1) and
-     (FSketch.Entities[Sel.Entities[0]].Kind in [sekCircle, sekArc]));
+  if (Length(Sel.Points) = 2) and (Length(Sel.Entities) = 0) then
+    Exit(True);
+  if (Length(Sel.Points) = 1) and (Length(Sel.Entities) = 1) then
+    Exit(FSketch.Entities[Sel.Entities[0]].Kind = sekLine);
+  if (Length(Sel.Points) = 0) and (Length(Sel.Entities) = 2) then
+    Exit((FSketch.Entities[Sel.Entities[0]].Kind = sekLine) and
+      (FSketch.Entities[Sel.Entities[1]].Kind = sekLine));
+  Result := (Length(Sel.Points) = 0) and (Length(Sel.Entities) = 1) and
+    (FSketch.Entities[Sel.Entities[0]].Kind in [sekCircle, sekArc]);
 end;
 
 procedure TCADSketchMode.SmartClick(U, V: Double);
@@ -666,13 +672,16 @@ begin
   Sel := FEditor.Selection;
   if K = chkNone then
   begin
-    { empty space: a picked line gets its length, a point / pair its distance }
-    if (Length(Sel.Points) + Length(Sel.Entities) > 0) and Assigned(FOnSmartDimension) then
+    { A single line needs an empty-space click to dimension its length.
+      A single point must wait for a second point or a line. }
+    if (Length(Sel.Points) = 0) and (Length(Sel.Entities) = 1) and
+       (FSketch.Entities[Sel.Entities[0]].Kind = sekLine) and
+       Assigned(FOnSmartDimension) then
       FOnSmartDimension(Self);
     Exit;
   end;
-  if not FEditor.IsSelected(K, Index) then
-    FEditor.SelectItem(K, Index);
+  { Toggling a picked item allows correcting an unsupported selection. }
+  FEditor.SelectItem(K, Index);
   if SmartReady and Assigned(FOnSmartDimension) then
     FOnSmartDimension(Self);
 end;

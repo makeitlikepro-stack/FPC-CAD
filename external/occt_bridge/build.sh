@@ -4,7 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="$SCRIPT_DIR/occt_bridge.cpp"
 OUT="$SCRIPT_DIR/libocct_bridge.so"
-INCLUDE_DIR="/usr/include/opencascade"
+# Override for a non-standard OCCT install (e.g. a FreeCAD bundle):
+#   OCCT_INCLUDE=/path/to/include/opencascade OCCT_LIB=/path/to/lib ./build.sh
+INCLUDE_DIR="${OCCT_INCLUDE:-/usr/include/opencascade}"
+LIB_DIR="${OCCT_LIB:-}"
 FORCE_BUILD=0
 
 if [[ "${1:-}" == "--force" ]]; then
@@ -24,6 +27,7 @@ needs_rebuild() {
   [[ $FORCE_BUILD -eq 1 ]] && return 0
   [[ ! -f "$OUT" ]] && return 0
   [[ "$SOURCE" -nt "$OUT" ]] && return 0
+  [[ "$SCRIPT_DIR/occt_bridge_options.h" -nt "$OUT" ]] && return 0
   [[ "${BASH_SOURCE[0]}" -nt "$OUT" ]] && return 0
   return 1
 }
@@ -39,7 +43,7 @@ trap 'rm -f "$TMP_OUT"' EXIT
 echo "Building OCCT bridge..."
 g++ -std=c++17 -O2 -fPIC -shared \
   "$SOURCE" \
-  -I"$INCLUDE_DIR" \
+  -I"$INCLUDE_DIR" -I"$SCRIPT_DIR" ${LIB_DIR:+-L"$LIB_DIR" -Wl,-rpath,"$LIB_DIR"} \
   -o "$TMP_OUT" \
   -lTKFillet -lTKBO -lTKMesh -lTKPrim -lTKTopAlgo -lTKBRep -lTKGeomAlgo \
   -lTKG3d -lTKG2d -lTKGeomBase -lTKMath -lTKernel

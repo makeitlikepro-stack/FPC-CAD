@@ -7,3 +7,10 @@
 - Docs: PERFORMANCE.md (where speed comes from, OCCT API per knob, honest GPU scope: OCCT modelling stays on the CPU), CODE_FLOW.md (folders, unit header, traces), CODE_MAP.md.
 - Tests: `tests/core/cad_core_tests.lpr` (ids/hash, registry, graph/plan, recompute + cache, cache limit, undo/redo incl. merged drag and stable ids, failures and blocking, parallel speed 8 x 40 ms, 50 x 200 thread stress, options). NOT RUN here (no FPC in the authoring environment); user runs `bash scripts/test_core.sh`.
 - 2026-10-31 user native run: `bash scripts/test_core.sh` 69/69 PASS, first compile. Parallel level: serial 321 ms, 4 threads 81 ms (8 x 40 ms features, ~4x). Merged to dev.
+
+## 2026-10-31 — Stage 3 step 1: OCCT bridge moved here + speed options (Candidate)
+- User decision: the OCCT bridge belongs to FPC-CAD. Copied unchanged from engine main 5982eef (first commit), then changed. Removing it from the engine is a separate engine step (engine src/cad OCCT units and tools depend on it).
+- `occt_bridge_options.h` (88-byte C struct, doubles then int32, size + version check) + set/get/size functions; options applied to BRepMesh (IMeshTools_Parameters) and to the parametric cut (BRepAlgoAPI options); OCCT thread pool size. The old per-call deflection argument still wins when > 0.
+- Pascal: `src/occt/cad.occt.options.pas`, `cad.occt.library.pas` (dynlibs; option records passed by pointer, not const record, because cdecl may pass const records by value).
+- Checks here: `g++ -fsyntax-only -Wall` of occt_bridge.cpp against OCCT 7.8.1 headers (from the OCCT GitHub tag; headers only, nothing built): 0 errors, 0 warnings, after fixing one real error (`deflection` still used in TessellateShape). C struct measured with gcc: 88 bytes, doubles at 8..32, ints at 40..84.
+- Native test `tests/occt/occt_bridge_tests.lpr` + `scripts/test_occt.sh`: ABI offsets, mapping, round trip, mismatch rejected, prism volume 6000, cut volume 6000 - pi*4*30, non-destructive cut, INFO meshing time InParallel off/on. NOT RUN here (no FPC, no OCCT libraries).

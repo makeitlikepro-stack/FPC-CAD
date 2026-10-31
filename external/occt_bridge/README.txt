@@ -1,3 +1,30 @@
+OCCT C ABI bridge (FPC-CAD)
+===========================
+
+Moved from the UI engine (engine main 5982eef, external/occt_bridge) on
+2026-10-31: OCCT belongs to the CAD project. Pascal side: src/occt
+(CAD.OCCT.Library = the only unit with the C names, CAD.OCCT.Options).
+
+Speed options (since FPC-CAD stage 3)
+-------------------------------------
+occt_bridge_options.h is the C mirror of the OCCT part of
+TCADPerformanceOptions (src/config/cad.config.performance.pas):
+  occt_bridge_set_options(const occt_bridge_options*)  1 = ok, 0 = size/version mismatch
+  occt_bridge_get_options(occt_bridge_options*)
+  occt_bridge_options_size()                           ABI check from Pascal
+Applied in MeshParameters (IMeshTools_Parameters: InParallel, Relative,
+Deflection, Angle, MinSize, ControlSurfaceDeflection, AllowQualityDecrease,
+CleanModel) and ApplyBooleanOptions (SetRunParallel, SetUseOBB,
+SetFuzzyValue, SetGlue, SetNonDestructive, SetCheckInverted). The thread
+pool size goes to OSD_ThreadPool::DefaultPool()->Init.
+A positive linearDeflection argument of occt_bridge_mesh_shape still wins over
+the option (old callers keep working); pass 0 to use the option.
+
+Build: bash external/occt_bridge/build.sh   (incremental; --force to rebuild)
+Other OCCT location: OCCT_INCLUDE=... OCCT_LIB=... bash external/occt_bridge/build.sh
+Test:  bash scripts/test_occt.sh
+
+----- history from the engine -----
 OCCT C ABI bridge
 =================
 

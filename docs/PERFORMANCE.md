@@ -36,7 +36,7 @@ Rules that keep this safe:
 - Exceptions inside `Compute` are caught per feature; a failed feature blocks its
   users, other branches continue.
 
-## 3. OCCT speed knobs (used by the OCCT adapter, stage 3)
+## 3. OCCT speed knobs (wired in the bridge since stage 3)
 
 | Option field | OCCT API | Effect |
 | --- | --- | --- |
@@ -55,7 +55,9 @@ Rules that keep this safe:
 | `Booleans.CheckInverted` | `SetCheckInverted` | off saves a check when solids are known valid |
 | `Threads.OcctThreads` | `OSD_ThreadPool::DefaultPool(n)` | cores given to OCCT (0 = all) |
 
-The C bridge passes these as one plain record, so the app can change them at runtime.
+The C bridge receives these as one plain record (`external/occt_bridge/occt_bridge_options.h`,
+Pascal `CAD.OCCT.Options`), so the app can change them at runtime:
+`TOCCTLibrary.ApplyOptions(Doc.Options)`. A size/version check rejects a Pascal/C mismatch.
 
 ## 4. GPU compute (engine `OpenGL.Compute.*`, OpenGL 4.3, optional)
 

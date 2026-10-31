@@ -1,4 +1,15 @@
+// FPC-CAD OCCT bridge. Moved from the UI engine (engine main 5982eef).
+// Speed options: occt_bridge_options.h, applied in ApplyMeshOptions and
+// ApplyBooleanOptions below (docs/PERFORMANCE.md section 3).
+#include "occt_bridge_options.h"
+
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepTools.hxx>
+#include <IMeshTools_Parameters.hxx>
+#include <OSD_Parallel.hxx>
+#include <OSD_ThreadPool.hxx>
+#include <TopTools_ListOfShape.hxx>
+#include <mutex>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
@@ -61,6 +72,95 @@ thread_local std::string gLastError;
 
 void SetError(const char* msg) {
   gLastError = msg ? msg : "Unknown OCCT error";
+}
+
+// ---------------------------------------------------------------- speed options
+// One global copy, changed only through occt_bridge_set_options. Operations
+// take a snapshot at their start (CurrentOptions), so a change during a
+// parallel recompute never mixes old and new values inside one operation.
+std::mutex gOptionsLock;
+occt_bridge_options gOptions = [] {
+  occt_bridge_options o{};
+  o.struct_size = sizeof(occt_bridge_options);
+  o.version = OCCT_BRIDGE_OPTIONS_VERSION;
+  o.mesh_linear_deflection = 0.001;
+  o.mesh_angular_deflection_deg = 20.0;
+  o.mesh_min_size = 0.0;
+  o.bool_fuzzy_value = 0.0;
+  o.mesh_in_parallel = 1;
+  o.mesh_relative = 1;
+  o.mesh_control_surface_deflection = 1;
+  o.mesh_allow_quality_decrease = 1;
+  o.mesh_keep_existing = 1;
+  o.bool_run_parallel = 1;
+  o.bool_use_obb = 1;
+  o.bool_glue = 0;
+  o.bool_non_destructive = 1;
+  o.bool_check_inverted = 1;
+  o.occt_threads = 0;
+  return o;
+}();
+
+occt_bridge_options CurrentOptions() {
+  std::lock_guard<std::mutex> lock(gOptionsLock);
+  return gOptions;
+}
+
+// BRepMesh parameters from the options. A positive per-call deflection
+// (old ABI argument) wins over the option, so existing callers keep working.
+IMeshTools_Parameters MeshParameters(const occt_bridge_options& o,
+                                     const double callDeflection) {
+  IMeshTools_Parameters p;
+  p.Deflection = callDeflection > 0.0 ? callDeflection
+                                      : std::max(1.0e-7, o.mesh_linear_deflection);
+  p.Angle = o.mesh_angular_deflection_deg * M_PI / 180.0;
+  p.Relative = o.mesh_relative != 0;
+  p.InParallel = o.mesh_in_parallel != 0;
+  if (o.mesh_min_size > 0.0) {
+    p.MinSize = o.mesh_min_size;
+  }
+  p.ControlSurfaceDeflection = o.mesh_control_surface_deflection != 0;
+  p.AllowQualityDecrease = o.mesh_allow_quality_decrease != 0;
+  // CleanModel = false keeps triangulations that still satisfy the
+  // deflection: unchanged faces of a recomputed solid are not remeshed.
+  p.CleanModel = o.mesh_keep_existing == 0;
+  return p;
+}
+
+// Applied to every boolean before Build().
+void ApplyBooleanOptions(BRepAlgoAPI_BooleanOperation& op,
+                         const occt_bridge_options& o) {
+  op.SetRunParallel(o.bool_run_parallel != 0);
+  op.SetUseOBB(o.bool_use_obb != 0);
+  if (o.bool_fuzzy_value > 0.0) {
+    op.SetFuzzyValue(o.bool_fuzzy_value);
+  }
+  switch (o.bool_glue) {
+    case 1: op.SetGlue(BOPAlgo_GlueShift); break;
+    case 2: op.SetGlue(BOPAlgo_GlueFull); break;
+    default: op.SetGlue(BOPAlgo_GlueOff); break;
+  }
+  op.SetNonDestructive(o.bool_non_destructive != 0);
+  op.SetCheckInverted(o.bool_check_inverted != 0);
+}
+
+// Cut with options (the 2-argument BRepAlgoAPI_Cut constructor builds at
+// once and cannot take options).
+TopoDS_Shape OptionedCut(const TopoDS_Shape& object, const TopoDS_Shape& tool) {
+  const occt_bridge_options o = CurrentOptions();
+  BRepAlgoAPI_Cut op;
+  TopTools_ListOfShape args;
+  TopTools_ListOfShape tools;
+  args.Append(object);
+  tools.Append(tool);
+  op.SetArguments(args);
+  op.SetTools(tools);
+  ApplyBooleanOptions(op, o);
+  op.Build();
+  if (!op.IsDone() || op.Shape().IsNull()) {
+    throw Standard_Failure("BRepAlgoAPI_Cut failed");
+  }
+  return op.Shape();
 }
 
 struct MeshHandle {
@@ -613,8 +713,11 @@ void AppendTriangle(MeshHandle& mesh, gp_Pnt p1, gp_Pnt p2, gp_Pnt p3,
 
 std::unique_ptr<MeshHandle> TessellateShape(const TopoDS_Shape& shape,
                                             const double linearDeflection) {
-  const double deflection = std::max(1.0e-5, linearDeflection);
-  BRepMesh_IncrementalMesh mesher(shape, deflection, false, 0.15, false);
+  const occt_bridge_options options = CurrentOptions();
+  if (options.mesh_keep_existing == 0) {
+    BRepTools::Clean(shape);             // force a full remesh
+  }
+  BRepMesh_IncrementalMesh mesher(shape, MeshParameters(options, linearDeflection));
 
   auto mesh = std::make_unique<MeshHandle>();
 
@@ -692,7 +795,7 @@ std::unique_ptr<MeshHandle> TessellateShape(const TopoDS_Shape& shape,
 
   // Build display edges from the same triangulation boundary nodes used
   // above for shaded faces. This keeps shaded and edge representations aligned.
-  AppendShapeEdges(*mesh, shape, edgeMap, deflection);
+  AppendShapeEdges(*mesh, shape, edgeMap, linearDeflection);   // unused by edges
   if (mesh->edgePositions.empty()) {
     throw Standard_Failure("OCCT edge discretization produced no line segments");
   }
@@ -757,19 +860,51 @@ std::unique_ptr<ShapeHandle> CutCylinderFromShape(
   const TopoDS_Shape cutter = BRepPrimAPI_MakeCylinder(
       axis, radius, (zmax - zmin) + 2.0 * margin).Shape();
 
-  BRepAlgoAPI_Cut cut(base->shape, cutter);
-  cut.Build();
-  if (!cut.IsDone() || cut.Shape().IsNull()) {
-    throw Standard_Failure("BRepAlgoAPI_Cut failed for parametric feature");
-  }
-
   auto result = std::make_unique<ShapeHandle>();
-  result->shape = cut.Shape();
+  result->shape = OptionedCut(base->shape, cutter);   // speed options applied
   return result;
 }
 }  // namespace
 
 extern "C" {
+
+// Returns 1 on success, 0 when the struct size or version does not match
+// (Pascal and C disagree on the layout: rebuild both from the same header).
+int occt_bridge_set_options(const occt_bridge_options* options) {
+  gLastError.clear();
+  if (options == nullptr || options->struct_size != static_cast<int32_t>(sizeof(occt_bridge_options)) ||
+      options->version != OCCT_BRIDGE_OPTIONS_VERSION) {
+    SetError("occt_bridge_set_options: struct size or version mismatch");
+    return 0;
+  }
+  {
+    std::lock_guard<std::mutex> lock(gOptionsLock);
+    gOptions = *options;
+  }
+  try {
+    // Threads OCCT uses inside one operation (meshing, booleans).
+    OSD_Parallel::SetUseOcctThreads(true);
+    const int threads = options->occt_threads > 0 ? options->occt_threads
+                                                  : OSD_Parallel::NbLogicalProcessors();
+    OSD_ThreadPool::DefaultPool()->Init(threads);
+  } catch (const Standard_Failure& failure) {
+    SetError(failure.GetMessageString());
+    return 0;
+  }
+  return 1;
+}
+
+int occt_bridge_get_options(occt_bridge_options* options) {
+  if (options == nullptr) {
+    return 0;
+  }
+  *options = CurrentOptions();
+  return 1;
+}
+
+int occt_bridge_options_size() {
+  return static_cast<int>(sizeof(occt_bridge_options));
+}
 
 const char* occt_bridge_occt_version() {
   return OCC_VERSION_COMPLETE;

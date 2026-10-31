@@ -6,7 +6,8 @@
 | --- | --- | --- |
 | `src/config/` | settings records only (performance knobs) | RTL |
 | `src/core/` | the model and the recompute machinery | RTL, `src/config` |
-| `src/occt/` | (stage 3) OCCT adapter through the C bridge | core, config |
+| `src/occt/` | OCCT adapter: `CAD.OCCT.Library` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
+| `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
 | `src/app/` | (stage 4) UI on the engine, viewport, GPU compute jobs | everything |
 
 No unit in `src/core` uses LCL, OpenGL or OCCT.
@@ -66,3 +67,16 @@ TCADHistory.Execute(TCADAddFeatureCommand)
 - Types start with `TCAD`, units with `CAD.<Folder>.`, files are lower case.
 - A feature type is one unit `cad.features.<name>.pas` (stage 3) registered in
   `TCADFeatureRegistry` by its type name.
+
+## Trace 4: speed options reach OCCT
+
+```
+TCADPerformanceOptions (src/config)
+  -> TOCCTLibrary.ApplyOptions                    cad.occt.library
+       -> OCCTOptionsFromPerformance              cad.occt.options (88-byte C record)
+       -> occt_bridge_set_options                 occt_bridge.cpp (size/version check, mutex copy,
+                                                  OSD_ThreadPool size)
+  later, per operation:
+       occt_bridge_mesh_shape -> MeshParameters   (IMeshTools_Parameters)
+       occt_bridge_cut_cylinder_shape -> OptionedCut -> ApplyBooleanOptions
+```

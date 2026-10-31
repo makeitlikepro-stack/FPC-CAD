@@ -17,12 +17,14 @@ interface
 uses
   Classes, SysUtils,
   OpenGL.ECS.Widgets,
-  CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.App.SketchMode, CAD.App.SketchPanel,
+  CAD.Sketch.Editor, CAD.Sketch.Commands, CAD.Sketch.TrimExtend,
+  CAD.App.SketchMode, CAD.App.SketchPanel,
   CAD.App.DesignLookup;
 
 type
   TCADToolbarAction = (ctaFinish, ctaSelect, ctaLine, ctaRect, ctaCircle, ctaArc, ctaArc3,
-    ctaPoint, ctaDimension, ctaDistX, ctaDistY, ctaUndo, ctaRedo, ctaNormalView, ctaCancel);
+    ctaPoint, ctaDimension, ctaDistX, ctaDistY, ctaUndo, ctaRedo, ctaNormalView, ctaCancel,
+    ctaTrim, ctaExtend);
 
   TCADSketchToolbar = class
   private
@@ -55,7 +57,7 @@ const
   ActionId: array[TCADToolbarAction] of string = ('FinishButton', 'SelectButton',
     'LineButton', 'RectButton', 'CircleButton', 'ArcButton', 'Arc3Button', 'PointButton',
     'DimensionButton', 'DistXButton', 'DistYButton', 'UndoButton', 'RedoButton',
-    'NormalViewButton', 'CancelButton');
+    'NormalViewButton', 'CancelButton', 'TrimButton', 'ExtendButton');
   RelationId: array[TCADSketchCommand] of string = ('HorizontalButton', 'VerticalButton',
     'CoincidentButton', 'ParallelButton', 'PerpendicularButton', 'EqualButton',
     'TangentButton', 'ConcentricButton', 'MidpointButton', 'OnObjectButton',
@@ -112,6 +114,11 @@ var
 begin
   if not FMode.Active or (FMode.Editor = nil) then
     Exit;
+  if FMode.LineEditActive then
+  begin
+    if FMode.LineEditMode = lemTrim then A := ctaTrim else A := ctaExtend;
+  end
+  else
   case FMode.Editor.Tool of
     sktSelect: if FMode.SmartDimension then A := ctaDimension else A := ctaSelect;
     sktLine: A := ctaLine;
@@ -158,6 +165,8 @@ begin
     ctaRedo: FMode.Redo;
     ctaNormalView: FMode.NormalView;
     ctaCancel: FMode.Cancel;
+    ctaTrim: FMode.SetLineEdit(lemTrim);
+    ctaExtend: FMode.SetLineEdit(lemExtend);
   end;
   Refresh;
 end;

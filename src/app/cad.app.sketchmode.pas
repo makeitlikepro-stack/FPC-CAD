@@ -59,7 +59,7 @@ type
     function StatusText: string;
     { Constraint buttons, dimension edit and delete; '' = done, else the
       message for the status line. }
-    function ApplyCommand(ACommand: TCADSketchCommand): string;
+    function ApplyCommand(ACommand: TCADSketchCommand; out AConstraint: Integer): string;
     function SetDimension(AConstraint: Integer; AValue: Double): string;
     function RemoveConstraint(AConstraint: Integer): string;
     property Active: Boolean read FActive;
@@ -286,14 +286,13 @@ begin
   Changed;
 end;
 
-function TCADSketchMode.ApplyCommand(ACommand: TCADSketchCommand): string;
-var
-  C: Integer;
+function TCADSketchMode.ApplyCommand(ACommand: TCADSketchCommand; out AConstraint: Integer): string;
 begin
   Result := '';
+  AConstraint := -1;
   if not FActive then
     Exit('no sketch');
-  if not FEditor.Apply(ACommand, C, Result) then
+  if not FEditor.Apply(ACommand, AConstraint, Result) then
   begin
     if Result = '' then
       Result := 'not applied';

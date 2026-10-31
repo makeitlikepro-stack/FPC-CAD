@@ -13,7 +13,7 @@ unit CAD.App.SketchPanel;
 interface
 
 uses
-  Classes, SysUtils, Math,
+  Classes, SysUtils, Math, LCLType,
   OpenGL.ECS.Widgets,
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
   CAD.App.SketchMode;
@@ -23,7 +23,9 @@ type
 
   TCADSketchPanel = class
   private
+    FUI: TUIWidgetFactory;
     FMode: TCADSketchMode;
+    FSelRevision: string;               { selection text last loaded into the edit }
     FToolLabel, FConsLabel, FInfo: TUILabel;
     FTools: array[0..10] of TUIButton;
     FCommands: array[TCADSketchCommand] of TUIButton;
@@ -39,6 +41,10 @@ type
     procedure ListChange(Sender: TObject);
     procedure SetClick(Sender: TObject);
     procedure DeleteClick(Sender: TObject);
+    procedure ValueKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    { Selects list row of AConstraint, loads its value, focuses the edit. }
+    procedure EditConstraint(AConstraint: Integer);
+    procedure LoadDimensionOfSelection;
     procedure Status(const AText: string);
     function SelectedConstraint: Integer;
     procedure RebuildList;
@@ -63,6 +69,8 @@ const
     'Perp', 'Equal', 'Tangent', 'Concentric', 'Midpoint', 'On obj', 'Symm', 'Fix', 'Dimension');
   RowH = 30;
   Gap = 6;
+  ListRows = 5;
+  ListItemH = 24;
 
 var
   FS: TFormatSettings;
@@ -73,6 +81,7 @@ var
   C: TCADSketchCommand;
 begin
   inherited Create;
+  FUI := UI;
   FMode := AMode;
   FToolLabel := UI.CreateLabel(AParent, 100, 24);
   FToolLabel.Text := 'Sketch';
@@ -92,9 +101,13 @@ begin
     FCommands[C].Tag := Ord(C);
     FCommands[C].OnClick := @CommandClick;
   end;
-  FList := UI.CreateListBox(AParent, 100, 120);
+  FList := UI.CreateListBox(AParent, 100, ListRows * ListItemH);
+  FList.ItemHeight := ListItemH;
+  FList.MaxVisibleItems := ListRows;        { fixed height, wheel scrolls }
   FList.OnChange := @ListChange;
   FValue := UI.CreateEdit(AParent, 100, RowH);
+  FValue.Placeholder := 'value, Enter = set';
+  FValue.OnKeyDown := @ValueKeyDown;
   FSet := UI.CreateButton(AParent, 60, RowH);
   FSet.Text := 'Set';
   FSet.OnClick := @SetClick;
@@ -153,8 +166,10 @@ begin
     Inc(K);
   end;
   Y := Y + ((K + 2) div 3) * (RowH + Gap);
-  Place(FList, ALeft, Y, AWidth, 120);
-  Y := Y + 120 + Gap;
+  FList.Width := AWidth;                    { height: rows x item height (list) }
+  FList.Left := ALeft;
+  FList.Top := Y;
+  Y := Y + ListRows * ListItemH + Gap;
   Place(FValue, ALeft, Y, AWidth - 2 * (60 + Gap), RowH);
   Place(FSet, ALeft + AWidth - 2 * 60 - Gap, Y, 60, RowH);
   Place(FDelete, ALeft + AWidth - 60, Y, 60, RowH);
@@ -189,10 +204,78 @@ end;
 procedure TCADSketchPanel.CommandClick(Sender: TObject);
 var
   Err: string;
+  C: Integer;
 begin
-  Err := FMode.ApplyCommand(TCADSketchCommand(TUIWidget(Sender).Tag));
+  Err := FMode.ApplyCommand(TCADSketchCommand(TUIWidget(Sender).Tag), C);
   if Err <> '' then
-    Status(Err);
+    Status(Err)
+  else if (C >= 0) and CADIsDimension(FMode.Sketch.Constraints[C].Kind) then
+  begin
+    EditConstraint(C);
+    Status('Dimension added: type the new value and press Enter');
+  end;
+end;
+
+procedure TCADSketchPanel.EditConstraint(AConstraint: Integer);
+var
+  I: Integer;
+begin
+  if FMode.Sketch.Revision <> FListRevision then
+    RebuildList;
+  for I := 0 to High(FListMap) do
+    if FListMap[I] = AConstraint then
+    begin
+      FList.SelectedIndex := I;
+      FList.EnsureItemVisible(I);
+      Break;
+    end;
+  ListChange(nil);
+  FUI.FocusWidget(FValue);
+end;
+
+{ One entity (or two points) selected that carries a dimension: load it. }
+procedure TCADSketchPanel.LoadDimensionOfSelection;
+var
+  S: TCADSketch;
+  Sel: TCADSketchSelection;
+  I: Integer;
+  C: TCADSketchConstraint;
+  Key: string;
+begin
+  S := FMode.Sketch;
+  Sel := FMode.Editor.Selection;
+  Key := CADSelectionText(S, Sel);
+  if Key = FSelRevision then
+    Exit;
+  FSelRevision := Key;
+  for I := 0 to S.ConstraintCount - 1 do
+  begin
+    C := S.Constraints[I];
+    if not (C.Active and CADIsDimension(C.Kind)) then
+      Continue;
+    if (Length(Sel.Entities) = 1) and (Length(Sel.Points) = 0) and
+       (C.Kind in [sckLength, sckRadius, sckDiameter]) and (C.A = Sel.Entities[0]) then
+    begin
+      EditConstraint(I);
+      Exit;
+    end;
+    if (Length(Sel.Points) = 2) and (Length(Sel.Entities) = 0) and (C.Kind = sckDistance) and
+       (((C.A = Sel.Points[0]) and (C.B = Sel.Points[1])) or
+        ((C.A = Sel.Points[1]) and (C.B = Sel.Points[0]))) then
+    begin
+      EditConstraint(I);
+      Exit;
+    end;
+  end;
+end;
+
+procedure TCADSketchPanel.ValueKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Key = VK_RETURN then
+  begin
+    SetClick(Sender);
+    Key := 0;
+  end;
 end;
 
 function TCADSketchPanel.SelectedConstraint: Integer;
@@ -289,6 +372,7 @@ begin
     Exit;
   if FMode.Sketch.Revision <> FListRevision then
     RebuildList;
+  LoadDimensionOfSelection;
   R := FMode.Editor.LastSolve;
   if R.DOF < 0 then
     FInfo.Text := 'Selected: ' + CADSelectionText(FMode.Sketch, FMode.Editor.Selection)

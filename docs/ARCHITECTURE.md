@@ -2,6 +2,7 @@
 
 ## Layers (dependency flows downward only)
 
+0. `src/config/` settings records (all speed knobs). No dependencies.
 1. `src/core/` pure model: document, features, parameters, dependency graph,
    command stack (Undo/Redo). No LCL, no OpenGL, no OCCT. Headless testable.
 2. `src/occt/` adapter: wraps the OCCT C ABI bridge (`libocct_bridge`), converts
@@ -22,5 +23,7 @@
 
 ## Status
 
-Stage 1 is documentation and project pin only. No compiled code yet; FPC and
-OCCT builds have not been run (Candidate).
+- Stage 1: documentation and engine pin.
+- Stage 2 (Candidate): `src/core` + `src/config`, speed foundation
+  (docs/PERFORMANCE.md), call flow (docs/CODE_FLOW.md), headless tests
+  `bash scripts/test_core.sh`. Not compiled in the authoring environment.

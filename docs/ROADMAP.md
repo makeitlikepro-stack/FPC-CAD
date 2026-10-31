@@ -3,12 +3,14 @@
 Each stage ends with a headless test and an acceptance note. `main` is updated
 only after the user accepts a stage.
 
-- **Stage 1 (now):** architecture, engine pin, repository layout.
-- **Stage 2:** `src/core` document model, feature interface, command stack
-  (Undo/Redo), dependency graph. Headless unit tests.
+- **Stage 1 (done):** architecture, engine pin, repository layout.
+- **Stage 2 (Candidate):** `src/core` document model, feature interface, command
+  stack (Undo/Redo), dependency graph, parallel recompute levels, result cache,
+  performance options (OCCT, threads, GPU). Headless unit tests.
 - **Stage 3:** OCCT adapter: box, cylinder, extrude of a rectangle profile,
   boolean cut. Mesh export to the engine's vertex format.
-- **Stage 4:** viewport in the engine: shaded view, pick faces and edges.
+- **Stage 4:** viewport on the engine `TUIViewport3D`: shaded view, pick faces and
+  edges; GPU compute jobs (bounds, culling, box select) with CPU fallback.
 - **Stage 5:** sketch with constraints (2D solver), Revolve, Fillet, Chamfer.
 - **Stage 6:** STEP import and export, feature tree editing with rebuild.
 

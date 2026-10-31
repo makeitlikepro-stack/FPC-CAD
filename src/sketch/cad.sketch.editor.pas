@@ -13,7 +13,9 @@ unit CAD.Sketch.Editor;
 
   Tools: Point, Line (chain: each click starts the next line at the last
   end; clicking the first point closes the chain), Rectangle (2 corners),
-  Circle (centre, radius point), Arc (centre, start, end; counter-clockwise).
+  Circle (centre, radius point), Arc (centre, start, end; counter-clockwise),
+  Arc3 (start, end, then a point the arc passes through: it sets the radius
+  and the side).
   Snaps, in priority order: existing point, line midpoint, sketch origin; a
   line end close to the start's X or Y snaps horizontal / vertical.
   Automatic constraints: a snapped point is reused (shared), the origin is a
@@ -27,7 +29,7 @@ uses
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Solver;
 
 type
-  TCADSketchTool = (sktSelect, sktPoint, sktLine, sktRectangle, sktCircle, sktArc);
+  TCADSketchTool = (sktSelect, sktPoint, sktLine, sktRectangle, sktCircle, sktArc, sktArc3);
 
   TCADSnapKind = (snkNone, snkPoint, snkMidpoint, snkOrigin, snkHorizontal, snkVertical);
 
@@ -71,6 +73,7 @@ type
     function CommitRectangle: Boolean;
     function CommitCircle: Boolean;
     function CommitArc: Boolean;
+    function CommitArc3: Boolean;
     procedure Solve;
     function GetPreview(AIndex: Integer): TCADSketchPreview;
   public
@@ -99,7 +102,7 @@ implementation
 
 const
   ToolNames: array[TCADSketchTool] of string = ('Select', 'Point', 'Line', 'Rectangle',
-    'Circle', 'Arc');
+    'Circle', 'Arc', 'Arc (3 points)');
 
 function NoSnap(X, Y: Double): TCADSnap;
 begin
@@ -174,7 +177,57 @@ begin
       else
         Result := Result + 'click the end point (counter-clockwise)';
       end;
+    sktArc3:
+      case FClickCount of
+        0: Result := Result + 'click the start point';
+        1: Result := Result + 'click the end point';
+      else
+        Result := Result + 'click a point on the arc (sets the radius)';
+      end;
   end;
+end;
+
+{ Circle through three points. False when they are (nearly) on one line. }
+function Circumcircle(X1, Y1, X2, Y2, X3, Y3: Double; out CX, CY, R: Double): Boolean;
+var
+  D, A, B: Double;
+begin
+  D := 2 * (X1 * (Y2 - Y3) + X2 * (Y3 - Y1) + X3 * (Y1 - Y2));
+  Result := Abs(D) > 1e-12 * Max(1.0, Sqr(Hypot(X2 - X1, Y2 - Y1)));
+  if not Result then
+  begin
+    CX := 0;
+    CY := 0;
+    R := 0;
+    Exit;
+  end;
+  A := Sqr(X1) + Sqr(Y1);
+  B := Sqr(X2) + Sqr(Y2);
+  R := Sqr(X3) + Sqr(Y3);
+  CX := (A * (Y2 - Y3) + B * (Y3 - Y1) + R * (Y1 - Y2)) / D;
+  CY := (A * (X3 - X2) + B * (X1 - X3) + R * (X2 - X1)) / D;
+  R := Hypot(X1 - CX, Y1 - CY);
+end;
+
+function CCWSweepOf(A1, A2: Double): Double;
+begin
+  Result := A2 - A1;
+  while Result <= 0 do
+    Result := Result + 2 * Pi;
+  while Result > 2 * Pi do
+    Result := Result - 2 * Pi;
+end;
+
+{ Arc through S (start click), E (end click) and M: True when it runs
+  counter-clockwise from S to E (else from E to S). }
+function ArcRunsSToE(CX, CY, SX, SY, EX, EY, MX, MY: Double): Boolean;
+var
+  AS_, AE, AM: Double;
+begin
+  AS_ := ArcTan2(SY - CY, SX - CX);
+  AE := ArcTan2(EY - CY, EX - CX);
+  AM := ArcTan2(MY - CY, MX - CX);
+  Result := CCWSweepOf(AS_, AM) < CCWSweepOf(AS_, AE);
 end;
 
 { ---------------------------------------------------------- snapping }
@@ -324,6 +377,19 @@ begin
       end;
     sktCircle:
       AddPreview(cpkCircle, 0, 0, 0, 0, SX, SY, Hypot(FSnap.X - SX, FSnap.Y - SY));
+    sktArc3:
+      if FClickCount = 1 then
+        AddPreview(cpkLine, SX, SY, FSnap.X, FSnap.Y, 0, 0, 0)
+      else if Circumcircle(FClicks[0].X, FClicks[0].Y, FClicks[1].X, FClicks[1].Y,
+        FSnap.X, FSnap.Y, CX, CY, R) then
+      begin
+        if ArcRunsSToE(CX, CY, FClicks[0].X, FClicks[0].Y, FClicks[1].X, FClicks[1].Y, FSnap.X, FSnap.Y) then
+          AddPreview(cpkArc, FClicks[0].X, FClicks[0].Y, FClicks[1].X, FClicks[1].Y, CX, CY, R)
+        else
+          AddPreview(cpkArc, FClicks[1].X, FClicks[1].Y, FClicks[0].X, FClicks[0].Y, CX, CY, R);
+      end
+      else
+        AddPreview(cpkLine, FClicks[0].X, FClicks[0].Y, FClicks[1].X, FClicks[1].Y, 0, 0, 0);
     sktArc:
       begin
         CX := FClicks[0].X;
@@ -450,6 +516,28 @@ begin
   FSketch.AddArc(C, S, E);
 end;
 
+function TCADSketchEditor.CommitArc3: Boolean;
+var
+  CX, CY, R: Double;
+  C, S, E: Integer;
+begin
+  Result := Circumcircle(FClicks[0].X, FClicks[0].Y, FClicks[1].X, FClicks[1].Y,
+    FClicks[2].X, FClicks[2].Y, CX, CY, R) and
+    (Hypot(FClicks[1].X - FClicks[0].X, FClicks[1].Y - FClicks[0].Y) > 1e-9);
+  if not Result then
+    Exit;
+  S := ResolvePoint(FClicks[0]);
+  E := ResolvePoint(FClicks[1]);
+  if S = E then
+    Exit(False);
+  C := FSketch.AddPoint(CX, CY);
+  if ArcRunsSToE(CX, CY, FClicks[0].X, FClicks[0].Y, FClicks[1].X, FClicks[1].Y,
+    FClicks[2].X, FClicks[2].Y) then
+    FSketch.AddArc(C, S, E)
+  else
+    FSketch.AddArc(C, E, S);
+end;
+
 function TCADSketchEditor.Click(X, Y: Double): Boolean;
 var
   P: Integer;
@@ -475,16 +563,19 @@ begin
       end
       else
         Committed := CommitLine(FSnap);
-    sktRectangle, sktCircle, sktArc:
+    sktRectangle, sktCircle, sktArc, sktArc3:
       begin
         FClicks[FClickCount] := FSnap;
         Inc(FClickCount);
-        if (FTool = sktArc) and (FClickCount = 3) then
+        if (FTool in [sktArc, sktArc3]) and (FClickCount = 3) then
         begin
-          Committed := CommitArc;
+          if FTool = sktArc then
+            Committed := CommitArc
+          else
+            Committed := CommitArc3;
           FClickCount := 0;
         end
-        else if (FTool <> sktArc) and (FClickCount = 2) then
+        else if (FTool in [sktRectangle, sktCircle]) and (FClickCount = 2) then
         begin
           if FTool = sktRectangle then
             Committed := CommitRectangle

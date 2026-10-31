@@ -683,6 +683,31 @@ begin
     Check((S.Entities[I].Kind = sekArc) and Near(S.EntityRadius(I), 10) and
       Near(S.PointY(S.Entities[I].P2), 10), 'arc: radius 10, end at (100, 10)');
 
+    { 3-point arc: ends first, then a point on the arc }
+    Ed.SetTool(sktArc3);
+    Ed.Click(200, 0);
+    Ed.Click(220, 0);
+    Ed.Move(210, 10);
+    Check((Ed.PreviewCount = 1) and (Ed.Previews[0].Kind = cpkArc) and Near(Ed.Previews[0].R, 10) and
+      Near(Ed.Previews[0].X1, 220), 'arc3: preview radius 10, runs from (220, 0) over the top');
+    Check(Ed.Click(210, 10), 'arc3: made');
+    I := S.EntityCount - 1;
+    Check((S.Entities[I].Kind = sekArc) and Near(S.EntityRadius(I), 10) and
+      Near(S.PointX(S.Entities[I].Center), 210) and Near(S.PointY(S.Entities[I].Center), 0),
+      'arc3: centre (210, 0), radius 10');
+    Check(Near(S.PointX(S.Entities[I].P1), 220) and Near(S.PointX(S.Entities[I].P2), 200),
+      'arc3: through a point above -> counter-clockwise from the end click');
+    Ed.Click(300, 0);
+    Ed.Click(310, 0);
+    Check(Ed.Click(305, -1), 'arc3: shallow arc below');
+    I := S.EntityCount - 1;
+    Check(Near(S.PointX(S.Entities[I].P1), 300) and Near(S.EntityRadius(I), 13),
+      'arc3: through (305, -1): radius 13, counter-clockwise from the start click');
+    Ents := S.EntityCount;
+    Ed.Click(400, 0);
+    Ed.Click(410, 0);
+    Check(not Ed.Click(420, 0) and (S.EntityCount = Ents), 'arc3: three points on a line make no arc');
+
     { point tool }
     Ed.SetTool(sktPoint);
     Ents := S.PointCount;

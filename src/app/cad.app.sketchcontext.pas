@@ -116,7 +116,8 @@ procedure TCADSketchContextMenu.ShowAt(AX, AY, AWidth, AHeight: Integer);
 var
   C: TCADSketchCommand;
   Sel: TCADSketchSelection;
-  Picked: Boolean;
+  Picked, AllConstruction: Boolean;
+  I: Integer;
 begin
   if not FMode.Active then
     Exit;
@@ -132,7 +133,15 @@ begin
     if Fits(sccDimension) then
       Add('Smart Dimension', 'smart-dim', cmaDimension);
     if Length(Sel.Entities) > 0 then
-      Add('Construction geometry', 'line', cmaConstruction);
+    begin
+      AllConstruction := True;
+      for I := 0 to High(Sel.Entities) do
+        AllConstruction := AllConstruction and FMode.Sketch.Entities[Sel.Entities[I]].Construction;
+      if AllConstruction then
+        Add('Normal geometry', 'line', cmaConstruction)
+      else
+        Add('Construction geometry', 'line', cmaConstruction);
+    end;
   end
   else
     Add('Smart Dimension', 'smart-dim', cmaDimension);

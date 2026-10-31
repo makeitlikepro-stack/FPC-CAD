@@ -22,7 +22,8 @@ uses
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
   CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.Sketch.DimGraphic, CAD.View.SketchDraw,
   OpenGL.Render.Material, CAD.App.SketchFill, CAD.Sketch.TrimExtend,
-  CAD.Sketch.CurveTrim, CAD.Sketch.Regions, CAD.Sketch.ContourSelection;
+  CAD.Sketch.CurveTrim, CAD.Sketch.Profile, CAD.Sketch.Regions,
+  CAD.Sketch.ContourSelection;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
@@ -934,6 +935,9 @@ begin
     Result := FEditor.Prompt + ' | ' + CADSolveStatusText(R.Status)
   else
     Result := Format('%s | DOF %d', [FEditor.Prompt, R.DOF]);
+  if (FEditor.Tool = sktSelect) and (Length(FContourSeeds)=0) then
+    Result := Result + ' | Click inside a bounded region to select for Extrude; ' +
+      'Shift+click to select more';
 end;
 
 end.

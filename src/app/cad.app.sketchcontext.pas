@@ -145,7 +145,9 @@ procedure TCADSketchContextMenu.ItemClick(Sender: TObject);
 var
   I: Integer;
 begin
-  I := FMenu.SelectedIndex;
+  { Engine closes the menu before calling ItemCommand. Close resets
+    SelectedIndex to -1, but Sender is the activated row widget. }
+  I := FMenu.IndexOfItemButton(Sender);
   if (I < 0) or (I > High(FItems)) then
     Exit;
   case FItems[I].Action of

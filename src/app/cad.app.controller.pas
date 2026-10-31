@@ -544,7 +544,9 @@ begin
         begin
           { first Esc drops the shape being drawn (Smart Dimension: the
             picked items), the next one goes to Select }
-          if FSketchMode.Editor.Busy then
+          if FSketchMode.LineEditActive then
+            FSketchToolbar.Run(ctaSelect)
+          else if FSketchMode.Editor.Busy then
             FSketchToolbar.Run(ctaCancel)
           else if FSketchMode.SmartDimension and
             (Length(FSketchMode.Editor.Selection.Points) + Length(FSketchMode.Editor.Selection.Entities) > 0) then

@@ -50,6 +50,14 @@ function CADApplyLineEdit(ASketch: TCADSketch; const APlan: TCADLineEditPlan;
 function CADAddTrimIntersectionPoint(S: TCADSketch; ABoundary: Integer;
   X, Y: Double): Integer;
 
+{ Transfer dependent PointOnLine / PointOnCircle constraints from a trimmed
+  entity to one of its actual surviving pieces. Constraints on removed
+  intervals are retired with the original entity. At survivor endpoints,
+  use Coincident to keep a true vertex connection. Call this BEFORE
+  removing the original entity. }
+procedure CADRelinkTrimDependencies(S: TCADSketch; ARemovedEntity: Integer;
+  const ASurvivors: array of Integer);
+
 { Find the bounded span containing the click, including the middle. }
 function CADPlanLineTrim(ASketch: TCADSketch; ALine: Integer;
   AClickX, AClickY: Double; out APlan: TCADTrimPlan; out AError: string): Boolean;
@@ -397,6 +405,106 @@ begin
   end;
 end;
 
+{ Parameter of P on a surviving straight segment or CCW circular arc.
+  Only physically present segments count. A reference to the deleted middle
+  span must not be transferred onto an unrelated survivor extension. }
+function CADTrimSurvivorContainsPoint(S: TCADSketch; AEntity, APoint: Integer): Boolean;
+const
+  JoinTol = 1e-6;
+var
+  E: TCADSketchEntity;
+  X, Y, AX, AY, BX, BY, DX, DY, Q, D2: Double;
+  CX, CY, R, A0, A1, AP, Sweep, PosOnArc: Double;
+begin
+  Result := False;
+  E := S.Entities[AEntity];
+  if (not E.Active) or (not S.Points[APoint].Active) then Exit;
+  X := S.PointX(APoint);
+  Y := S.PointY(APoint);
+  if E.Kind = sekLine then
+  begin
+    AX := S.PointX(E.P1);
+    AY := S.PointY(E.P1);
+    BX := S.PointX(E.P2);
+    BY := S.PointY(E.P2);
+    DX := BX - AX;
+    DY := BY - AY;
+    D2 := DX * DX + DY * DY;
+    if D2 <= 1e-20 then Exit;
+    Q := ((X - AX) * DX + (Y - AY) * DY) / D2;
+    Result := (Q >= -JoinTol / Sqrt(D2)) and
+              (Q <= 1 + JoinTol / Sqrt(D2)) and
+              (Hypot(X - (AX + Q * DX), Y - (AY + Q * DY)) <= JoinTol);
+    Exit;
+  end;
+  CX := S.PointX(E.Center);
+  CY := S.PointY(E.Center);
+  R := S.EntityRadius(AEntity);
+  if (R <= JoinTol) or (Abs(Hypot(X-CX, Y-CY) - R) > JoinTol) then Exit;
+  if E.Kind = sekCircle then Exit(True);
+  A0 := ArcTan2(S.PointY(E.P1)-CY, S.PointX(E.P1)-CX);
+  A1 := ArcTan2(S.PointY(E.P2)-CY, S.PointX(E.P2)-CX);
+  AP := ArcTan2(Y-CY, X-CX);
+  Sweep := A1-A0;
+  while Sweep <= 0 do Sweep := Sweep + 2*Pi;
+  PosOnArc := AP-A0;
+  while PosOnArc < 0 do PosOnArc := PosOnArc + 2*Pi;
+  Result := (PosOnArc <= Sweep + JoinTol / R) or
+    (Hypot(X - S.PointX(E.P1), Y - S.PointY(E.P1)) <= JoinTol) or
+    (Hypot(X - S.PointX(E.P2), Y - S.PointY(E.P2)) <= JoinTol);
+end;
+
+procedure CADRelinkTrimDependencies(S: TCADSketch; ARemovedEntity: Integer;
+  const ASurvivors: array of Integer);
+const
+  JoinTol = 1e-6;
+var
+  I, J, Chosen, P, Endpoint: Integer;
+  C: TCADSketchConstraint;
+  E: TCADSketchEntity;
+begin
+  { Scan only the ORIGINAL constraints, not the new ones added below. }
+  J := S.ConstraintCount;
+  for I := 0 to J - 1 do
+  begin
+    C := S.Constraints[I];
+    if (not C.Active) or (C.B <> ARemovedEntity) or
+       not (C.Kind in [sckPointOnLine, sckPointOnCircle]) then Continue;
+    P := C.A;
+    if (P < 0) or (P >= S.PointCount) or
+       (not S.Points[P].Active) then Continue;
+    Chosen := -1;
+    for Endpoint := Low(ASurvivors) to High(ASurvivors) do
+      if CADTrimSurvivorContainsPoint(S, ASurvivors[Endpoint], P) then
+      begin
+        Chosen := ASurvivors[Endpoint];
+        Break;
+      end;
+    if Chosen < 0 then Continue;  { attached to a removed span: retire it }
+    E := S.Entities[Chosen];
+    Endpoint := -1;
+    if E.Kind in [sekLine, sekArc] then
+    begin
+      if Hypot(S.PointX(P)-S.PointX(E.P1),
+               S.PointY(P)-S.PointY(E.P1)) <= JoinTol then
+        Endpoint := E.P1
+      else if Hypot(S.PointX(P)-S.PointX(E.P2),
+                    S.PointY(P)-S.PointY(E.P2)) <= JoinTol then
+        Endpoint := E.P2;
+    end;
+    if Endpoint >= 0 then
+    begin
+      { A Coincident relation is stronger than projecting onto an infinite
+        line/circle. If IDs already match the points are inherently joined. }
+      if Endpoint <> P then S.Coincident(P, Endpoint);
+    end
+    else if E.Kind = sekLine then
+      S.PointOnLine(P, Chosen)
+    else
+      S.PointOnCircle(P, Chosen);
+  end;
+end;
+
 { Return the interval between the nearest crossings around the click.
   The boundary lines are finite segments, but the target is treated as
   one segment of a larger infinite straight line. }
@@ -487,7 +595,8 @@ var
   Trial: TCADSketch;
   Target: TCADSketchEntity;
   C: TCADSketchConstraint;
-  I, L, P: Integer;
+  I, L, P, PieceCount: Integer;
+  Pieces: array[0..1] of Integer;
   AX, AY, DX, DY: Double;
   Horizontal, Vertical: Boolean;
   SolveResult: TCADSketchSolveResult;
@@ -495,6 +604,8 @@ var
   procedure AddPiece(P1, P2: Integer);
   begin
     L := Trial.AddLine(P1, P2);
+    Pieces[PieceCount] := L;
+    Inc(PieceCount);
     Trial.SetConstruction(L, Target.Construction);
     if Horizontal then Trial.Horizontal(L);
     if Vertical then Trial.Vertical(L);
@@ -534,6 +645,7 @@ begin
     case C.Kind of
       sckHorizontal: Horizontal := True;
       sckVertical: Vertical := True;
+      sckPointOnLine: Continue; { dependent point is migrated separately }
     else
       begin
         AError := 'cannot trim a line with dimensions or relations that require remapping';
@@ -551,6 +663,7 @@ begin
     AY := Trial.PointY(Target.P1);
     DX := Trial.PointX(Target.P2) - AX;
     DY := Trial.PointY(Target.P2) - AY;
+    PieceCount := 0;
     { Keep original end point indices on the survivors. If the click is
       between two crossings, two pieces are retained, with a real gap. }
     if APlan.FromT > ParamEpsilon then
@@ -565,6 +678,8 @@ begin
         AX + APlan.ToT * DX, AY + APlan.ToT * DY);
       AddPiece(P, Target.P2);
     end;
+    CADRelinkTrimDependencies(Trial, APlan.TargetEntity,
+      Copy(Pieces, 0, PieceCount));
     Trial.RemoveEntity(APlan.TargetEntity);
     SolveResult := CADSolveSketch(Trial);
     if SolveResult.Status <> cssSolved then

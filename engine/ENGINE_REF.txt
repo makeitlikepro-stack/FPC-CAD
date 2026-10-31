@@ -1,0 +1,5 @@
+repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
+branch=main
+commit=c43e75aea3a1d96daa3f60db4164a5312eadd6c8
+checkpoint=2026-10-30 Released Engine main: inactive-tab close-hover fix confirmed by user
+note=Engine source is not copied here. The build resolves this exact commit.

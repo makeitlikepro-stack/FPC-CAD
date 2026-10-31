@@ -1,0 +1,15 @@
+{
+  "_comment": "FPC-CAD icon key -> Tabler outline icon (MIT). Built by build_icons.py into assets/icons.",
+  "icons": {
+    "new-sketch": "pencil-plus", "edit-sketch": "pencil", "finish": "check",
+    "select": "pointer", "line": "line", "rect": "rectangle", "circle": "circle",
+    "arc": "circle-half-2", "arc3": "vector-bezier-arc", "point": "point",
+    "cancel": "x", "normal-view": "focus-centered", "undo": "arrow-back-up",
+    "redo": "arrow-forward-up", "dimension": "dimensions", "dist-x": "arrow-autofit-width",
+    "dist-y": "arrow-autofit-height", "horizontal": "separator-horizontal",
+    "vertical": "separator-vertical", "coincident": "focus-2", "parallel": "slashes",
+    "perpendicular": "angle", "equal": "equal-double", "tangent": "circle-dashed",
+    "concentric": "target", "midpoint": "focus", "on-object": "point",
+    "symmetric": "flip-vertical", "fix": "lock", "delete": "trash"
+  }
+}

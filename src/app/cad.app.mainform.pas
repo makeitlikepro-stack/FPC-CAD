@@ -24,7 +24,8 @@ uses
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Features.Sketch, CAD.Features.Extrude,
-  CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims;
+  CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
+  CAD.App.SketchToolbar, CAD.Sketch.Commands, LCLType;
 
 type
   TCADMainForm = class(TForm)
@@ -44,6 +45,7 @@ type
     FSketchMode: TCADSketchMode;
     FSketchPanel: TCADSketchPanel;
     FSketchDims: TCADSketchDims;
+    FSketchToolbar: TCADSketchToolbar;
     FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
     FLastSketch: TCADId;
     FSketchCount: Integer;
@@ -51,6 +53,7 @@ type
     procedure NewSketch(Sender: TObject);
     procedure FinishClick(Sender: TObject);
     procedure EditSketchClick(Sender: TObject);
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     function SketchToEdit: TCADId;
     procedure SketchChanged(Sender: TObject);
     procedure SketchStatus(Sender: TObject; const AText: string);
@@ -98,11 +101,14 @@ begin
   FHost.Align := alClient;
   FHost.OnSetupUI := @HostSetupUI;
   FHost.OnResize := @HostResize;
+  KeyPreview := True;                    { sketch shortcuts reach the form first }
+  OnKeyDown := @FormKeyDown;
   FHost.Parent := Self;
 end;
 
 destructor TCADMainForm.Destroy;
 begin
+  FreeAndNil(FSketchToolbar);
   FreeAndNil(FSketchDims);
   FreeAndNil(FSketchPanel);
   FreeAndNil(FSketchMode);
@@ -168,6 +174,8 @@ begin
   FSketchPanel.OnFinish := @FinishClick;
   FSketchPanel.OnEditSketch := @EditSketchClick;
   FSketchPanel.OnStatus := @SketchStatus;
+  FSketchToolbar := TCADSketchToolbar.Create(UI, FHost.Root, FSketchMode, FSketchPanel);
+  FSketchToolbar.OnFinish := @FinishClick;
   FSketchDims := TCADSketchDims.Create(UI, FHost.Root, FView, FSketchMode);
   FSketchDims.OnStatus := @SketchStatus;
   FSketchDims.OnConstraintClick := @RelationClick;
@@ -248,6 +256,7 @@ begin
     Inc(Y, 16);
   end;
   FSketchPanel.Layout(12, Y, PanelWidth - 24);
+  FSketchToolbar.Layout(0, 6, VW);
 end;
 
 procedure TCADMainForm.HostResize(Sender: TObject);
@@ -363,6 +372,56 @@ begin
     Result := F.Id;
 end;
 
+{ SolidWorks-like shortcuts while a sketch is open; typing in an edit box
+  keeps its keys. }
+procedure TCADMainForm.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+var
+  Handled: Boolean;
+begin
+  if (FSketchMode = nil) or not FSketchMode.Active then
+    Exit;
+  if (FHost.UI <> nil) and (FHost.UI.FocusedWidget is TUIEdit) then
+    Exit;
+  Handled := True;
+  if ssCtrl in Shift then
+    case Key of
+      VK_Z: if ssShift in Shift then FSketchToolbar.Run(ctaRedo) else FSketchToolbar.Run(ctaUndo);
+      VK_Y: FSketchToolbar.Run(ctaRedo);
+      VK_RETURN: FSketchToolbar.Run(ctaFinish);
+    else
+      Handled := False;
+    end
+  else
+    case Key of
+      VK_S: FSketchToolbar.Run(ctaSelect);
+      VK_L: FSketchToolbar.Run(ctaLine);
+      VK_R: FSketchToolbar.Run(ctaRect);
+      VK_C: FSketchToolbar.Run(ctaCircle);
+      VK_A: FSketchToolbar.Run(ctaArc);
+      VK_T: FSketchToolbar.Run(ctaArc3);
+      VK_P: FSketchToolbar.Run(ctaPoint);
+      VK_D: FSketchToolbar.Run(ctaDimension);
+      VK_X: FSketchToolbar.Run(ctaDistX);
+      VK_Y: FSketchToolbar.Run(ctaDistY);
+      VK_H: FSketchPanel.RunCommand(sccHorizontal);
+      VK_V: FSketchPanel.RunCommand(sccVertical);
+      VK_N: FSketchToolbar.Run(ctaNormalView);
+      VK_DELETE: FSketchPanel.DeleteSelected;
+      VK_ESCAPE:
+        begin
+          { first Esc drops the shape being drawn, the next one goes to Select }
+          if FSketchMode.Editor.Busy then
+            FSketchToolbar.Run(ctaCancel)
+          else
+            FSketchToolbar.Run(ctaSelect);
+        end;
+    else
+      Handled := False;
+    end;
+  if Handled then
+    Key := 0;
+end;
+
 procedure TCADMainForm.EditSketchClick(Sender: TObject);
 var
   Id: TCADId;
@@ -415,6 +474,8 @@ begin
     FSketchPanel.Refresh;
   if FSketchDims <> nil then
     FSketchDims.Refresh;
+  if FSketchToolbar <> nil then
+    FSketchToolbar.Refresh;
   if FSketchMode.Active then
     FStatus.Text := FSketchMode.StatusText
   else

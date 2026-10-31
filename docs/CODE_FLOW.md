@@ -11,7 +11,7 @@
 | `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`, `Sketch`, `Extrude`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
 | `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`), `CAD.View.Sync` (shown results -> viewport objects), `CAD.View.ViewportTarget` (sync target on `TUIViewport3D`), `CAD.View.SketchDraw` (pixel -> sketch ray, camera square to the plane, stroke meshes) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
-| `src/app/` | application: `CAD.App.MainForm` (host, viewport, panel), `CAD.App.DemoScene` (plate + 6 holes), `CAD.App.SketchMode` (viewport mouse -> editor, sketch objects), `CAD.App.SketchPanel` (sketch tools, constraint buttons, list, dimension edit), `CAD.App.SketchDims` (dimension chips in the view, in-place edit); `app/fpc_cad.lpi` builds `./fpc_cad` | everything |
+| `src/app/` | application: `CAD.App.MainForm` (host, viewport, panel), `CAD.App.DemoScene` (plate + 6 holes), `CAD.App.SketchMode` (viewport mouse -> editor, sketch objects), `CAD.App.SketchPanel` (sketch tools, constraint buttons, list, dimension edit), `CAD.App.SketchDims` (dimension chips and relation glyphs in the view, in-place edit), `CAD.App.SketchToolbar` (icon toolbar over the view, shortcuts via the main form); `app/fpc_cad.lpi` builds `./fpc_cad` | everything |
 
 No unit in `src/core` uses LCL, OpenGL or OCCT.
 

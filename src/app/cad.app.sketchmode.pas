@@ -20,7 +20,7 @@ uses
   OpenGL.UI.Viewport3D, OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData,
   OpenGL.Render.Viewport3DPass,
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
-  CAD.View.SketchDraw;
+  CAD.Sketch.Text, CAD.View.SketchDraw;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
@@ -40,6 +40,11 @@ type
     FDownX, FDownY: Integer;
     FOnChanged: TNotifyEvent;
     FOnEntityDoubleClick: TCADEntityEvent;
+    { sketch undo: texts of the sketch after each change }
+    FUndo: array of string;
+    FUndoPos: Integer;
+    FRestoring: Boolean;
+    procedure Restore(const AText: string);
     procedure MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseMove(Sender: TObject; Shift: TShiftState; X, Y: Integer);
@@ -56,6 +61,11 @@ type
     destructor Destroy; override;
     { Starts a new empty sketch on the plane (origin, X, normal). }
     procedure Enter(const AOrigin, AXDir, ANormal: array of Double);
+    { Sketch undo / redo (every change that altered the sketch text). }
+    procedure Undo;
+    procedure Redo;
+    function CanUndo: Boolean;
+    function CanRedo: Boolean;
     { Opens an existing sketch (takes ownership), Select tool. }
     procedure EnterSketch(ASketch: TCADSketch);
     { Leaves sketch mode; the caller takes the sketch text first. }
@@ -133,6 +143,9 @@ begin
   FEditor := TCADSketchEditor.Create(FSketch);
   FEditor.SetTool(sktSelect);
   FEditor.Resolve;                         { states and DOF of a loaded sketch }
+  SetLength(FUndo, 1);
+  FUndo[0] := CADSketchToText(FSketch);
+  FUndoPos := 0;
   FActive := True;
   FView.OnMouseDown := @MouseDown;
   FView.OnMouseUp := @MouseUp;
@@ -142,6 +155,61 @@ begin
   RefreshSketch;
   RefreshPreview;
   Changed;
+end;
+
+function TCADSketchMode.CanUndo: Boolean;
+begin
+  Result := FActive and (FUndoPos > 0);
+end;
+
+function TCADSketchMode.CanRedo: Boolean;
+begin
+  Result := FActive and (FUndoPos < High(FUndo));
+end;
+
+procedure TCADSketchMode.Restore(const AText: string);
+var
+  S: TCADSketch;
+  Tool: TCADSketchTool;
+begin
+  S := TCADSketch.Create;
+  try
+    CADSketchFromText(AText, S);
+  except
+    S.Free;
+    raise;
+  end;
+  Tool := FEditor.Tool;
+  FEditor.Free;
+  FSketch.Free;
+  FSketch := S;
+  FEditor := TCADSketchEditor.Create(FSketch);
+  FEditor.SetTool(Tool);
+  FEditor.Resolve;
+  RefreshSketch;
+  RefreshPreview;
+  FRestoring := True;
+  try
+    Changed;
+  finally
+    FRestoring := False;
+  end;
+end;
+
+procedure TCADSketchMode.Undo;
+begin
+  if not CanUndo then
+    Exit;
+  Dec(FUndoPos);
+  Restore(FUndo[FUndoPos]);
+end;
+
+procedure TCADSketchMode.Redo;
+begin
+  if not CanRedo then
+    Exit;
+  Inc(FUndoPos);
+  Restore(FUndo[FUndoPos]);
 end;
 
 procedure TCADSketchMode.Leave;
@@ -243,8 +311,31 @@ begin
   FView.Invalidate3D;
 end;
 
+const
+  UndoLimit = 200;
+
 procedure TCADSketchMode.Changed;
+var
+  T: string;
+  I: Integer;
 begin
+  if FActive and not FRestoring and (FSketch <> nil) and (Length(FUndo) > 0) then
+  begin
+    T := CADSketchToText(FSketch);
+    if T <> FUndo[FUndoPos] then
+    begin
+      SetLength(FUndo, FUndoPos + 2);         { drops the redo tail }
+      Inc(FUndoPos);
+      FUndo[FUndoPos] := T;
+      if Length(FUndo) > UndoLimit then
+      begin
+        for I := 0 to High(FUndo) - 1 do
+          FUndo[I] := FUndo[I + 1];
+        SetLength(FUndo, Length(FUndo) - 1);
+        Dec(FUndoPos);
+      end;
+    end;
+  end;
   if Assigned(FOnChanged) then
     FOnChanged(Self);
 end;

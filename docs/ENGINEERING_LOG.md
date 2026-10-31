@@ -124,3 +124,12 @@
 - Tests: `TestStatus` (determined flags, states for a rectangle with and without its height, conflicting top line red, glyph H and its anchor, no glyph for removed constraints and dimensions). NOT RUN here.
 - 2026-10-31 user: colours work (fully defined = black, SolidWorks convention; green was the old scheme). Request: open a sketch again after Finish to change it.
 - Edit sketch: panel button "Edit sketch" (next to "New sketch"; "Finish + Extrude 10" renamed "Finish sketch"). Target: the sketch of the selected body (an Extrude's input or a Sketch), else the last sketch made or edited. The feature text is loaded into a new sketch (`TCADSketchMode.EnterSketch`, Select tool, solved for states); Finish writes the text back with `SetParam` on that Sketch feature, so the Extrude (and anything after it) recomputes from the cache path. New sketches still get Sketch + Extrude 10.
+- 2026-10-31 user: Edit sketch works.
+
+## 2026-10-31 — Stage 5 step 5b: sketch toolbar, icons, shortcuts, sketch undo (Candidate)
+- Icons: `tools/icons/build_icons.py` + `cad_icons.json` (30 keys -> Tabler outline, MIT) rasterised with librsvg/cairo into `assets/icons/png/{20,24}` with LICENSE and SOURCE.txt (Tabler commit ed177a0). Checked visually here (strip of all 24 px icons).
+- `src/app/cad.app.sketchtoolbar.pas`: toolbar over the top of the viewport while sketching. Row 1: Finish | Select, Line, Rect, Circle, Arc, Arc 3pt, Point | Dimension, Dist X, Dist Y | Undo, Redo | Normal view, Cancel. Row 2: relations (H, V, Coincident, Parallel, Perpendicular, Equal, Tangent, Concentric, Midpoint, On object, Symmetric, Fix). Icon buttons with hints naming the shortcut; active tool underlined.
+- Shortcuts (form KeyPreview; ignored while an edit box has focus): S, L, R, C, A, T (3-point arc), P, D, X, Y, H, V, N (normal view), Delete (selected list constraint), Esc (drop the shape, then Select), Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z, Ctrl+Enter (finish).
+- Sketch undo / redo in `TCADSketchMode`: the sketch text after every change that altered it (200 steps); undo / redo reload the text, keep the tool.
+- Panel: tools and relation buttons moved to the toolbar; outside a sketch only New / Edit sketch, inside: relation list, value edit, Delete, DOF line. `RunCommand`, `DeleteSelected` public; the list follows a replaced sketch object (undo).
+- NOT RUN here (GUI).

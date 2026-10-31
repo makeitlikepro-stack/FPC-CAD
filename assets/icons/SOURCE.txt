@@ -1,0 +1,1 @@
+Tabler Icons (MIT) https://github.com/tabler/tabler-icons commit ed177a085b652fe04ec4f37ced867c94621e7840

@@ -34,6 +34,7 @@ type
     FSet, FDelete: TUIButton;
     FListMap: array of Integer;         { list row -> constraint index }
     FListRevision: Cardinal;
+    FListSketch: TObject;               { the list belongs to this sketch object }
     FOnNewSketch, FOnFinish, FOnEditSketch: TNotifyEvent;
     FOnStatus: TCADStatusEvent;
     procedure ToolClick(Sender: TObject);
@@ -55,6 +56,11 @@ type
     function Layout(ALeft, ATop, AWidth: Double): Double;
     { After any sketch change: list, DOF line. }
     procedure Refresh;
+    { Relation / dimension on the selection (toolbar, keys); a new dimension
+      opens its value for editing. }
+    procedure RunCommand(ACommand: TCADSketchCommand);
+    { Removes the constraint selected in the list (Delete key). }
+    procedure DeleteSelected;
     { Selects a constraint in the list (a relation glyph was clicked). }
     procedure SelectConstraint(AConstraint: Integer);
     property OnNewSketch: TNotifyEvent read FOnNewSketch write FOnNewSketch;
@@ -133,45 +139,41 @@ end;
 
 function TCADSketchPanel.Layout(ALeft, ATop, AWidth: Double): Double;
 var
-  Y, CW: Double;
-  I, K: Integer;
+  Y: Double;
+  I: Integer;
   C: TCADSketchCommand;
   Show: Boolean;
 begin
-  CW := (AWidth - 2 * Gap) / 3;
+  { Tools, dimensions and relations are on the sketch toolbar; the panel
+    keeps New / Edit sketch outside a sketch, and the relation list, value
+    edit and DOF line inside one. The old buttons stay hidden. }
+  Show := FMode.Active;
+  for I := 1 to 10 do
+    FTools[I].Visible := False;
+  for C := Low(TCADSketchCommand) to High(TCADSketchCommand) do
+    FCommands[C].Visible := False;
+  FTools[0].Visible := not Show;
+  FTools[11].Visible := not Show;
   Y := ATop;
   Place(FToolLabel, ALeft, Y, AWidth, 24);
   Y := Y + 26;
-  Place(FTools[0], ALeft, Y, (AWidth - Gap) / 2, RowH);
-  Place(FTools[11], ALeft + (AWidth + Gap) / 2, Y, (AWidth - Gap) / 2, RowH);
-  Y := Y + RowH + Gap;
-  for I := 1 to 9 do
-    Place(FTools[I], ALeft + ((I - 1) mod 3) * (CW + Gap), Y + ((I - 1) div 3) * (RowH + Gap), CW, RowH);
-  Y := Y + 3 * (RowH + Gap);
-  Place(FTools[10], ALeft, Y, AWidth, RowH);
-  Y := Y + RowH + Gap;
-
-  Show := FMode.Active;
-  FConsLabel.Visible := Show;
+  if not Show then
+  begin
+    FToolLabel.Text := 'Sketch';
+    Place(FTools[0], ALeft, Y, (AWidth - Gap) / 2, RowH);
+    Place(FTools[11], ALeft + (AWidth + Gap) / 2, Y, (AWidth - Gap) / 2, RowH);
+    Y := Y + RowH + Gap;
+  end
+  else
+    FToolLabel.Text := 'Relations and dimensions';
+  FConsLabel.Visible := False;
   FList.Visible := Show;
   FValue.Visible := Show;
   FSet.Visible := Show;
   FDelete.Visible := Show;
   FInfo.Visible := Show;
-  for C := Low(TCADSketchCommand) to High(TCADSketchCommand) do
-    FCommands[C].Visible := Show;
   if not Show then
     Exit(Y);
-  Y := Y + 8;
-  Place(FConsLabel, ALeft, Y, AWidth, 24);
-  Y := Y + 26;
-  K := 0;
-  for C := Low(TCADSketchCommand) to High(TCADSketchCommand) do
-  begin
-    Place(FCommands[C], ALeft + (K mod 3) * (CW + Gap), Y + (K div 3) * (RowH + Gap), CW, RowH);
-    Inc(K);
-  end;
-  Y := Y + ((K + 2) div 3) * (RowH + Gap);
   FList.Width := AWidth;                    { height: rows x item height (list) }
   FList.Left := ALeft;
   FList.Top := Y;
@@ -209,11 +211,16 @@ begin
 end;
 
 procedure TCADSketchPanel.CommandClick(Sender: TObject);
+begin
+  RunCommand(TCADSketchCommand(TUIWidget(Sender).Tag));
+end;
+
+procedure TCADSketchPanel.RunCommand(ACommand: TCADSketchCommand);
 var
   Err: string;
   C: Integer;
 begin
-  Err := FMode.ApplyCommand(TCADSketchCommand(TUIWidget(Sender).Tag), C);
+  Err := FMode.ApplyCommand(ACommand, C);
   if Err <> '' then
     Status(Err)
   else if (C >= 0) and CADIsDimension(FMode.Sketch.Constraints[C].Kind) then
@@ -350,6 +357,11 @@ begin
     Status(Err);
 end;
 
+procedure TCADSketchPanel.DeleteSelected;
+begin
+  DeleteClick(nil);
+end;
+
 procedure TCADSketchPanel.DeleteClick(Sender: TObject);
 var
   C: Integer;
@@ -387,6 +399,7 @@ begin
     end;
   SetLength(FListMap, N);
   FListRevision := S.Revision;
+  FListSketch := S;
 end;
 
 procedure TCADSketchPanel.Refresh;
@@ -395,7 +408,7 @@ var
 begin
   if not FMode.Active or (FMode.Sketch = nil) then
     Exit;
-  if FMode.Sketch.Revision <> FListRevision then
+  if (FMode.Sketch.Revision <> FListRevision) or (FMode.Sketch <> FListSketch) then
     RebuildList;
   LoadDimensionOfSelection;
   R := FMode.Editor.LastSolve;

@@ -232,6 +232,7 @@ begin
     end;
   ListChange(nil);
   FUI.FocusWidget(FValue);
+  FValue.SelectAll;
 end;
 
 { One entity (or two points) selected that carries a dimension: load it. }

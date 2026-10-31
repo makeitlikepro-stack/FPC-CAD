@@ -99,10 +99,16 @@ begin
 end;
 
 function TCADSketchDims.CameraKey: string;
+var
+  Rev: Int64;
 begin
-  Result := Format('%g|%g|%g|%g|%g|%g|%g|%g|%g', [FView.Camera.YawDeg, FView.Camera.PitchDeg,
+  Rev := -1;
+  if FMode.Sketch <> nil then
+    Rev := FMode.Sketch.Revision;
+  { camera, view size and the sketch revision (a point drag moves anchors) }
+  Result := Format('%g|%g|%g|%g|%g|%g|%g|%g|%g|%d', [FView.Camera.YawDeg, FView.Camera.PitchDeg,
     FView.Camera.Distance, FView.Camera.Target.X, FView.Camera.Target.Y, FView.Camera.Target.Z,
-    FView.Camera.OrthoHeight, FView.Width, FView.Height]);
+    FView.Camera.OrthoHeight, FView.Width, FView.Height, Rev]);
 end;
 
 procedure TCADSketchDims.Tick(Sender: TObject);
@@ -157,7 +163,8 @@ begin
   FCameraKey := CameraKey;
   for I := 0 to FChipCount - 1 do
   begin
-    if CADDimensionAnchor(FMode.Sketch, FChipConstraint[I], U, V) and
+    if (FChipConstraint[I] <> FEditConstraint) and       { the edit box takes its place }
+       CADDimensionAnchor(FMode.Sketch, FChipConstraint[I], U, V) and
        FMode.SketchToScreen(U, V, X, Y) and (X >= 0) and (Y >= 0) and
        (X < FView.Width) and (Y < FView.Height) then
     begin
@@ -193,6 +200,7 @@ begin
   FEdit.Visible := True;
   PlaceChips;
   FUI.FocusWidget(FEdit);
+  FEdit.SelectAll;                             { typing replaces the old value }
   Status('Type the new value: Enter sets, Esc closes');
 end;
 
@@ -200,6 +208,8 @@ procedure TCADSketchDims.CloseEdit;
 begin
   FEdit.Visible := False;
   FEditConstraint := -1;
+  if FMode.Active and (FChipCount > 0) then
+    PlaceChips;                                { the chip comes back }
 end;
 
 procedure TCADSketchDims.ChipClick(Sender: TObject);

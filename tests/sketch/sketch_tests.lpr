@@ -218,7 +218,8 @@ begin
     S.Perpendicular(Ax, L2);
     S.Length(L2, 4);
     S.Coincident(S.Entities[L2].P1, S.Entities[Ax].P2);
-    Q := S.AddLine(S.AddPoint(14, 4), S.AddPoint(18, 6));
+    P := S.AddPoint(14, 4);                  { points first: argument order }
+    Q := S.AddLine(P, S.AddPoint(18, 6));
     S.Collinear(L, Q);
     S.Length(Q, 3);
     S.DistanceX(O, S.Entities[Q].P1, 15);

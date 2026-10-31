@@ -120,6 +120,25 @@ begin
   end;
 end;
 
+{ Closed (or open) polyline through x, y pairs. Points are made first and
+  kept in variables: FPC may evaluate call arguments right to left, so
+  AddLine(AddPoint(..), AddPoint(..)) does not fix the point order. }
+procedure AddPolygon(S: TCADSketch; const XY: array of Double; AClosed: Boolean = True);
+var
+  First, Prev, P, I: Integer;
+begin
+  First := S.AddPoint(XY[0], XY[1]);
+  Prev := First;
+  for I := 1 to Length(XY) div 2 - 1 do
+  begin
+    P := S.AddPoint(XY[2 * I], XY[2 * I + 1]);
+    S.AddLine(Prev, P);
+    Prev := P;
+  end;
+  if AClosed then
+    S.AddLine(Prev, First);
+end;
+
 function NewSketch(S: TCADSketch): TCADFeature;
 begin
   Result := TCADSketchFeature.Create;
@@ -262,10 +281,7 @@ begin
     { YZ plane, rectangle 20 x 10, extruded 4 along +X }
     S := TCADSketch.Create;
     S.SetPlane([5, 0, 0], [0, 1, 0], [1, 0, 0]);
-    S.AddLine(S.AddPoint(0, 0), S.AddPoint(20, 0));
-    S.AddLine(1, S.AddPoint(20, 10));
-    S.AddLine(2, S.AddPoint(0, 10));
-    S.AddLine(3, 0);
+    AddPolygon(S, [0, 0, 20, 0, 20, 10, 0, 10]);
     Sk := D.AttachFeature(NewSketch(S));
     Ex := D.AttachFeature(NewExtrude(4));
     Link(D, Ex, Sk);
@@ -274,18 +290,9 @@ begin
 
     { island: square 100 with a 60 hole and a 20 island -> 2 faces }
     S := TCADSketch.Create;
-    S.AddLine(S.AddPoint(0, 0), S.AddPoint(100, 0));
-    S.AddLine(1, S.AddPoint(100, 100));
-    S.AddLine(2, S.AddPoint(0, 100));
-    S.AddLine(3, 0);
-    S.AddLine(S.AddPoint(20, 20), S.AddPoint(20, 80));
-    S.AddLine(5, S.AddPoint(80, 80));
-    S.AddLine(6, S.AddPoint(80, 20));
-    S.AddLine(7, 4);
-    S.AddLine(S.AddPoint(40, 40), S.AddPoint(60, 40));
-    S.AddLine(9, S.AddPoint(60, 60));
-    S.AddLine(10, S.AddPoint(40, 60));
-    S.AddLine(11, 8);
+    AddPolygon(S, [0, 0, 100, 0, 100, 100, 0, 100]);
+    AddPolygon(S, [20, 20, 20, 80, 80, 80, 80, 20]);
+    AddPolygon(S, [40, 40, 60, 40, 60, 60, 40, 60]);
     Sk := D.AttachFeature(NewSketch(S));
     Ex := D.AttachFeature(NewExtrude(2));
     Link(D, Ex, Sk);
@@ -306,8 +313,7 @@ begin
   D := TCADDocument.Create;
   try
     S := TCADSketch.Create;
-    S.AddLine(S.AddPoint(0, 0), S.AddPoint(10, 0));
-    S.AddLine(1, S.AddPoint(10, 10));
+    AddPolygon(S, [0, 0, 10, 0, 10, 10], False);
     Sk := D.AttachFeature(NewSketch(S));
     Ex := D.AttachFeature(NewExtrude(5));
     Link(D, Ex, Sk);

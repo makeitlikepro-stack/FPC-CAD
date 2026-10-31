@@ -798,7 +798,7 @@ begin
   try
     Line := S.AddLineXY(-10, 0, 10, 0);
     Arc := S.AddArc(S.AddPoint(0, 5),
-      S.AddPoint(5, 0), S.AddPoint(0, 10));
+      S.AddPoint(5, 0), S.AddPoint(-5, 10));
     Check(CADSketchHit(S, 5, 0, 0.5, Index) = chkPoint,
       'trim picking: normal selection prefers a sketch point');
     Check(CADSketchEntityHit(S, 5, 0, 0.5) = Line,

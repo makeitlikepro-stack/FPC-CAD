@@ -693,8 +693,10 @@ var
   Err: string;
 begin
   K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
-  if (K <> chkEntity) or (FSketch.Entities[Index].Kind <> sekLine) then
+  if K <> chkEntity then
     FLineEditMessage := 'Trim / Extend: click the body of a straight line'
+  else if FSketch.Entities[Index].Kind <> sekLine then
+    FLineEditMessage := 'Trim / Extend: circles and arcs are not supported yet'
   else if not CADPlanLineEdit(FSketch, Index, U, V, FLineEditMode, Plan, Err) then
     FLineEditMessage := Err
   else if not CADApplyLineEdit(FSketch, Plan, Err) then

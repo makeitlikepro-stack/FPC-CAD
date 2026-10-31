@@ -371,6 +371,7 @@ begin
   Best := FSnapTolerance;
   for I := 0 to FSketch.PointCount - 1 do
   begin
+    if not FSketch.Points[I].Active then Continue;
     D := Hypot(FSketch.PointX(I) - X, FSketch.PointY(I) - Y);
     if D <= Best then
     begin
@@ -386,6 +387,7 @@ begin
   for I := 0 to FSketch.EntityCount - 1 do
   begin
     E := FSketch.Entities[I];
+    if not E.Active then Continue;
     if E.Kind <> sekLine then
       Continue;
     MX := 0.5 * (FSketch.PointX(E.P1) + FSketch.PointX(E.P2));

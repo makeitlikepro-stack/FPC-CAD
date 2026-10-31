@@ -16,3 +16,10 @@
 - Native test `tests/occt/occt_bridge_tests.lpr` + `scripts/test_occt.sh`: ABI offsets, mapping, round trip, mismatch rejected, prism volume 6000, cut volume 6000 - pi*4*30, non-destructive cut, INFO meshing time InParallel off/on. NOT RUN here (no FPC, no OCCT libraries).
 - 2026-10-31 user run: bridge built with system OCCT 7.8 (libTK*.so.7.8). Pascal: `Fatal: identifier expected but LIBRARY found` — `Library` is a reserved word, not allowed as a unit name part. Renamed CAD.OCCT.Library -> CAD.OCCT.Bridge.
 - 2026-10-31 user run: `bash scripts/test_occt.sh` 19/19 PASS, OCCT 7.8.1. Fine mesh x5: InParallel off 156 ms, on 63 ms (~2.5x). Merged to dev.
+
+## 2026-10-31 — Stage 3 step 2: OCCT features on the core (Candidate)
+- Engine side done: bridge + OCCT units removed from the engine (engine main caa157a, user build PASS).
+- Bridge: `occt_bridge_make_box`, `_make_cylinder`, `_boolean` (cut/fuse/common with all speed options), `_shape_volume`. Thread safety: one `std::shared_mutex` — meshing exclusive (it writes Poly_Triangulation into TFaces shared with boolean inputs), modelling shared. `g++ -fsyntax-only -Wall` vs OCCT 7.8.1 headers: 0 errors, 0 warnings.
+- Pascal: `CAD.OCCT.ShapeResult` (result owns shape + mesh handles, size estimate from the mesh), `src/features/` (`CAD.Features.OCCTBase`, `.Box`, `.Cylinder`, `.BooleanOp`), global `OCCT` accessor, `Mesh.MeshInRecompute` option (default on). Unit names scanned for reserved words.
+- Test `tests/occt/occt_features_tests.lpr` (run by `scripts/test_occt.sh`): volumes (cut, fuse 9000, common 3000), partial recompute, undo from the cache (0 OCCT calls), error text and blocking, 8 chains x 6 booleans serial vs all cores (INFO) with correct volumes. NOT RUN here.
+- 2026-10-31 user run: occt bridge 19/19 PASS, occt features 17/17 PASS (OCCT 7.8.1). Parallel chains: serial 650 ms, all cores 633 ms — little gain: OCCT ops already run parallel inside (RunParallel, InParallel) and every intermediate boolean result is meshed under the exclusive mesh lock. Next: mesh only results that are displayed (leaf features). Merged to dev.

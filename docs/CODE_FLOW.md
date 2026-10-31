@@ -7,6 +7,7 @@
 | `src/config/` | settings records only (performance knobs) | RTL |
 | `src/core/` | the model and the recompute machinery | RTL, `src/config` |
 | `src/occt/` | OCCT adapter: `CAD.OCCT.Bridge` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
+| `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
 | `src/app/` | (stage 4) UI on the engine, viewport, GPU compute jobs | everything |
 
@@ -79,4 +80,20 @@ TCADPerformanceOptions (src/config)
   later, per operation:
        occt_bridge_mesh_shape -> MeshParameters   (IMeshTools_Parameters)
        occt_bridge_cut_cylinder_shape -> OptionedCut -> ApplyBooleanOptions
+```
+
+## Trace 5: an OCCT feature computes (worker thread)
+
+```
+TCADDocument.ComputeOne                           cad.core.document
+  -> TCADBooleanFeature.Compute                   cad.features.booleanop
+       -> InputShape(inputs, 0/1)                 cad.features.occtbase (TOCCTShapeResult.Shape)
+       -> OCCT.BooleanOp                          cad.occt.bridge -> occt_bridge_boolean
+            (shared lock: booleans run in parallel; OptionedBoolean applies the options)
+       -> WrapShape                               cad.features.occtbase
+            -> OCCT.ShapeVolume                   exact B-rep volume (shared lock)
+            -> OCCT.MeshShape (if MeshInRecompute) exclusive lock, InParallel inside
+            -> TOCCTShapeResult                   cad.occt.shaperesult (owns shape + mesh)
+  -> TCADResultCache.Store                        the cache owns the result; freeing it
+                                                  frees the OCCT handles
 ```

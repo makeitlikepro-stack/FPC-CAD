@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FPC="${FPC:-$(command -v fpc || true)}"
 [[ -n "$FPC" ]] || { echo "BLOCKED: fpc not found (set FPC=/path/to/fpc)" >&2; exit 2; }
 OUT="${OUTDIR:-$(mktemp -d "${TMPDIR:-/tmp}/fpccad-sketch.XXXXXX")}"
-for PROG in sketch_tests trim_extend_tests; do
+for PROG in sketch_tests trim_extend_tests region_tests; do
   if ! "$FPC" -Mobjfpc -Sa -gl -O2 "-Fu$ROOT/src/sketch" \
       "-FU$OUT" "-FE$OUT" "$ROOT/tests/sketch/$PROG.lpr" > "$OUT/build-$PROG.log" 2>&1; then
     echo "BUILD FAILED: $PROG (log: $OUT/build-$PROG.log)" >&2

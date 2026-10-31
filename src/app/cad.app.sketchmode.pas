@@ -21,7 +21,7 @@ uses
   OpenGL.Render.Viewport3DPass,
   CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
   CAD.Sketch.Text, CAD.Sketch.TypedInput, CAD.Sketch.DimGraphic, CAD.View.SketchDraw,
-  OpenGL.Render.Material, CAD.App.SketchFill;
+  OpenGL.Render.Material, CAD.App.SketchFill, CAD.Sketch.TrimExtend;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
@@ -46,6 +46,9 @@ type
     FOnChanged: TNotifyEvent;
     FOnEntityDoubleClick: TCADEntityEvent;
     FSmartDim: Boolean;                  { Smart Dimension tool: clicks pick, then dimension }
+    FLineEditActive: Boolean;            { current end-only Trim / Extend tool }
+    FLineEditMode: TCADLineEditMode;
+    FLineEditMessage: string;
     FOnSmartDimension: TNotifyEvent;
     FOnContextMenu: TCADViewPointEvent;
     { sketch undo: texts of the sketch after each change }
@@ -53,6 +56,7 @@ type
     FUndoPos: Integer;
     FRestoring: Boolean;
     procedure SmartClick(U, V: Double);
+    procedure LineEditClick(U, V: Double);
     function SmartReady: Boolean;
     procedure Restore(const AText: string);
     procedure MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
@@ -107,6 +111,10 @@ type
       or two items (points, lines), or a picked line / point and a click on
       empty space fire OnSmartDimension with the picked items selected. }
     procedure SetSmartDimension(AOn: Boolean);
+    { End-only Trim / Extend: click the outer portion of a line. }
+    procedure SetLineEdit(AMode: TCADLineEditMode);
+    property LineEditActive: Boolean read FLineEditActive;
+    property LineEditMode: TCADLineEditMode read FLineEditMode;
     property SmartDimension: Boolean read FSmartDim;
     property OnSmartDimension: TNotifyEvent read FOnSmartDimension write FOnSmartDimension;
     { Right click when no shape is being drawn: the item under the cursor
@@ -176,6 +184,9 @@ begin
   FSketch := ASketch;
   FEditor := TCADSketchEditor.Create(FSketch);
   FEditor.SetTool(sktSelect);
+  FLineEditActive := False;
+  FLineEditMessage := '';
+  FSmartDim := False;
   FEditor.Resolve;                         { states and DOF of a loaded sketch }
   SetLength(FUndo, 1);
   FUndo[0] := CADSketchToText(FSketch);
@@ -253,6 +264,8 @@ var
 begin
   FActive := False;
   FSmartDim := False;
+  FLineEditActive := False;
+  FLineEditMessage := '';
   FView.OnMouseDown := nil;
   FView.OnMouseUp := nil;
   FView.OnMouseMove := nil;
@@ -281,6 +294,8 @@ begin
   if not FActive then
     Exit;
   FSmartDim := False;
+  FLineEditActive := False;
+  FLineEditMessage := '';
   FEditor.SetTool(ATool);
   RefreshPreview;
   Changed;
@@ -484,6 +499,8 @@ begin
   if not FActive then
     Exit;
   AHandled := True;                         { sketch mode: the view does not orbit }
+  if FLineEditActive then
+    Exit;                                    { editing is click-only, not point drag }
   if not ToSketch(AX, AY, U, V) then
     Exit;
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
@@ -545,6 +562,11 @@ begin
   if (Button <> mbLeft) or not ToSketch(X, Y, U, V) then
     Exit;
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
+  if FLineEditActive then
+  begin
+    LineEditClick(U, V);
+    Exit;
+  end;
   if FSmartDim then
     SmartClick(U, V)
   else if FEditor.Tool = sktSelect then
@@ -641,6 +663,49 @@ begin
   FEditor.SetTool(sktSelect);
   FEditor.ClearSelection;
   FSmartDim := AOn;
+  FLineEditActive := False;
+  FLineEditMessage := '';
+  RefreshPreview;
+  Changed;
+end;
+
+{ Begin a click-only, end-segment Trim or Extend operation. }
+procedure TCADSketchMode.SetLineEdit(AMode: TCADLineEditMode);
+begin
+  if not FActive then
+    Exit;
+  FEditor.SetTool(sktSelect);
+  FEditor.ClearSelection;
+  FSmartDim := False;
+  FLineEditActive := True;
+  FLineEditMode := AMode;
+  FLineEditMessage := '';
+  RefreshPreview;
+  Changed;
+end;
+
+{ One click plans a safe line edit and applies it transactionally. }
+procedure TCADSketchMode.LineEditClick(U, V: Double);
+var
+  K: TCADHitKind;
+  Index: Integer;
+  Plan: TCADLineEditPlan;
+  Err: string;
+begin
+  K := CADSketchHit(FSketch, U, V, FEditor.SnapTolerance, Index);
+  if (K <> chkEntity) or (FSketch.Entities[Index].Kind <> sekLine) then
+    FLineEditMessage := 'Trim / Extend: click the body of a straight line'
+  else if not CADPlanLineEdit(FSketch, Index, U, V, FLineEditMode, Plan, Err) then
+    FLineEditMessage := Err
+  else if not CADApplyLineEdit(FSketch, Plan, Err) then
+    FLineEditMessage := Err
+  else
+  begin
+    FLineEditMessage := 'Line endpoint updated. Click another line, or press Esc to Select';
+    FEditor.ClearSelection;
+    FEditor.Resolve;
+    RefreshSketch;
+  end;
   RefreshPreview;
   Changed;
 end;
@@ -723,6 +788,15 @@ var
 begin
   if not FActive then
     Exit('');
+  if FLineEditActive then
+  begin
+    if FLineEditMessage <> '' then
+      Exit(FLineEditMessage);
+    if FLineEditMode = lemTrim then
+      Exit('Trim: click an outer line segment between the end and a crossing | Esc: Select')
+    else
+      Exit('Extend: click near a line end to reach a boundary | Esc: Select');
+  end;
   if FSmartDim then
     Exit('Smart Dimension: click a line, circle or arc (two items: distance or angle; ' +
       'a line then empty space: its length) | Esc: clear / Select');

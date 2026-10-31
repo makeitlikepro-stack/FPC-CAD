@@ -9,6 +9,7 @@
 | `src/occt/` | OCCT adapter: `CAD.OCCT.Bridge` (loads the bridge, the only unit with C names), `CAD.OCCT.Options` (C record) | core, config |
 | `src/features/` | one unit per feature type (`Box`, `Cylinder`, `Boolean`), all on `TCADOCCTFeature` | core, config, occt |
 | `external/occt_bridge/` | C++ bridge on OCCT (built on the user machine) | OCCT |
+| `src/view/` | display adapters to the engine viewport: `CAD.View.MeshConvert` (OCCT mesh -> `TV3DMeshData`) | occt, engine `src/rendering` + `src/ui` (no GL calls) |
 | `src/app/` | (stage 4) UI on the engine, viewport, GPU compute jobs | everything |
 
 No unit in `src/core` uses LCL, OpenGL or OCCT.

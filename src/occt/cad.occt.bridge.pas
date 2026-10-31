@@ -46,6 +46,7 @@ type
     FEdgeVertexCount: function(AMesh: Pointer): LongInt; cdecl;
     FPositions: function(AMesh: Pointer): PSingle; cdecl;
     FNormals: function(AMesh: Pointer): PSingle; cdecl;
+    FSmoothNormals: function(AMesh: Pointer): PSingle; cdecl;
     FIndices: function(AMesh: Pointer): PLongWord; cdecl;
     FFaceIds: function(AMesh: Pointer): PLongWord; cdecl;
     FEdgePositions: function(AMesh: Pointer): PSingle; cdecl;
@@ -88,6 +89,8 @@ type
     function MeshEdgeVertexCount(AMesh: TOCCTMeshHandle): Integer;
     function MeshPositions(AMesh: TOCCTMeshHandle): PSingle;
     function MeshNormals(AMesh: TOCCTMeshHandle): PSingle;
+    { Per-vertex surface normals (smooth shading of curved faces). }
+    function MeshSmoothNormals(AMesh: TOCCTMeshHandle): PSingle;
     function MeshIndices(AMesh: TOCCTMeshHandle): PLongWord;
     function MeshFaceIds(AMesh: TOCCTMeshHandle): PLongWord;
     function MeshEdgePositions(AMesh: TOCCTMeshHandle): PSingle;
@@ -198,6 +201,7 @@ begin
   Pointer(FEdgeVertexCount) := Sym('occt_bridge_mesh_edge_vertex_count');
   Pointer(FPositions) := Sym('occt_bridge_mesh_positions');
   Pointer(FNormals) := Sym('occt_bridge_mesh_normals');
+  Pointer(FSmoothNormals) := Sym('occt_bridge_mesh_smooth_normals');
   Pointer(FIndices) := Sym('occt_bridge_mesh_indices');
   Pointer(FFaceIds) := Sym('occt_bridge_mesh_face_ids');
   Pointer(FEdgePositions) := Sym('occt_bridge_mesh_edge_positions');
@@ -317,6 +321,11 @@ end;
 function TOCCTLibrary.MeshNormals(AMesh: TOCCTMeshHandle): PSingle;
 begin
   Result := FNormals(AMesh);
+end;
+
+function TOCCTLibrary.MeshSmoothNormals(AMesh: TOCCTMeshHandle): PSingle;
+begin
+  Result := FSmoothNormals(AMesh);
 end;
 
 function TOCCTLibrary.MeshIndices(AMesh: TOCCTMeshHandle): PLongWord;

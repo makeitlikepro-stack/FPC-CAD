@@ -29,24 +29,24 @@ procedure TestTrimEnd;
 var
   S: TCADSketch;
   Line: Integer;
-  P: TCADLineEditPlan;
+  P: TCADTrimPlan;
   Err: string;
 begin
   S := TCADSketch.Create;
   try
     Line := S.AddLineXY(0, 0, 10, 0);
     S.AddLineXY(4, -4, 4, 4);
-    Check(CADPlanLineEdit(S, Line, 1, 0, lemTrim, P, Err) and
-      (P.Endpoint = leStart) and Near(P.X, 4) and Near(P.Y, 0),
-      'trim: click before crossing moves line start');
-    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, P, Err) and
-      (P.Endpoint = leEnd) and Near(P.X, 4),
-      'trim: click after crossing moves line end');
+    Check(CADPlanLineTrim(S, Line, 1, 0, P, Err) and
+      Near(P.FromT, 0) and Near(P.ToT, 0.4),
+      'trim: click left removes span 0..4');
+    Check(CADPlanLineTrim(S, Line, 9, 0, P, Err) and
+      Near(P.FromT, 0.4) and Near(P.ToT, 1),
+      'trim: click right removes span 4..10');
     Check(Near(S.PointX(S.Entities[Line].P1), 0) and
       Near(S.PointX(S.Entities[Line].P2), 10),
-      'trim: planning leaves the original sketch unchanged');
-    Check(not CADPlanLineEdit(S, Line, 4, 0, lemTrim, P, Err) and (Err <> ''),
-      'trim: clicking on the intersection is not an unintentional edit');
+      'trim: planning does not alter original sketch');
+    Check(not CADPlanLineTrim(S, Line, 4, 0, P, Err) and (Err <> ''),
+      'trim: click exactly on crossing refuses ambiguity');
   finally
     S.Free;
   end;
@@ -56,7 +56,7 @@ procedure TestMiddleTrim;
 var
   S: TCADSketch;
   Line: Integer;
-  P: TCADLineEditPlan;
+  P: TCADTrimPlan;
   Err: string;
 begin
   S := TCADSketch.Create;
@@ -64,15 +64,15 @@ begin
     Line := S.AddLineXY(0, 0, 10, 0);
     S.AddLineXY(3, -3, 3, 3);
     S.AddLineXY(7, -3, 7, 3);
-    Check(CADPlanLineEdit(S, Line, 1, 0, lemTrim, P, Err) and
-      Near(P.X, 3) and (P.Endpoint = leStart),
-      'trim: first outer span stops at first crossing');
-    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, P, Err) and
-      Near(P.X, 7) and (P.Endpoint = leEnd),
-      'trim: last outer span stops at last crossing');
-    Check(not CADPlanLineEdit(S, Line, 5, 0, lemTrim, P, Err) and
-      (Pos('split', Err) > 0),
-      'trim: a middle span is refused until entity splitting is available');
+    Check(CADPlanLineTrim(S, Line, 1, 0, P, Err) and
+      Near(P.FromT, 0) and Near(P.ToT, 0.3),
+      'trim: first outer span is 0..3');
+    Check(CADPlanLineTrim(S, Line, 9, 0, P, Err) and
+      Near(P.FromT, 0.7) and Near(P.ToT, 1),
+      'trim: last outer span is 7..10');
+    Check(CADPlanLineTrim(S, Line, 5, 0, P, Err) and
+      Near(P.FromT, 0.3) and Near(P.ToT, 0.7),
+      'trim: clicking the middle chooses 3..7 for deletion');
   finally
     S.Free;
   end;

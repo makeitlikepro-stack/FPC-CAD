@@ -35,6 +35,31 @@ procedure CADBuildEditorMesh(Ed: TCADSketchEditor; AMarkerSize, AOriginSize: Dou
 
 implementation
 
+{ The viewport takes its scene bounds (camera near / far) from surface
+  vertices only. Stroke-only meshes get two vertices at the corners of their
+  strokes' box and no triangles: nothing is drawn, but the clip range keeps
+  the sketch inside it at every zoom. }
+procedure AddBoundsVertices(AMesh: TV3DMeshData);
+var
+  I: Integer;
+  V: TV3DStrokeVertex;
+  Lo, Hi: TV3Vec;
+begin
+  if AMesh.StrokeCount = 0 then
+    Exit;
+  V := AMesh.Strokes[0];
+  Lo := V3(V.PX, V.PY, V.PZ);
+  Hi := Lo;
+  for I := 1 to AMesh.StrokeCount - 1 do
+  begin
+    V := AMesh.Strokes[I];
+    Lo := V3(Min(Lo.X, V.PX), Min(Lo.Y, V.PY), Min(Lo.Z, V.PZ));
+    Hi := V3(Max(Hi.X, V.PX), Max(Hi.Y, V.PY), Max(Hi.Z, V.PZ));
+  end;
+  AMesh.AddVertex(Lo, V3(0, 0, 1), 0);
+  AMesh.AddVertex(Hi, V3(0, 0, 1), 0);
+end;
+
 function P3(S: TCADSketch; U, V: Double): TV3Vec;
 var
   X, Y, Z: Double;
@@ -161,6 +186,7 @@ begin
         end;
     end;
   end;
+  AddBoundsVertices(AMesh);
 end;
 
 procedure CADBuildEditorMesh(Ed: TCADSketchEditor; AMarkerSize, AOriginSize: Double;
@@ -201,6 +227,7 @@ begin
     AMesh.AddPolylineEdge([P3(S, X - H, Y - H), P3(S, X + H, Y - H), P3(S, X + H, Y + H),
       P3(S, X - H, Y + H)], True, 3);
   end;
+  AddBoundsVertices(AMesh);
 end;
 
 end.

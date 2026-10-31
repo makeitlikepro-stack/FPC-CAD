@@ -180,3 +180,4 @@
   - `CAD.Sketch.Commands`: `CADAngleRays` (crossing + rays towards each segment), `CADDimensionShownIn` (angles: the angle between the segments, from the constraint's directed value: |v| or 180 - |v| by the line directions), used by chip text, list label, value edits; `CADSetDimension` takes the angle between the sides (0 < v < 180) and stores the matching directed value.
   - `CAD.Sketch.DimGraphic.AngleDim`: arc between the segment rays (smaller side), radius 46 px or 80 % of the shorter side; no room (shorter sides or arc < 40 px) -> inner arc + extra arc out past side 2 (>= 25 deg) with the value at its end.
   - Tests: 120 / reversed line 36.87 between the sides, set 45, 0 and 200 refused, arc inside the corner.
+- 2026-11-01 user: angle dimension between the sides: correct (GUI PASS).

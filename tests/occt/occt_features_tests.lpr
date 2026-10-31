@@ -4,8 +4,9 @@ program occt_features_tests;
 { Native tests: core document + OCCT features + bridge (needs OCCT).
   Run: bash scripts/test_occt.sh
   Covers: box/cylinder/boolean volumes, partial recompute after an edit,
-  Undo served from the cache (no OCCT call), errors and blocking, meshes in
-  the recompute, 8 parallel chains (correctness + INFO timing). }
+  Undo served from the cache (no OCCT call), errors and blocking, display
+  pass (only shown results get a mesh), 8 parallel chains (correctness +
+  INFO timing: mesh every result vs mesh shown results only). }
 
 uses
   {$ifdef unix}cthreads,{$endif}
@@ -71,6 +72,17 @@ begin
   Result := TOCCTShapeResult(F.Output).Volume;
 end;
 
+{ True when the feature's result has a mesh. }
+function HasMesh(D: TCADDocument; const AId: TCADId): Boolean;
+var
+  F: TCADFeature;
+begin
+  F := D.Find(AId);
+  Result := (F <> nil) and (F.Output is TOCCTShapeResult) and
+    (TOCCTShapeResult(F.Output).Mesh <> nil) and
+    (OCCT.MeshVertexCount(TOCCTShapeResult(F.Output).Mesh) > 0);
+end;
+
 function Link2(D: TCADDocument; const AUser, A, B: TCADId): Boolean;
 var
   Err: string;
@@ -97,9 +109,9 @@ begin
     Check((R.Computed = 3) and (R.Failed = 0), 'box, cylinder, cut computed');
     Check(Near(Vol(D, B), 6000), 'box volume 6000');
     Check(Near(Vol(D, Cut), (6000 - Pi * 4 * 30)), Format('cut volume %.6f', [Vol(D, Cut)]));
-    F := D.Find(Cut);
-    Check((TOCCTShapeResult(F.Output).Mesh <> nil) and
-      (OCCT.MeshVertexCount(TOCCTShapeResult(F.Output).Mesh) > 0), 'mesh made during the recompute');
+    Check(HasMesh(D, Cut) and (R.Display.Shown = 1) and (R.Display.Prepared = 1),
+      'display pass: the cut (end of the chain) is meshed');
+    Check(not HasMesh(D, B) and not HasMesh(D, C), 'inputs of the cut get no mesh');
 
     H.Execute(TCADSetParamCommand.Create(C, 'radius', CADFloat(3)));
     R := D.Recompute;
@@ -109,6 +121,7 @@ begin
     H.Undo;
     R := D.Recompute;
     Check((R.Computed = 0) and (R.CacheHits = 2), 'undo: no OCCT call, results from the cache');
+    Check(HasMesh(D, Cut) and (R.Display.Prepared = 0), 'undo: cached result keeps its mesh (no remesh)');
     Check(Near(Vol(D, Cut), (6000 - Pi * 4 * 30)), 'undo restores the volume');
 
     B2 := D.AttachFeature(NewBox(5, 0, 0, 10, 20, 30));       { overlaps half of B }
@@ -120,6 +133,17 @@ begin
     Check(Near(Vol(D, Fuse), 9000), Format('fuse volume %.6f = 9000', [Vol(D, Fuse)]));
     Check(Near(Vol(D, Common), 3000), Format('common volume %.6f = 3000', [Vol(D, Common)]));
     Check(Near(Vol(D, B), 6000), 'inputs unchanged (non-destructive)');
+    Check(HasMesh(D, Fuse) and HasMesh(D, Common) and not HasMesh(D, B2), 'new chain ends meshed, inputs not');
+
+    { Show a feature mid-tree: only the display pass runs, no OCCT model call. }
+    Check(D.SetShowMode(B, csmShow) and D.NeedsDisplay, 'show mode marks the display pass');
+    R := D.Recompute;
+    Check((R.Planned = 0) and (R.Display.Prepared = 1) and HasMesh(D, B),
+      'csmShow: the box mid-tree gets its mesh, nothing recomputed');
+    F := D.Find(Cut);
+    D.SetShowMode(Cut, csmHide);
+    Check(not D.IsShown(Cut) and D.IsShown(B), 'IsShown follows the show mode');
+    Check(F.DisplayError = '', 'no display error');
   finally
     H.Free;
     D.Free;
@@ -152,11 +176,15 @@ begin
   end;
 end;
 
-function TimeChains(AThreads: Integer; out AAllCorrect: Boolean): QWord;
+{ 8 independent plates, each with 6 holes: 8 chains of 6 booleans.
+  ATiming decides which results get a mesh. Returns the recompute time. }
+function TimeChains(AThreads: Integer; ATiming: TCADMeshTiming;
+  out AAllCorrect: Boolean; out AMeshes: Integer): QWord;
 var
   O: TCADPerformanceOptions;
   D: TCADDocument;
   Cuts: array[0..7] of TCADId;
+  Mid: TCADId;
   I, J: Integer;
   Cut, Last: TCADId;
   R: TCADRecomputeReport;
@@ -165,10 +193,11 @@ begin
   O := DefaultPerformanceOptions;
   O.Threads.RecomputeThreads := AThreads;
   O.Cache.Enabled := False;
+  O.Mesh.Timing := ATiming;
   OCCT.ApplyOptions(O);
   D := TCADDocument.CreateWithOptions(O);
   try
-    { 8 independent plates, each with 6 holes: 8 chains of 6 booleans. }
+    Mid := CADNoId;
     for I := 0 to 7 do
     begin
       Last := D.AttachFeature(NewBox(I * 100, 0, 0, 80, 80, 10));
@@ -177,16 +206,23 @@ begin
         Cut := D.AttachFeature(NewBool(CAD_BOOLEAN_CUT));
         Link2(D, Cut, Last, D.AttachFeature(NewCyl(I * 100 + 10 + J * 12, 40, -1, 4, 12)));
         Last := Cut;
+        if (I = 0) and (J = 2) then
+          Mid := Cut;                    { an intermediate result }
       end;
       Cuts[I] := Last;
     end;
     R := D.Recompute;
     Result := R.Milliseconds;
+    AMeshes := R.Display.Prepared;
     Expected := 80 * 80 * 10 - 6 * Pi * 16 * 10;
     AAllCorrect := R.Failed = 0;
     for I := 0 to 7 do
-      if not Near(Vol(D, Cuts[I]), Expected) then
+      if not Near(Vol(D, Cuts[I]), Expected) or not HasMesh(D, Cuts[I]) then
         AAllCorrect := False;
+    { Every-result mode meshes inside Compute, so the middle has a mesh and
+      the pass finds the ends ready (0 new). Shown-only: middle has none. }
+    if HasMesh(D, Mid) <> (ATiming = cmtEveryResult) then
+      AAllCorrect := False;
   finally
     D.Free;
   end;
@@ -194,14 +230,21 @@ end;
 
 procedure TestParallel;
 var
-  Serial, Parallel: QWord;
-  Ok1, Ok2: Boolean;
+  EverySerial, EveryAll, ShownSerial, ShownAll: QWord;
+  Ok1, Ok2, Ok3, Ok4: Boolean;
+  M1, M2, M3, M4: Integer;
 begin
-  Serial := TimeChains(1, Ok1);
-  Parallel := TimeChains(0, Ok2);
-  WriteLn(Format('INFO  8 plates x 6 holes (48 booleans + meshes): serial %d ms, all cores %d ms',
-    [Serial, Parallel]));
-  Check(Ok1 and Ok2, '8 parallel chains: every volume correct in both runs');
+  EverySerial := TimeChains(1, cmtEveryResult, Ok1, M1);
+  EveryAll := TimeChains(0, cmtEveryResult, Ok2, M2);
+  ShownSerial := TimeChains(1, cmtDisplayed, Ok3, M3);
+  ShownAll := TimeChains(0, cmtDisplayed, Ok4, M4);
+  WriteLn(Format('INFO  8 plates x 6 holes, mesh every result (104 meshes): serial %d ms, all cores %d ms',
+    [EverySerial, EveryAll]));
+  WriteLn(Format('INFO  8 plates x 6 holes, mesh shown only (%d meshes): serial %d ms, all cores %d ms',
+    [M4, ShownSerial, ShownAll]));
+  Check(Ok1 and Ok2 and (M1 = 0) and (M2 = 0), 'mesh every result: volumes correct, all meshed in Compute');
+  Check(Ok3 and Ok4, 'mesh shown only: every volume correct, ends meshed, middle not');
+  Check((M3 = 8) and (M4 = 8), Format('mesh shown only: 8 meshes (got %d, %d)', [M3, M4]));
   OCCT.ApplyOptions(DefaultPerformanceOptions);
 end;
 

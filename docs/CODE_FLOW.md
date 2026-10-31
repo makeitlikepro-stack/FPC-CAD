@@ -92,8 +92,24 @@ TCADDocument.ComputeOne                           cad.core.document
             (shared lock: booleans run in parallel; OptionedBoolean applies the options)
        -> WrapShape                               cad.features.occtbase
             -> OCCT.ShapeVolume                   exact B-rep volume (shared lock)
-            -> OCCT.MeshShape (if MeshInRecompute) exclusive lock, InParallel inside
-            -> TOCCTShapeResult                   cad.occt.shaperesult (owns shape + mesh)
+            -> TOCCTShapeResult                   cad.occt.shaperesult (owns shape, no mesh yet)
+            -> PrepareDisplay (only if Mesh.Timing = cmtEveryResult)
   -> TCADResultCache.Store                        the cache owns the result; freeing it
                                                   frees the OCCT handles
+```
+
+## Trace 6: display pass - meshes for shown results only (calling thread)
+
+```
+TCADDocument.Recompute                            cad.core.document
+  1. RunLevels                                    Trace 1/5 (parallel model work)
+  2. PrepareDisplay   (Mesh.Timing = cmtDisplayed; cmtManual: the caller calls it)
+       -> RunDisplayPass                          cad.core.displaypass
+            for each feature: clean + CADIsShown? (ShowMode, or UserCount = 0)
+              -> Output.DisplayReady?             yes: skip (cached result keeps its mesh)
+              -> Output.PrepareDisplay            TOCCTShapeResult -> OCCT.MeshShape
+                                                  (exclusive lock, InParallel inside)
+              -> TCADResultCache.Remeasure        cache bytes include the new mesh
+            failure -> Feature.DisplayError (model stays cfsClean)
+  report: TCADRecomputeReport.Display (Shown, Prepared, Failed, ms)
 ```

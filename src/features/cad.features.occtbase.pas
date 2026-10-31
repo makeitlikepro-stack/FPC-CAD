@@ -7,14 +7,15 @@ unit CAD.Features.OCCTBase;
   CALLED BY: CAD.Features.Box, .Cylinder, .BooleanOp (their Compute).
   CALLS:     CAD.OCCT.Bridge, CAD.OCCT.ShapeResult.
   THREADS:   worker threads (inside Compute).
-  SPEED:     meshing happens here, inside the parallel recompute, when
-             Options.Mesh.MeshInRecompute is on (the bridge serialises meshes
-             but each mesh uses all cores). }
+  SPEED:     no mesh here by default (Mesh.Timing = cmtDisplayed): the
+             document's display pass meshes only shown results after the
+             recompute. Only cmtEveryResult meshes here, for every result. }
 
 interface
 
 uses
-  SysUtils, CAD.Core.Feature, CAD.OCCT.Bridge, CAD.OCCT.ShapeResult;
+  SysUtils, CAD.Core.Feature, CAD.Config.Performance, CAD.OCCT.Bridge,
+  CAD.OCCT.ShapeResult;
 
 type
   TCADOCCTFeature = class(TCADFeature)
@@ -33,8 +34,7 @@ implementation
 function TCADOCCTFeature.WrapShape(AShape: TOCCTShapeHandle; const AWhat: string;
   out AResult: TCADResult; out AError: string): Boolean;
 var
-  Mesh: TOCCTMeshHandle;
-  Volume: Double;
+  R: TOCCTShapeResult;
 begin
   AResult := nil;
   AError := '';
@@ -43,19 +43,14 @@ begin
     AError := AWhat + ': ' + OCCT.LastError;
     Exit(False);
   end;
-  Volume := OCCT.ShapeVolume(AShape);
-  Mesh := nil;
-  if OCCT.Options.Mesh.MeshInRecompute then
+  R := TOCCTShapeResult.Create(AShape, nil, OCCT.ShapeVolume(AShape));
+  if (OCCT.Options.Mesh.Timing = cmtEveryResult) and not R.PrepareDisplay(AError) then
   begin
-    Mesh := OCCT.MeshShape(AShape, 0);         { 0 = deflection from the options }
-    if Mesh = nil then
-    begin
-      AError := AWhat + ': mesh: ' + OCCT.LastError;
-      OCCT.FreeShape(AShape);
-      Exit(False);
-    end;
+    AError := AWhat + ': ' + AError;
+    R.Free;                              { frees the shape too }
+    Exit(False);
   end;
-  AResult := TOCCTShapeResult.Create(AShape, Mesh, Volume);
+  AResult := R;
   Result := True;
 end;
 

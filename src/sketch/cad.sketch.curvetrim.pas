@@ -107,6 +107,11 @@ begin
   if R <= GeoEpsilon then Exit;
   if E.Kind = sekCircle then
     Exit(True);
+  { At an arc endpoint floating-point angle wrapping can map -epsilon
+    to 2*pi-epsilon. Accept the geometric vertex before angle clipping. }
+  if (Hypot(X - S.PointX(E.P1), Y - S.PointY(E.P1)) <= 1e-6) or
+     (Hypot(X - S.PointX(E.P2), Y - S.PointY(E.P2)) <= 1e-6) then
+    Exit(True);
   A0 := ArcTan2(S.PointY(E.P1) - CY, S.PointX(E.P1) - CX);
   A1 := ArcTan2(S.PointY(E.P2) - CY, S.PointX(E.P2) - CX);
   AP := ArcTan2(Y - CY, X - CX);
@@ -431,9 +436,10 @@ var
     end;
   end;
 
-  function NewAnglePoint(Angle: Double): Integer;
+  function NewAnglePoint(Angle: Double; ABoundary: Integer): Integer;
   begin
-    Result := Trial.AddPoint(CX + R * Cos(Angle), CY + R * Sin(Angle));
+    Result := CADAddTrimIntersectionPoint(Trial, ABoundary,
+      CX + R * Cos(Angle), CY + R * Sin(Angle));
   end;
 
 begin
@@ -504,8 +510,8 @@ begin
         if HasSurvivors then
         begin
           { Complement of the deleted CCW interval: To -> From + 1. }
-          P := NewAnglePoint(ToT * 2 * Pi);
-          L := NewAnglePoint(FromT * 2 * Pi);
+          P := NewAnglePoint(ToT * 2 * Pi, APlan.RightBoundary);
+          L := NewAnglePoint(FromT * 2 * Pi, APlan.LeftBoundary);
           AddArcPiece(P, L);
         end;
       end
@@ -518,12 +524,12 @@ begin
         Sweep := CCWSweep(AStart, AEnd);
         if FromT > ParamEpsilon then
         begin
-          P := NewAnglePoint(AStart + FromT * Sweep);
+          P := NewAnglePoint(AStart + FromT * Sweep, APlan.LeftBoundary);
           AddArcPiece(E.P1, P);
         end;
         if ToT < 1 - ParamEpsilon then
         begin
-          P := NewAnglePoint(AStart + ToT * Sweep);
+          P := NewAnglePoint(AStart + ToT * Sweep, APlan.RightBoundary);
           AddArcPiece(P, E.P2);
         end;
       end;

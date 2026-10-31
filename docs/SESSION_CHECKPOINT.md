@@ -42,7 +42,7 @@ System OCCT 7.6.3 (bridge also checked against 7.8.1 headers).
   Left/Top (X/Y are centre offsets, Y up).
 
 ## Open
-1. Core test result after step 3 not reported yet (`bash scripts/test_core.sh`).
+1. (done) Core tests after step 3: 80/80 PASS.
 2. Parallel chains give no gain (306 vs 307 ms): OCCT booleans already use all
    cores (RunParallel). Next measure: RunParallel off + parallel chains.
 3. Stage 4 step 4: GPU compute jobs with CPU fallback.

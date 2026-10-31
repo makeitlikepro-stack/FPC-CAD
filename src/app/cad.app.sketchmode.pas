@@ -650,6 +650,13 @@ var
 begin
   if not FActive then
     Exit;
+  if FExtrudePreviewActive then
+  begin
+    { Live solid preview: allow the viewport's normal left-drag orbit.
+      Turn preview off to resume sketch-point drag manipulation. }
+    AHandled := False;
+    Exit;
+  end;
   AHandled := True;                         { sketch mode: the view does not orbit }
   if FLineEditActive then
     Exit;                                    { editing is click-only, not point drag }
@@ -1033,6 +1040,12 @@ begin
     else
       Exit('Extend: click near a line end to reach a boundary | Esc: Select');
   end;
+  if FExtrudePreviewActive and (FExtrudePreviewError <> '') then
+    Exit('Extrude preview: ' + FExtrudePreviewError);
+  if FExtrudePreviewActive then
+    Exit(Format('Extrude %.3f mm | Click a region to select | ' +
+      'Shift+click to add | Left-drag to orbit the preview',
+      [FExtrudeOptions.Depth]));
   if FSmartDim then
     Exit('Smart Dimension: click a line, circle or arc (two items: distance or angle; ' +
       'a line then empty space: its length) | Esc: clear / Select');

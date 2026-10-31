@@ -530,6 +530,55 @@ begin
   end;
 end;
 
+procedure TestLineTrimmedByArc;
+var
+  S: TCADSketch;
+  Line, Hit: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(-10, 3, 10, 3);
+    S.AddArc(S.AddPoint(0, 0), S.AddPoint(5, 0), S.AddPoint(-5, 0));
+    Check(CADPlanSketchTrim(S, Line, 0, 3, Plan, Err) and
+      Near(Plan.FromT, 0.3) and Near(Plan.ToT, 0.7),
+      'curve trim: finite upper arc intersects line at x=-4 and x=4');
+    Check(CADApplySketchTrim(S, Plan, Err),
+      'curve trim: remove line portion bounded by an arc');
+    Check(CADSketchHit(S, 0, 3, 0.2, Hit) = chkNone,
+      'curve trim: line trimmed against arc has a real hole');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestCircleTrimmedByLongArc;
+var
+  S: TCADSketch;
+  Circle, Hit: Integer;
+  Plan: TCADTrimPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Circle := S.AddCircle(S.AddPoint(0, 0), 5);
+    { A CCW 340-degree arc, starting at 270 and ending at 250 degrees,
+      contains both circle-circle intersections at about 127 and 233. }
+    S.AddArc(S.AddPoint(6, 0), S.AddPoint(6, -5),
+      S.AddPoint(6 + 5 * Cos(DegToRad(250)),
+        5 * Sin(DegToRad(250))));
+    Check(CADPlanSketchTrim(S, Circle, 5, 0, Plan, Err) and
+      (Plan.FromT < 0) and (Plan.ToT > 0),
+      'curve trim: an arc boundary can cut a full circle at two crossings');
+    Check(CADApplySketchTrim(S, Plan, Err) and
+      (CADSketchHit(S, 5, 0, 0.2, Hit) = chkNone),
+      'curve trim: selected short circle section is removed against arc');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestRadiusAndConstraintGuard;
 var
   S: TCADSketch;
@@ -682,6 +731,8 @@ begin
   TestArcCutByLine;
   TestArcCutByCircleAndArc;
   TestLineTrimmedByCircle;
+  TestLineTrimmedByArc;
+  TestCircleTrimmedByLongArc;
   TestRadiusAndConstraintGuard;
   TestCircleWithOneCrossing;
   TestArcMiddleSegment;

@@ -276,7 +276,8 @@ procedure TCADSketchDims.EditDimension(AConstraint: Integer);
 var
   C: TCADSketchConstraint;
 begin
-  if not FMode.Active or (AConstraint < 0) then
+  if not FMode.Active or (FMode.Sketch = nil) or
+     (AConstraint < 0) or (AConstraint >= FMode.Sketch.ConstraintCount) then
     Exit;
   C := FMode.Sketch.Constraints[AConstraint];
   if not (C.Active and CADIsDimension(C.Kind)) then
@@ -327,9 +328,15 @@ begin
     Exit;
   end;
   Err := FMode.SetDimension(FEditConstraint, V);
-  CloseEdit;
   if Err <> '' then
+  begin
+    { Keep the input visible so the user can correct a rejected value. }
     Status(Err);
+    FUI.FocusWidget(FEdit);
+    FEdit.SelectAll;
+    Exit;
+  end;
+  CloseEdit;
   Refresh;
   if Assigned(FOnEdited) then
     FOnEdited(Self);

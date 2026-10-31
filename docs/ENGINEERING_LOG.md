@@ -46,3 +46,4 @@
 - `CADFillMeshFromResult` in MeshConvert (OCCT shape result -> mesh; the only type check, in the view layer).
 - `src/view/cad.view.viewporttarget.pas`: target on `TUIViewport3D` (FindObject / AddObject with the given id, starts hidden, Invalidate3D). Engine has no RemoveObject: a removed feature keeps a hidden object. Compiled only with the full engine (step 3 app); not in the tests.
 - Test `tests/view/view_sync_tests.lpr` (fake target + fake results, no OCCT/GL): first sync only the chain end, no-op sync without redraw, param change, csmShow mid-tree, hide/show without converting, filler failure + retry, detach, Reset, id mapping. Added to `scripts/test_view.sh`. NOT RUN here (no FPC).
+- 2026-10-31 user run: `bash scripts/test_view.sh` view mesh 36/36 PASS (640k vertices 28 ms), view sync 17/17 PASS, first compile. Merged to dev.

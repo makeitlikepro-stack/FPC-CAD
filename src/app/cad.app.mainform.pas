@@ -22,7 +22,8 @@ uses
   OpenGL.Render.Picking3D,
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
-  CAD.Core.Values, CAD.Sketch.Editor, CAD.Features.Sketch, CAD.Features.Extrude,
+  CAD.Core.Values, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
+  CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims;
 
 type
@@ -43,10 +44,14 @@ type
     FSketchMode: TCADSketchMode;
     FSketchPanel: TCADSketchPanel;
     FSketchDims: TCADSketchDims;
+    FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
+    FLastSketch: TCADId;
     FSketchCount: Integer;
     procedure HostSetupUI(Sender: TObject);
     procedure NewSketch(Sender: TObject);
     procedure FinishClick(Sender: TObject);
+    procedure EditSketchClick(Sender: TObject);
+    function SketchToEdit: TCADId;
     procedure SketchChanged(Sender: TObject);
     procedure SketchStatus(Sender: TObject; const AText: string);
     procedure RelationClick(Sender: TObject; AConstraint: Integer);
@@ -80,6 +85,8 @@ var
   EngineDir: string;
 begin
   inherited CreateNew(AOwner);
+  FEditSketch := CADNoId;
+  FLastSketch := CADNoId;
   Caption := 'FPC-CAD';
   Width := 1200;
   Height := 760;
@@ -159,6 +166,7 @@ begin
   FSketchPanel := TCADSketchPanel.Create(UI, FPanel, FSketchMode);
   FSketchPanel.OnNewSketch := @NewSketch;
   FSketchPanel.OnFinish := @FinishClick;
+  FSketchPanel.OnEditSketch := @EditSketchClick;
   FSketchPanel.OnStatus := @SketchStatus;
   FSketchDims := TCADSketchDims.Create(UI, FHost.Root, FView, FSketchMode);
   FSketchDims.OnStatus := @SketchStatus;
@@ -300,13 +308,21 @@ var
   F: TCADFeature;
   Err: string;
 begin
-  if (FSketchMode.Sketch <> nil) and (FSketchMode.Sketch.EntityCount > 0) then
+  if CADIdValid(FEditSketch) and (FSketchMode.Sketch <> nil) then
+  begin
+    { an edited sketch: its feature gets the new text; the extrude follows }
+    FDoc.SetParam(FEditSketch, 'geometry', CADSketchValue(FSketchMode.Sketch));
+    FLastSketch := FEditSketch;
+    FEditSketch := CADNoId;
+  end
+  else if (FSketchMode.Sketch <> nil) and (FSketchMode.Sketch.EntityCount > 0) then
   begin
     Inc(FSketchCount);
     F := TCADSketchFeature.Create;
     F.Name := Format('Sketch %d', [FSketchCount]);
     F.SetParamValue('geometry', CADSketchValue(FSketchMode.Sketch));
     Sk := FDoc.AttachFeature(F);
+    FLastSketch := Sk;
     F := TCADExtrudeFeature.Create;
     F.Name := Format('Extrude %d', [FSketchCount]);
     F.SetParamValue('length', CADFloat(10));
@@ -323,7 +339,57 @@ begin
   if FDoc = nil then
     Exit;
   ShowDocumentObjects(False);
+  FEditSketch := CADNoId;
   FSketchMode.Enter([0, 0, 0], [1, 0, 0], [0, 0, 1]);
+  Layout;
+end;
+
+{ The sketch of the selected body (an Extrude's input, or a Sketch), else the
+  last sketch made or edited. }
+function TCADMainForm.SketchToEdit: TCADId;
+var
+  F: TCADFeature;
+begin
+  Result := CADNoId;
+  F := nil;
+  if FView.Selection.ObjectId <> 0 then
+    F := FDoc.Find(TCADViewSync.FeatureOf(FView.Selection.ObjectId));
+  if (F is TCADExtrudeFeature) and (Length(F.Inputs) > 0) then
+    F := FDoc.Find(F.Inputs[0]);
+  if F is TCADSketchFeature then
+    Exit(F.Id);
+  F := FDoc.Find(FLastSketch);
+  if F is TCADSketchFeature then
+    Result := F.Id;
+end;
+
+procedure TCADMainForm.EditSketchClick(Sender: TObject);
+var
+  Id: TCADId;
+  S: TCADSketch;
+begin
+  if (FDoc = nil) or FSketchMode.Active then
+    Exit;
+  Id := SketchToEdit;
+  if not CADIdValid(Id) then
+  begin
+    FStatus.Text := 'Select a body made from a sketch first (click it), then Edit sketch';
+    Exit;
+  end;
+  S := TCADSketch.Create;
+  try
+    CADSketchFromText(FDoc.Find(Id).GetParamValue('geometry').S, S);
+  except
+    on E: Exception do
+    begin
+      S.Free;
+      FStatus.Text := 'Cannot open the sketch: ' + E.Message;
+      Exit;
+    end;
+  end;
+  ShowDocumentObjects(False);
+  FEditSketch := Id;
+  FSketchMode.EnterSketch(S);
   Layout;
 end;
 

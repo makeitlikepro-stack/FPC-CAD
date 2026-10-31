@@ -27,14 +27,14 @@ type
     FMode: TCADSketchMode;
     FSelRevision: string;               { selection text last loaded into the edit }
     FToolLabel, FConsLabel, FInfo: TUILabel;
-    FTools: array[0..10] of TUIButton;
+    FTools: array[0..11] of TUIButton;
     FCommands: array[TCADSketchCommand] of TUIButton;
     FList: TUIListBox;
     FValue: TUIEdit;
     FSet, FDelete: TUIButton;
     FListMap: array of Integer;         { list row -> constraint index }
     FListRevision: Cardinal;
-    FOnNewSketch, FOnFinish: TNotifyEvent;
+    FOnNewSketch, FOnFinish, FOnEditSketch: TNotifyEvent;
     FOnStatus: TCADStatusEvent;
     procedure ToolClick(Sender: TObject);
     procedure CommandClick(Sender: TObject);
@@ -59,14 +59,16 @@ type
     procedure SelectConstraint(AConstraint: Integer);
     property OnNewSketch: TNotifyEvent read FOnNewSketch write FOnNewSketch;
     property OnFinish: TNotifyEvent read FOnFinish write FOnFinish;
+    { Edit the sketch of the selected body (or the last one). }
+    property OnEditSketch: TNotifyEvent read FOnEditSketch write FOnEditSketch;
     property OnStatus: TCADStatusEvent read FOnStatus write FOnStatus;
   end;
 
 implementation
 
 const
-  ToolText: array[0..10] of string = ('New sketch (XY)', 'Select', 'Line', 'Rect',
-    'Circle', 'Arc', 'Arc 3pt', 'Point', 'Cancel', 'Normal view', 'Finish + Extrude 10');
+  ToolText: array[0..11] of string = ('New sketch', 'Select', 'Line', 'Rect',
+    'Circle', 'Arc', 'Arc 3pt', 'Point', 'Cancel', 'Normal view', 'Finish sketch', 'Edit sketch');
   CommandText: array[TCADSketchCommand] of string = ('Horiz', 'Vert', 'Coinc', 'Parallel',
     'Perp', 'Equal', 'Tangent', 'Concentric', 'Midpoint', 'On obj', 'Symm', 'Fix', 'Dimension',
     'Dist X', 'Dist Y');
@@ -140,7 +142,8 @@ begin
   Y := ATop;
   Place(FToolLabel, ALeft, Y, AWidth, 24);
   Y := Y + 26;
-  Place(FTools[0], ALeft, Y, AWidth, RowH);
+  Place(FTools[0], ALeft, Y, (AWidth - Gap) / 2, RowH);
+  Place(FTools[11], ALeft + (AWidth + Gap) / 2, Y, (AWidth - Gap) / 2, RowH);
   Y := Y + RowH + Gap;
   for I := 1 to 9 do
     Place(FTools[I], ALeft + ((I - 1) mod 3) * (CW + Gap), Y + ((I - 1) div 3) * (RowH + Gap), CW, RowH);
@@ -201,6 +204,7 @@ begin
     8: FMode.Cancel;
     9: FMode.NormalView;
     10: if FMode.Active and Assigned(FOnFinish) then FOnFinish(Self);
+    11: if Assigned(FOnEditSketch) then FOnEditSketch(Self);
   end;
 end;
 

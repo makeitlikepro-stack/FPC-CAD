@@ -56,6 +56,8 @@ type
     destructor Destroy; override;
     { Starts a new empty sketch on the plane (origin, X, normal). }
     procedure Enter(const AOrigin, AXDir, ANormal: array of Double);
+    { Opens an existing sketch (takes ownership), Select tool. }
+    procedure EnterSketch(ASketch: TCADSketch);
     { Leaves sketch mode; the caller takes the sketch text first. }
     procedure Leave;
     procedure SetTool(ATool: TCADSketchTool);
@@ -114,13 +116,23 @@ begin
 end;
 
 procedure TCADSketchMode.Enter(const AOrigin, AXDir, ANormal: array of Double);
+var
+  S: TCADSketch;
+begin
+  S := TCADSketch.Create;
+  S.SetPlane(AOrigin, AXDir, ANormal);
+  EnterSketch(S);
+  FEditor.SetTool(sktLine);
+end;
+
+procedure TCADSketchMode.EnterSketch(ASketch: TCADSketch);
 begin
   FEditor.Free;
   FSketch.Free;
-  FSketch := TCADSketch.Create;
-  FSketch.SetPlane(AOrigin, AXDir, ANormal);
+  FSketch := ASketch;
   FEditor := TCADSketchEditor.Create(FSketch);
-  FEditor.SetTool(sktLine);
+  FEditor.SetTool(sktSelect);
+  FEditor.Resolve;                         { states and DOF of a loaded sketch }
   FActive := True;
   FView.OnMouseDown := @MouseDown;
   FView.OnMouseUp := @MouseUp;

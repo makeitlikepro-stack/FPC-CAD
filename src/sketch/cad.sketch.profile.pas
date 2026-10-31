@@ -255,12 +255,16 @@ var
   Lo, Hi: array[0..1] of Double;
 begin
   Result := 1;
-  if S.PointCount = 0 then
+  I := 0;
+  while (I < S.PointCount) and (not S.Points[I].Active) do
+    Inc(I);
+  if I >= S.PointCount then
     Exit;
-  Lo[0] := S.PointX(0); Hi[0] := Lo[0];
-  Lo[1] := S.PointY(0); Hi[1] := Lo[1];
-  for I := 1 to S.PointCount - 1 do
+  Lo[0] := S.PointX(I); Hi[0] := Lo[0];
+  Lo[1] := S.PointY(I); Hi[1] := Lo[1];
+  for I := I + 1 to S.PointCount - 1 do
   begin
+    if not S.Points[I].Active then Continue;
     Lo[0] := Min(Lo[0], S.PointX(I)); Hi[0] := Max(Hi[0], S.PointX(I));
     Lo[1] := Min(Lo[1], S.PointY(I)); Hi[1] := Max(Hi[1], S.PointY(I));
   end;

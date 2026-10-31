@@ -3,7 +3,7 @@ program region_tests;
 
 uses
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Regions,
-  CAD.Sketch.Profile, CAD.Sketch.Text;
+  CAD.Sketch.ContourSelection, CAD.Sketch.Profile, CAD.Sketch.Text;
 
 var
   Total, Failed:Integer;
@@ -195,6 +195,50 @@ begin
   finally S.Free; end;
 end;
 
+procedure TestRegionSelectionPersistence;
+var
+  S:TCADSketch;
+  P,Q:TCADSketchProfile;
+  Seeds,Loaded:TCADContourSeeds;
+  Indices:TCADRegionIndices;
+  Saved:string;
+begin
+  S:=TCADSketch.Create;
+  try
+    Rectangle(S,0,0,10,10);
+    S.AddLineXY(5,-2,5,12);
+    S.AddLineXY(-2,5,12,5);
+    Check(CADBuildRegions(S,P),'region select: detect four faces');
+    SetLength(Seeds,0);
+    Check(CADClickContour(P,2,2,False,Seeds) and (Length(Seeds)=1),
+      'region select: click to select one face');
+    Check(CADClickContour(P,8,8,True,Seeds) and (Length(Seeds)=2),
+      'region select: Shift+click to add another face');
+    Indices:=CADContourIndices(P,Seeds);
+    Check((Length(Indices)=2) and (Indices[0]<>Indices[1]),
+      'region select: two distinct selected contours');
+    Q:=CADRegionProfileSubset(P,Indices);
+    Check(Length(Q.Faces)=2,'region select: OCCT subset contains only selected faces');
+    Saved:=CADContoursToText(Seeds);
+    Check(CADContoursFromText(Saved,Loaded) and
+      (Length(Loaded)=2) and
+      (Length(CADContourIndices(P,Loaded))=2),
+      'region select: saved contour seeds round trip correctly');
+    Check(CADClickContour(P,2,2,True,Seeds) and (Length(Seeds)=1),
+      'region select: Shift+click on an active contour toggles it off');
+    Check(CADClickContour(P,8,8,True,Seeds) and (Length(Seeds)=0) and
+      (CADContoursToText(Seeds)='ALL'),
+      'region select: no selection restores legacy ALL behaviour');
+    Indices:=CADContourIndices(P,Seeds);
+    Check(Length(Indices)=4,
+      'region select: ALL sends all four regions for Extrude');
+    Check(not CADContoursFromText('v1:broken',Loaded),
+      'region select: malformed contour text is refused');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Total:=0; Failed:=0;
   TestFourAreas;
@@ -204,6 +248,7 @@ begin
   TestNestedHoles;
   TestConstructionAndUnconnected;
   TestOverlapRejection;
+  TestRegionSelectionPersistence;
   if Failed=0 then
     WriteLn(Format('PASS: non-destructive region extraction (%d checks)',[Total]))
   else

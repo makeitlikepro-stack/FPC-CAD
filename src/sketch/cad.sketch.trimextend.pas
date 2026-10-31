@@ -43,6 +43,13 @@ function CADPlanLineEdit(ASketch: TCADSketch; ALine: Integer; AClickX, AClickY: 
 function CADApplyLineEdit(ASketch: TCADSketch; const APlan: TCADLineEditPlan;
   out AError: string): Boolean;
 
+{ Create a cut endpoint attached to the boundary. If it coincides with an
+  existing boundary vertex, share that point's ID (strongest coincidence).
+  Otherwise constrain it to the finite boundary's supporting line/circle.
+  This keeps the new endpoint on the boundary during subsequent edits. }
+function CADAddTrimIntersectionPoint(S: TCADSketch; ABoundary: Integer;
+  X, Y: Double): Integer;
+
 { Find the bounded span containing the click, including the middle. }
 function CADPlanLineTrim(ASketch: TCADSketch; ALine: Integer;
   AClickX, AClickY: Double; out APlan: TCADTrimPlan; out AError: string): Boolean;
@@ -327,6 +334,34 @@ begin
 end;
 
 
+{ The intersections are computed from existing geometry, but the
+  resulting endpoints must be part of the parametric constraint graph. }
+function CADAddTrimIntersectionPoint(S: TCADSketch; ABoundary: Integer;
+  X, Y: Double): Integer;
+const
+  JoinTol = 1e-6;
+var
+  E: TCADSketchEntity;
+begin
+  if (ABoundary < 0) or (ABoundary >= S.EntityCount) then
+    raise ECADSketch.Create('trim: missing boundary for intersection point');
+  E := S.Entities[ABoundary];
+  if not E.Active then
+    raise ECADSketch.Create('trim: boundary is no longer active');
+  if E.Kind in [sekLine, sekArc] then
+  begin
+    if Hypot(S.PointX(E.P1) - X, S.PointY(E.P1) - Y) <= JoinTol then
+      Exit(E.P1);
+    if Hypot(S.PointX(E.P2) - X, S.PointY(E.P2) - Y) <= JoinTol then
+      Exit(E.P2);
+  end;
+  Result := S.AddPoint(X, Y);
+  if E.Kind = sekLine then
+    S.PointOnLine(Result, ABoundary)
+  else
+    S.PointOnCircle(Result, ABoundary);
+end;
+
 { Return the interval between the nearest crossings around the click.
   The boundary lines are finite segments, but the target is treated as
   one segment of a larger infinite straight line. }
@@ -485,12 +520,14 @@ begin
       between two crossings, two pieces are retained, with a real gap. }
     if APlan.FromT > ParamEpsilon then
     begin
-      P := Trial.AddPoint(AX + APlan.FromT * DX, AY + APlan.FromT * DY);
+      P := CADAddTrimIntersectionPoint(Trial, APlan.LeftBoundary,
+        AX + APlan.FromT * DX, AY + APlan.FromT * DY);
       AddPiece(Target.P1, P);
     end;
     if APlan.ToT < 1 - ParamEpsilon then
     begin
-      P := Trial.AddPoint(AX + APlan.ToT * DX, AY + APlan.ToT * DY);
+      P := CADAddTrimIntersectionPoint(Trial, APlan.RightBoundary,
+        AX + APlan.ToT * DX, AY + APlan.ToT * DY);
       AddPiece(P, Target.P2);
     end;
     Trial.RemoveEntity(APlan.TargetEntity);

@@ -32,6 +32,9 @@ type
 
 { Nearest point within ATol, else nearest entity within ATol. }
 function CADSketchHit(S: TCADSketch; X, Y, ATol: Double; out AIndex: Integer): TCADHitKind;
+{ Edit tools must pick an entity even when the cursor is near its endpoint.
+  Returns -1 when no active entity is within the tolerance. }
+function CADSketchEntityHit(S: TCADSketch; X, Y, ATol: Double): Integer;
 { Adds or removes (toggle) a picked item. }
 procedure CADSelectionToggle(var ASel: TCADSketchSelection; AKind: TCADHitKind; AIndex: Integer);
 procedure CADSelectionClear(var ASel: TCADSketchSelection);
@@ -129,6 +132,29 @@ begin
       else
         Result := Min(Hypot(X - S.PointX(E.P1), Y - S.PointY(E.P1)),
           Hypot(X - S.PointX(E.P2), Y - S.PointY(E.P2)));
+    end;
+  end;
+end;
+
+function CADSketchEntityHit(S: TCADSketch; X, Y, ATol: Double): Integer;
+var
+  I: Integer;
+  Best, D: Double;
+begin
+  Result := -1;
+  if S = nil then Exit;
+  Best := ATol;
+  for I := 0 to S.EntityCount - 1 do
+  begin
+    if not S.Entities[I].Active then Continue;
+    D := EntityDistance(S, I, X, Y);
+    if (D < Best) or
+       ((Result >= 0) and (Abs(D - Best) <= 1e-9) and
+        (S.Entities[I].Kind = sekLine) and
+        (S.Entities[Result].Kind <> sekLine)) then
+    begin
+      Best := D;
+      Result := I;
     end;
   end;
 end;

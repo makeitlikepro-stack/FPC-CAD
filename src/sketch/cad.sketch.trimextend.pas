@@ -342,6 +342,9 @@ const
   JoinTol = 1e-6;
 var
   E: TCADSketchEntity;
+  C: TCADSketchConstraint;
+  I: Integer;
+  HasRelation: Boolean;
 begin
   if (ABoundary < 0) or (ABoundary >= S.EntityCount) then
     raise ECADSketch.Create('trim: missing boundary for intersection point');
@@ -355,11 +358,43 @@ begin
     if Hypot(S.PointX(E.P2) - X, S.PointY(E.P2) - Y) <= JoinTol then
       Exit(E.P2);
   end;
-  Result := S.AddPoint(X, Y);
-  if E.Kind = sekLine then
-    S.PointOnLine(Result, ABoundary)
-  else
-    S.PointOnCircle(Result, ABoundary);
+
+  { At a repeated crossing, use the same existing active vertex for BOTH
+    trimmed entities. Independent PointOnObject constraints allow sliding
+    and are not a substitute for an actual shared Coincident vertex. }
+  Result := -1;
+  for I := 0 to S.PointCount - 1 do
+    if S.Points[I].Active and
+       (Hypot(S.PointX(I) - X, S.PointY(I) - Y) <= JoinTol) then
+    begin
+      Result := I;
+      Break;
+    end;
+  if Result < 0 then
+    Result := S.AddPoint(X, Y);
+
+  { A vertex on the boundary interior needs an explicit point-on-object
+    relation. A previously shared vertex may already have that constraint. }
+  HasRelation := False;
+  for I := 0 to S.ConstraintCount - 1 do
+  begin
+    C := S.Constraints[I];
+    if C.Active and (C.A = Result) and (C.B = ABoundary) and
+       (((E.Kind = sekLine) and (C.Kind = sckPointOnLine)) or
+        ((E.Kind in [sekArc, sekCircle]) and
+          (C.Kind = sckPointOnCircle))) then
+    begin
+      HasRelation := True;
+      Break;
+    end;
+  end;
+  if not HasRelation then
+  begin
+    if E.Kind = sekLine then
+      S.PointOnLine(Result, ABoundary)
+    else
+      S.PointOnCircle(Result, ABoundary);
+  end;
 end;
 
 { Return the interval between the nearest crossings around the click.

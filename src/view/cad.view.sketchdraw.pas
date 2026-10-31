@@ -16,7 +16,7 @@ unit CAD.View.SketchDraw;
 interface
 
 uses
-  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Editor,
+  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Commands,
   OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData;
 
 { Pixel (AX, AY: top-left origin) of a AWidth x AHeight viewport -> sketch
@@ -28,8 +28,9 @@ function CADScreenToSketch(ACamera: TViewport3DCamera; AWidth, AHeight: Double;
 procedure CADCameraToSketch(ACamera: TViewport3DCamera; S: TCADSketch);
 { Sketch entities as strokes (construction too). Edge id = entity + 1. }
 procedure CADBuildSketchMesh(S: TCADSketch; AMesh: TV3DMeshData);
-{ Editor previews, the snap marker (square of AMarkerSize mm) and an origin
-  cross of AOriginSize mm. }
+{ Editor previews, the snap marker (square of AMarkerSize mm), selection
+  markers (diamonds on selected points, line middles and circle centres) and
+  an origin cross of AOriginSize mm. }
 procedure CADBuildEditorMesh(Ed: TCADSketchEditor; AMarkerSize, AOriginSize: Double;
   AMesh: TV3DMeshData);
 
@@ -189,6 +190,11 @@ begin
   AddBoundsVertices(AMesh);
 end;
 
+procedure AddDiamond(S: TCADSketch; AMesh: TV3DMeshData; X, Y, H: Double);
+begin
+  AMesh.AddPolylineEdge([P3(S, X - H, Y), P3(S, X, Y - H), P3(S, X + H, Y), P3(S, X, Y + H)], True, 4);
+end;
+
 procedure CADBuildEditorMesh(Ed: TCADSketchEditor; AMarkerSize, AOriginSize: Double;
   AMesh: TV3DMeshData);
 var
@@ -196,6 +202,7 @@ var
   I: Integer;
   Pv: TCADSketchPreview;
   A1, A2, H, X, Y: Double;
+  E: TCADSketchEntity;
 begin
   S := Ed.Sketch;
   AMesh.Clear;
@@ -226,6 +233,19 @@ begin
     Y := Ed.Snap.Y;
     AMesh.AddPolylineEdge([P3(S, X - H, Y - H), P3(S, X + H, Y - H), P3(S, X + H, Y + H),
       P3(S, X - H, Y + H)], True, 3);
+  end;
+  { selection: diamonds }
+  H := 0.6 * AMarkerSize;
+  for I := 0 to High(Ed.Selection.Points) do
+    AddDiamond(S, AMesh, S.PointX(Ed.Selection.Points[I]), S.PointY(Ed.Selection.Points[I]), H);
+  for I := 0 to High(Ed.Selection.Entities) do
+  begin
+    E := S.Entities[Ed.Selection.Entities[I]];
+    if E.Kind = sekLine then
+      AddDiamond(S, AMesh, 0.5 * (S.PointX(E.P1) + S.PointX(E.P2)),
+        0.5 * (S.PointY(E.P1) + S.PointY(E.P2)), H)
+    else
+      AddDiamond(S, AMesh, S.PointX(E.Center), S.PointY(E.Center), H);
   end;
   AddBoundsVertices(AMesh);
 end;

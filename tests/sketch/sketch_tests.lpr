@@ -9,12 +9,14 @@ program sketch_tests;
   4. Minimum-norm move: dragging a corner moves only what it must.
   5. Plane mapping, errors, speed (INFO).
   6. Profiles: loops, faces, holes, islands, orientation, areas, errors.
-  7. Editor tools: snaps, automatic constraints, previews, cancel. }
+  7. Editor tools: snaps, automatic constraints, previews, cancel, drag.
+  8. Constraint commands: picking, selection, each button, redundant and
+     conflicting constraints taken back, dimensions edited, labels. }
 
 uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Constraints, CAD.Sketch.Solver,
-  CAD.Sketch.Profile, CAD.Sketch.Editor;
+  CAD.Sketch.Profile, CAD.Sketch.Editor, CAD.Sketch.Commands;
 
 var
   Checks, Failures: Integer;
@@ -763,6 +765,89 @@ begin
   end;
 end;
 
+function Sel(const APoints, AEntities: array of Integer): TCADSketchSelection;
+var
+  I: Integer;
+begin
+  Result := Default(TCADSketchSelection);
+  SetLength(Result.Points, Length(APoints));
+  for I := 0 to High(APoints) do
+    Result.Points[I] := APoints[I];
+  SetLength(Result.Entities, Length(AEntities));
+  for I := 0 to High(AEntities) do
+    Result.Entities[I] := AEntities[I];
+end;
+
+procedure TestCommands;
+var
+  S: TCADSketch;
+  P0, P1, P2, P3, L0, L1, L2, L3, Cir, C, Idx: Integer;
+  Err: string;
+  Sl: TCADSketchSelection;
+  X1: Double;
+  R: TCADSketchSolveResult;
+begin
+  S := TCADSketch.Create;
+  try
+    P0 := S.AddPoint(0, 0);
+    P1 := S.AddPoint(40, 1);
+    P2 := S.AddPoint(41, 21);
+    P3 := S.AddPoint(-1, 20);
+    L0 := S.AddLine(P0, P1);
+    L1 := S.AddLine(P1, P2);
+    L2 := S.AddLine(P2, P3);
+    L3 := S.AddLine(P3, P0);
+    Cir := S.AddCircle(S.AddPoint(100, 0), 5);
+
+    { picking }
+    Check((CADSketchHit(S, 40.3, 1.2, 1, Idx) = chkPoint) and (Idx = P1), 'hit: corner point');
+    Check((CADSketchHit(S, 20, 0.8, 1, Idx) = chkEntity) and (Idx = L0), 'hit: bottom line');
+    Check((CADSketchHit(S, 104.8, 0, 1, Idx) = chkEntity) and (Idx = Cir), 'hit: circle rim');
+    Check(CADSketchHit(S, 60, 60, 1, Idx) = chkNone, 'hit: empty space');
+    Sl := Default(TCADSketchSelection);
+    CADSelectionToggle(Sl, chkEntity, L0);
+    CADSelectionToggle(Sl, chkPoint, P2);
+    CADSelectionToggle(Sl, chkEntity, L0);
+    Check((Length(Sl.Entities) = 0) and (Length(Sl.Points) = 1), 'selection: toggle adds and removes');
+
+    { buttons }
+    Check(CADApplyCommand(S, Sel([P0], []), sccFix, C, Err), 'fix the origin corner');
+    Check(CADApplyCommand(S, Sel([], [L0]), sccHorizontal, C, Err) and (C >= 0), 'horizontal: ' + Err);
+    Check(not CADApplyCommand(S, Sel([], [L0]), sccHorizontal, C, Err) and (Pos('implied', Err) > 0) and
+      not S.Constraints[S.ConstraintCount - 1].Active, 'second horizontal is implied: taken back');
+    Check(CADApplyCommand(S, Sel([], [L0, L1]), sccPerpendicular, C, Err), 'perpendicular: ' + Err);
+    Check(CADApplyCommand(S, Sel([], [L2, L0]), sccParallel, C, Err), 'parallel: ' + Err);
+    Check(CADApplyCommand(S, Sel([], [L3]), sccVertical, C, Err), 'vertical: ' + Err);
+    Check(not CADApplyCommand(S, Sel([], [L0, L1]), sccTangent, C, Err) and (Pos('does not fit', Err) > 0),
+      'tangent on two lines does not fit');
+
+    X1 := S.PointX(P1);
+    Check(CADApplyCommand(S, Sel([], [L0]), sccDimension, C, Err) and
+      (S.Constraints[C].Kind = sckLength) and Near(S.PointX(P1), X1), 'dimension: current length, nothing moves');
+    Check(CADSetDimension(S, C, 50, Err) and Near(S.PointX(P1), 50), 'set the length to 50');
+    Check(Pos('length 50', CADConstraintLabel(S, C)) > 0, 'label shows the length: ' + CADConstraintLabel(S, C));
+    Check(not CADSetDimension(S, C, -5, Err) and (Pos('positive', Err) > 0) and Near(S.PointX(P1), 50),
+      'negative size refused');
+    Check(not CADApplyCommand(S, Sel([], [L2]), sccDimension, C, Err) and (Pos('implied', Err) > 0),
+      'top length is implied by the rectangle: taken back');
+    Check(CADApplyCommand(S, Sel([], [L0, L1]), sccEqual, C, Err) and Near(S.PointY(P2), 50), 'equal: square 50');
+    R := CADSolveSketch(S);
+    Check((R.Status = cssSolved) and (R.DOF = 0), Format('square is fully constrained, DOF %d', [R.DOF]));
+
+    { conflicting: a diagonal dimension that the square cannot take }
+    Check(CADApplyCommand(S, Sel([P0, P2], []), sccDimension, C, Err) = False, 'diagonal of a fixed square is implied');
+    Check(Near(S.PointX(P2), 50) and Near(S.PointY(P2), 50), 'taken back: the square did not move');
+
+    { circle: diameter dimension, tangent to the extended top line }
+    Check(CADApplyCommand(S, Sel([], [Cir]), sccDimension, C, Err) and (S.Constraints[C].Kind = sckDiameter) and
+      Near(S.Constraints[C].Value, 10), 'circle dimension is its diameter');
+    Check(CADApplyCommand(S, Sel([], [L2, Cir]), sccTangent, C, Err) and
+      Near(Abs(S.PointY(S.Entities[Cir].Center) - 50), 5), 'tangent: circle touches the top line');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -775,6 +860,7 @@ begin
   TestProfiles;
   TestEditor;
   TestEditorDrag;
+  TestCommands;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

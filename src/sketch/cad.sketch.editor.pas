@@ -26,7 +26,7 @@ unit CAD.Sketch.Editor;
 interface
 
 uses
-  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Solver;
+  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Solver, CAD.Sketch.Commands;
 
 type
   TCADSketchTool = (sktSelect, sktPoint, sktLine, sktRectangle, sktCircle, sktArc, sktArc3);
@@ -64,6 +64,7 @@ type
     FLastSolve: TCADSketchSolveResult;
     FCursorX, FCursorY: Double;
     FDragPoint: Integer;        { -1 = no drag }
+    FSelection: TCADSketchSelection;
     function FindSnap(X, Y: Double; AFromPoint: Integer): TCADSnap;
     function ResolvePoint(const ASnap: TCADSnap): Integer;
     function OriginPoint: Integer;
@@ -106,6 +107,19 @@ type
     function DragTo(X, Y: Double): Boolean;
     procedure EndDrag;
     function Dragging: Boolean;
+    { Select tool: pick the point / entity under (X, Y); AAdd (Shift) toggles
+      it in the selection, otherwise it replaces the selection. Empty
+      space clears it. }
+    procedure SelectAt(X, Y: Double; AAdd: Boolean);
+    procedure ClearSelection;
+    { Constraint button on the selection (CAD.Sketch.Commands); clears the
+      selection on success and refreshes LastSolve. }
+    function Apply(ACommand: TCADSketchCommand; out AConstraint: Integer; out AError: string): Boolean;
+    { Dimension value (degrees for angles); refreshes LastSolve. }
+    function SetDimension(AConstraint: Integer; AValue: Double; out AError: string): Boolean;
+    property Selection: TCADSketchSelection read FSelection;
+    { Solve again (after a change made outside the editor) and refresh LastSolve. }
+    procedure Resolve;
   end;
 
 implementation
@@ -139,7 +153,47 @@ end;
 procedure TCADSketchEditor.SetTool(ATool: TCADSketchTool);
 begin
   Cancel;
+  if ATool <> sktSelect then
+    ClearSelection;
   FTool := ATool;
+end;
+
+procedure TCADSketchEditor.Resolve;
+begin
+  Solve;
+end;
+
+procedure TCADSketchEditor.ClearSelection;
+begin
+  CADSelectionClear(FSelection);
+end;
+
+procedure TCADSketchEditor.SelectAt(X, Y: Double; AAdd: Boolean);
+var
+  Kind: TCADHitKind;
+  Index: Integer;
+begin
+  Kind := CADSketchHit(FSketch, X, Y, FSnapTolerance, Index);
+  if not AAdd then
+    ClearSelection;
+  if Kind <> chkNone then
+    CADSelectionToggle(FSelection, Kind, Index);
+end;
+
+function TCADSketchEditor.Apply(ACommand: TCADSketchCommand; out AConstraint: Integer;
+  out AError: string): Boolean;
+begin
+  Result := CADApplyCommand(FSketch, FSelection, ACommand, AConstraint, AError);
+  if Result then
+    ClearSelection;
+  Solve;
+end;
+
+function TCADSketchEditor.SetDimension(AConstraint: Integer; AValue: Double;
+  out AError: string): Boolean;
+begin
+  Result := CADSetDimension(FSketch, AConstraint, AValue, AError);
+  Solve;
 end;
 
 procedure TCADSketchEditor.Cancel;

@@ -23,7 +23,7 @@ uses
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Sketch.Editor, CAD.Features.Sketch, CAD.Features.Extrude,
-  CAD.App.DemoScene, CAD.App.SketchMode;
+  CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel;
 
 type
   TCADMainForm = class(TForm)
@@ -40,13 +40,14 @@ type
     FTitle, FRadiusLabel, FStatus: TUILabel;
     FLines: array[0..5] of TUILabel;   { 0..1 pick, 2..5 timing (labels are one line) }
     FRadius: TUISlider;
-    FSketchLabel: TUILabel;
-    FSketchButtons: array[0..10] of TUIButton;
     FSketchMode: TCADSketchMode;
+    FSketchPanel: TCADSketchPanel;
     FSketchCount: Integer;
     procedure HostSetupUI(Sender: TObject);
-    procedure SketchClick(Sender: TObject);
+    procedure NewSketch(Sender: TObject);
+    procedure FinishClick(Sender: TObject);
     procedure SketchChanged(Sender: TObject);
+    procedure SketchStatus(Sender: TObject; const AText: string);
     procedure FinishSketch;
     procedure ShowDocumentObjects(AVisible: Boolean);
     procedure HostResize(Sender: TObject);
@@ -68,8 +69,6 @@ var
 implementation
 
 const
-  SketchButtonText: array[0..10] of string = ('New sketch (XY)', 'Select', 'Line', 'Rect',
-    'Circle', 'Arc', 'Arc 3pt', 'Point', 'Cancel', 'Normal view', 'Finish + Extrude 10');
   PanelWidth = 260;
   StatusHeight = 26;
   StartRadius = 4.0;
@@ -95,6 +94,7 @@ end;
 
 destructor TCADMainForm.Destroy;
 begin
+  FreeAndNil(FSketchPanel);
   FreeAndNil(FSketchMode);
   { Sync and target point at the viewport; the document's cache frees OCCT
     shapes, so it goes before the bridge. Widgets belong to the host. }
@@ -151,17 +151,12 @@ begin
   FRadius.OnChange := @RadiusChanged;
   for I := 0 to High(FLines) do
     FLines[I] := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
-  FSketchLabel := UI.CreateLabel(FPanel, PanelWidth - 24, 24);
-  FSketchLabel.Text := 'Sketch';
-  for I := 0 to High(FSketchButtons) do
-  begin
-    FSketchButtons[I] := UI.CreateButton(FPanel, 70, 30);
-    FSketchButtons[I].Text := SketchButtonText[I];
-    FSketchButtons[I].Tag := I;
-    FSketchButtons[I].OnClick := @SketchClick;
-  end;
   FSketchMode := TCADSketchMode.Create(FView);
   FSketchMode.OnChanged := @SketchChanged;
+  FSketchPanel := TCADSketchPanel.Create(UI, FPanel, FSketchMode);
+  FSketchPanel.OnNewSketch := @NewSketch;
+  FSketchPanel.OnFinish := @FinishClick;
+  FSketchPanel.OnStatus := @SketchStatus;
   FStatus := UI.CreateLabel(FHost.Root, 100, StatusHeight);
   FStatus.TextColor := tColor4.Create(0.85, 0.87, 0.9, 1);
   FRadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
@@ -197,6 +192,7 @@ end;
 procedure TCADMainForm.Layout;
 var
   W, H, VW, VH, I, Y: Integer;
+  Demo: Boolean;
 
   procedure Place(AWidget: TUIWidget; ALeft, ATop, AWidth, AHeight: Double);
   begin
@@ -214,27 +210,30 @@ begin
   Place(FView, 0, 0, VW, VH);
   Place(FPanel, VW, 0, Max(1, W - VW), VH);
   Place(FStatus, 8, VH, Max(1, W - 16), StatusHeight);
-  Place(FTitle, 12, 10, PanelWidth - 24, 26);
-  Place(FRadiusLabel, 12, 44, PanelWidth - 24, 24);
-  Place(FRadius, 12, 70, PanelWidth - 24, 28);
-  Y := 112;
+  { the demo part gives its room to the sketch panel while sketching }
+  Demo := not FSketchMode.Active;
+  FTitle.Visible := Demo;
+  FRadiusLabel.Visible := Demo;
+  FRadius.Visible := Demo;
   for I := 0 to High(FLines) do
+    FLines[I].Visible := Demo;
+  Y := 10;
+  if Demo then
   begin
-    if I = 2 then
-      Inc(Y, 16);
-    Place(FLines[I], 12, Y, PanelWidth - 24, 24);
-    Inc(Y, 24);
+    Place(FTitle, 12, 10, PanelWidth - 24, 26);
+    Place(FRadiusLabel, 12, 44, PanelWidth - 24, 24);
+    Place(FRadius, 12, 70, PanelWidth - 24, 28);
+    Y := 112;
+    for I := 0 to High(FLines) do
+    begin
+      if I = 2 then
+        Inc(Y, 16);
+      Place(FLines[I], 12, Y, PanelWidth - 24, 24);
+      Inc(Y, 24);
+    end;
+    Inc(Y, 16);
   end;
-  { sketch: one wide button, 3 x 3 tools, 1 wide }
-  Inc(Y, 16);
-  Place(FSketchLabel, 12, Y, PanelWidth - 24, 24);
-  Inc(Y, 28);
-  Place(FSketchButtons[0], 12, Y, PanelWidth - 24, 30);
-  Inc(Y, 36);
-  for I := 1 to 9 do
-    Place(FSketchButtons[I], 12 + ((I - 1) mod 3) * 80, Y + ((I - 1) div 3) * 36, 74, 30);
-  Inc(Y, 108);
-  Place(FSketchButtons[10], 12, Y, PanelWidth - 24, 30);
+  FSketchPanel.Layout(12, Y, PanelWidth - 24);
 end;
 
 procedure TCADMainForm.HostResize(Sender: TObject);
@@ -313,32 +312,30 @@ begin
   Rebuild(True);
 end;
 
-procedure TCADMainForm.SketchClick(Sender: TObject);
+procedure TCADMainForm.NewSketch(Sender: TObject);
 begin
   if FDoc = nil then
     Exit;
-  case TUIWidget(Sender).Tag of
-    0:
-      begin
-        ShowDocumentObjects(False);
-        FSketchMode.Enter([0, 0, 0], [1, 0, 0], [0, 0, 1]);
-      end;
-    1: FSketchMode.SetTool(sktSelect);
-    2: FSketchMode.SetTool(sktLine);
-    3: FSketchMode.SetTool(sktRectangle);
-    4: FSketchMode.SetTool(sktCircle);
-    5: FSketchMode.SetTool(sktArc);
-    6: FSketchMode.SetTool(sktArc3);
-    7: FSketchMode.SetTool(sktPoint);
-    8: FSketchMode.Cancel;
-    9: FSketchMode.NormalView;
-    10: if FSketchMode.Active then
-         FinishSketch;
-  end;
+  ShowDocumentObjects(False);
+  FSketchMode.Enter([0, 0, 0], [1, 0, 0], [0, 0, 1]);
+  Layout;
+end;
+
+procedure TCADMainForm.FinishClick(Sender: TObject);
+begin
+  FinishSketch;
+  Layout;
+end;
+
+procedure TCADMainForm.SketchStatus(Sender: TObject; const AText: string);
+begin
+  FStatus.Text := AText;
 end;
 
 procedure TCADMainForm.SketchChanged(Sender: TObject);
 begin
+  if FSketchPanel <> nil then
+    FSketchPanel.Refresh;
   if FSketchMode.Active then
     FStatus.Text := FSketchMode.StatusText
   else

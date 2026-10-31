@@ -18,7 +18,9 @@ interface
 uses
   Classes, SysUtils, Math, Controls,
   OpenGL.UI.Viewport3D, OpenGL.UI.Viewport3D.Camera, OpenGL.Render.Viewport3DMeshData,
-  CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.View.SketchDraw;
+  OpenGL.Render.Viewport3DPass,
+  CAD.Sketch.Model, CAD.Sketch.Editor, CAD.Sketch.Solver, CAD.Sketch.Commands,
+  CAD.View.SketchDraw;
 
 const
   CAD_SKETCH_OBJECT_ID = 900001;      { far above feature ids (slot + 1) }
@@ -55,6 +57,11 @@ type
     procedure Cancel;
     procedure NormalView;
     function StatusText: string;
+    { Constraint buttons, dimension edit and delete; '' = done, else the
+      message for the status line. }
+    function ApplyCommand(ACommand: TCADSketchCommand): string;
+    function SetDimension(AConstraint: Integer; AValue: Double): string;
+    function RemoveConstraint(AConstraint: Integer): string;
     property Active: Boolean read FActive;
     property Sketch: TCADSketch read FSketch;
     property Editor: TCADSketchEditor read FEditor;
@@ -128,6 +135,7 @@ begin
   O := FView.FindObject(CAD_SKETCH_PREVIEW_ID);
   if O <> nil then
     O.Visible := False;
+  FView.Pass.EdgeColor := Viewport3DRGBA(0.08, 0.09, 0.11, 1.0);
   FView.Invalidate3D;
   Changed;
 end;
@@ -173,6 +181,11 @@ end;
 procedure TCADSketchMode.RefreshSketch;
 begin
   CADBuildSketchMesh(FSketch, ObjectMesh(CAD_SKETCH_OBJECT_ID));
+  { fully constrained sketch: green strokes }
+  if FActive and (FEditor.LastSolve.Status = cssSolved) and (FEditor.LastSolve.DOF = 0) then
+    FView.Pass.EdgeColor := Viewport3DRGBA(0.05, 0.55, 0.2, 1.0)
+  else
+    FView.Pass.EdgeColor := Viewport3DRGBA(0.08, 0.09, 0.11, 1.0);
   FView.Invalidate3D;
 end;
 
@@ -265,8 +278,57 @@ begin
   if (Button <> mbLeft) or not ToSketch(X, Y, U, V) then
     Exit;
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
-  if FEditor.Click(U, V) then
+  if FEditor.Tool = sktSelect then
+    FEditor.SelectAt(U, V, ssShift in Shift)
+  else if FEditor.Click(U, V) then
     RefreshSketch;
+  RefreshPreview;
+  Changed;
+end;
+
+function TCADSketchMode.ApplyCommand(ACommand: TCADSketchCommand): string;
+var
+  C: Integer;
+begin
+  Result := '';
+  if not FActive then
+    Exit('no sketch');
+  if not FEditor.Apply(ACommand, C, Result) then
+  begin
+    if Result = '' then
+      Result := 'not applied';
+  end;
+  RefreshSketch;
+  RefreshPreview;
+  Changed;
+end;
+
+function TCADSketchMode.SetDimension(AConstraint: Integer; AValue: Double): string;
+begin
+  Result := '';
+  if not FActive then
+    Exit('no sketch');
+  FEditor.SetDimension(AConstraint, AValue, Result);
+  RefreshSketch;
+  RefreshPreview;
+  Changed;
+end;
+
+function TCADSketchMode.RemoveConstraint(AConstraint: Integer): string;
+begin
+  Result := '';
+  if not FActive then
+    Exit('no sketch');
+  try
+    FSketch.RemoveConstraint(AConstraint);
+  except
+    on E: Exception do
+      Result := E.Message;
+  end;
+  FEditor.ClearSelection;
+  FEditor.Cancel;
+  FEditor.Resolve;
+  RefreshSketch;
   RefreshPreview;
   Changed;
 end;

@@ -281,6 +281,7 @@ begin
     if I = APlan.TargetEntity then
       Continue;
     E := ASketch.Entities[I];
+    if not E.Active then Continue;
     if ((E.Kind in [sekLine, sekArc]) and
         ((E.P1 = EndpointPoint) or (E.P2 = EndpointPoint))) or
        ((E.Kind in [sekCircle, sekArc]) and (E.Center = EndpointPoint)) then

@@ -606,13 +606,34 @@ var
   F: TCADFeature;
   Err: string;
 begin
+  if (FExtrudePanel <> nil) and FExtrudePanel.Visible then
+  begin
+    { A typed value is committed even when the user clicks Exit Sketch
+      directly instead of pressing Enter in the depth input. }
+    if not ReadExtrudeDepth then Exit;
+    FSketchMode.SetExtrudePreview(True, FExtrudeDraft);
+    if FSketchMode.ExtrudePreviewError <> '' then
+    begin
+      FExtrudeStatus.Text := FSketchMode.ExtrudePreviewError;
+      Exit;                              { do not commit an invalid solid }
+    end;
+    FExtrudeSaved := FExtrudeDraft;
+  end;
   if CADIdValid(FEditSketch) and (FSketchMode.Sketch <> nil) then
   begin
-    { an edited sketch: its feature gets the new text; the extrude follows }
+    { Edited sketch and its existing linked extrusion retain their identity. }
     FDoc.SetParam(FEditSketch, 'geometry', CADSketchValue(FSketchMode.Sketch));
     FDoc.SetParam(FEditSketch, 'contours', CADText(FSketchMode.ContoursText));
+    if CADIdValid(FEditExtrude) and
+       (FDoc.Find(FEditExtrude) is TCADExtrudeFeature) then
+    begin
+      FDoc.SetParam(FEditExtrude, 'length', CADFloat(FExtrudeSaved.Depth));
+      FDoc.SetParam(FEditExtrude, 'symmetric', CADBool(FExtrudeSaved.Symmetric));
+      FDoc.SetParam(FEditExtrude, 'reversed', CADBool(FExtrudeSaved.Reversed));
+    end;
     FLastSketch := FEditSketch;
     FEditSketch := CADNoId;
+    FEditExtrude := CADNoId;
   end
   else if (FSketchMode.Sketch <> nil) and (FSketchMode.Sketch.EntityCount > 0) then
   begin
@@ -625,11 +646,14 @@ begin
     FLastSketch := Sk;
     F := TCADExtrudeFeature.Create;
     F.Name := Format('Extrude %d', [FSketchCount]);
-    F.SetParamValue('length', CADFloat(10));
+    F.SetParamValue('length', CADFloat(FExtrudeSaved.Depth));
+    F.SetParamValue('symmetric', CADBool(FExtrudeSaved.Symmetric));
+    F.SetParamValue('reversed', CADBool(FExtrudeSaved.Reversed));
     Ex := FDoc.AttachFeature(F);
     FDoc.TryLink(Ex, Sk, Err);
   end;
   FSketchMode.Leave;
+  FExtrudePanel.Visible := False;
   ShowDocumentObjects(True);
   Rebuild(True);
 end;
@@ -738,6 +762,13 @@ var
 begin
   if (FDoc = nil) or FSketchMode.Active then
     Exit;
+  FEditExtrude := CADNoId;
+  if W.View.Selection.ObjectId <> 0 then
+  begin
+    { Find the selected extrusion before SketchToEdit maps it to its input. }
+    if FDoc.Find(TCADViewSync.FeatureOf(W.View.Selection.ObjectId)) is TCADExtrudeFeature then
+      FEditExtrude := TCADViewSync.FeatureOf(W.View.Selection.ObjectId);
+  end;
   Id := SketchToEdit;
   if not CADIdValid(Id) then
   begin

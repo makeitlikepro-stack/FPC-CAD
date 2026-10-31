@@ -114,6 +114,10 @@ begin
       AddLoop(P.Faces[F].Holes[H]);
   end;
   SetLength(ALoopSizes, NL);
+  { The region arrangement also stores outside-face cycles which are NOT
+    referenced by selected bounded faces. Remove the unused edge capacity
+    before passing the buffer to OCCT. }
+  SetLength(AEdges, NE * 9);
 end;
 
 function TCADSketchFeature.Compute(const AInputs: array of TCADResult;

@@ -939,6 +939,129 @@ begin
   end;
 end;
 
+{ These sequences mirror the user screenshots: trim one of a pair of
+  intersecting objects, then trim the untouched boundary that the first
+  operation attached new endpoint constraints to. This used to fail with
+  "relations that need explicit remapping". }
+procedure TestSequentialLineToLineTrim;
+var
+  S: TCADSketch;
+  Horizontal, LeftBoundary, RightBoundary: Integer;
+  First, Second: TCADTrimPlan;
+  Err: string;
+  SurvivingLine, SurvivingBoundary: TCADSketchEntity;
+begin
+  S := TCADSketch.Create;
+  try
+    Horizontal := S.AddLineXY(-10, 0, 10, 0);
+    LeftBoundary := S.AddLineXY(-3, -8, -3, 8);
+    RightBoundary := S.AddLineXY(3, -8, 3, 8);
+    Check(CADPlanSketchTrim(S, Horizontal, 0, 0, First, Err) and
+      CADApplySketchTrim(S, First, Err),
+      'consecutive line trim: cut centre between the two crossing boundaries');
+    Check(CADPlanSketchTrim(S, LeftBoundary, -3, 5, Second, Err) and
+      CADApplySketchTrim(S, Second, Err),
+      'consecutive line trim: cut OTHER line after it gained PointOnLine (' + Err + ')');
+    SurvivingLine := S.Entities[3];
+    SurvivingBoundary := S.Entities[S.EntityCount-1];
+    Check(SurvivingLine.Active and SurvivingBoundary.Active and
+      Near(S.PointY(SurvivingBoundary.P2), 0) and
+      (SurvivingLine.P2 = SurvivingBoundary.P2),
+      'consecutive line trim: two retained pieces share one real intersection node');
+    Check(S.Entities[RightBoundary].Active and
+      (not S.Entities[LeftBoundary].Active),
+      'consecutive line trim: the other boundary is untouched');
+    Check(CADPlanSketchTrim(S, RightBoundary, 3, 5, Second, Err) and
+      CADApplySketchTrim(S, Second, Err),
+      'consecutive line trim: third cut works after the first two (' + Err + ')');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestSequentialLineToCircleTrim;
+var
+  S: TCADSketch;
+  Line, Circle, Arc, LeftPiece, RightPiece: Integer;
+  First, Second: TCADTrimPlan;
+  Err: string;
+  E: TCADSketchEntity;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(-10, 0, 10, 0);
+    Circle := S.AddCircle(S.AddPoint(0, 0), 5);
+    Check(CADPlanSketchTrim(S, Line, 0, 0, First, Err) and
+      CADApplySketchTrim(S, First, Err),
+      'consecutive curve trim: first cut line interior against the circle');
+    LeftPiece := S.EntityCount - 2;
+    RightPiece := S.EntityCount - 1;
+    Check(CADPlanSketchTrim(S, Circle, 0, 5, Second, Err) and
+      CADApplySketchTrim(S, Second, Err),
+      'consecutive curve trim: cut CIRCLE with incoming PointOnCircle (' + Err + ')');
+    Arc := S.EntityCount - 1;
+    E := S.Entities[Arc];
+    Check(E.Active and (E.Kind = sekArc) and
+      (S.Entities[LeftPiece].Active) and (S.Entities[RightPiece].Active) and
+      (S.Entities[LeftPiece].P2 = E.P1) and
+      (S.Entities[RightPiece].P1 = E.P2),
+      'consecutive curve trim: retained arc remains connected to both line pieces');
+    Check(not S.Entities[Circle].Active,
+      'consecutive curve trim: original circle is removed, not hidden visually');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestSequentialCircleToCircleTrim;
+var
+  S: TCADSketch;
+  Circle1, Circle2: Integer;
+  First, Second: TCADTrimPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Circle1 := S.AddCircle(S.AddPoint(0, 0), 5);
+    Circle2 := S.AddCircle(S.AddPoint(6, 0), 5);
+    Check(CADPlanSketchTrim(S, Circle1, 5, 0, First, Err) and
+      CADApplySketchTrim(S, First, Err),
+      'consecutive circles: trim the right segment from first circle');
+    Check(CADPlanSketchTrim(S, Circle2, 11, 0, Second, Err) and
+      CADApplySketchTrim(S, Second, Err),
+      'consecutive circles: trim second circle with incoming PointOnCircle (' + Err + ')');
+    Check((not S.Entities[Circle1].Active) and
+      (not S.Entities[Circle2].Active) and
+      S.Entities[S.EntityCount-1].Active and
+      (S.Entities[S.EntityCount-1].Kind = sekArc),
+      'consecutive circles: both cuts persist as real arcs');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestSequentialArcToLineTrim;
+var
+  S: TCADSketch;
+  Arc, Boundary: Integer;
+  First, Second: TCADTrimPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Arc := S.AddArc(S.AddPoint(0, 0), S.AddPoint(5, 0), S.AddPoint(-5, 0));
+    Boundary := S.AddLineXY(0, -7, 0, 7);
+    Check(CADPlanSketchTrim(S, Arc, 3.535533906, 3.535533906,
+      First, Err) and CADApplySketchTrim(S, First, Err),
+      'consecutive arc trim: cut right half of arc with a line boundary');
+    Check(CADPlanSketchTrim(S, Boundary, 0, 4, Second, Err) and
+      CADApplySketchTrim(S, Second, Err),
+      'consecutive arc trim: boundary line can still be trimmed (' + Err + ')');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -963,6 +1086,10 @@ begin
   TestInvisibleCurveIsNotBoundary;
   TestArcMiddleSegment;
   TestWholeCircleAndArcDeletion;
+  TestSequentialLineToLineTrim;
+  TestSequentialLineToCircleTrim;
+  TestSequentialCircleToCircleTrim;
+  TestSequentialArcToLineTrim;
   TestTrimPointOnLineFollowsBoundary;
   TestTrimAtArcEndpointAndEntityPicking;
   TestCircleConnectionAndNearTangentCrossings;

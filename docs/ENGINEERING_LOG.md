@@ -15,3 +15,4 @@
 - Checks here: `g++ -fsyntax-only -Wall` of occt_bridge.cpp against OCCT 7.8.1 headers (from the OCCT GitHub tag; headers only, nothing built): 0 errors, 0 warnings, after fixing one real error (`deflection` still used in TessellateShape). C struct measured with gcc: 88 bytes, doubles at 8..32, ints at 40..84.
 - Native test `tests/occt/occt_bridge_tests.lpr` + `scripts/test_occt.sh`: ABI offsets, mapping, round trip, mismatch rejected, prism volume 6000, cut volume 6000 - pi*4*30, non-destructive cut, INFO meshing time InParallel off/on. NOT RUN here (no FPC, no OCCT libraries).
 - 2026-10-31 user run: bridge built with system OCCT 7.8 (libTK*.so.7.8). Pascal: `Fatal: identifier expected but LIBRARY found` — `Library` is a reserved word, not allowed as a unit name part. Renamed CAD.OCCT.Library -> CAD.OCCT.Bridge.
+- 2026-10-31 user run: `bash scripts/test_occt.sh` 19/19 PASS, OCCT 7.8.1. Fine mesh x5: InParallel off 156 ms, on 63 ms (~2.5x). Merged to dev.

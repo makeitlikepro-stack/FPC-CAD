@@ -678,7 +678,8 @@ begin
   Best := FSnapTolerance;
   for I := 0 to FSketch.PointCount - 1 do
   begin
-    if FSketch.Fixed[FSketch.Points[I].XParam] then
+    if (not FSketch.Points[I].Active) or
+       FSketch.Fixed[FSketch.Points[I].XParam] then
       Continue;
     D := Hypot(FSketch.PointX(I) - X, FSketch.PointY(I) - Y);
     if D <= Best then

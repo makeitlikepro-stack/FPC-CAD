@@ -125,6 +125,72 @@ begin
   end;
 end;
 
+procedure TestCommitAndSafety;
+var
+  S: TCADSketch;
+  Line, P2: Integer;
+  Plan: TCADLineEditPlan;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 10, 0);
+    S.AddLineXY(4, -3, 4, 3);
+    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, Plan, Err) and
+      CADApplyLineEdit(S, Plan, Err) and
+      Near(S.PointX(S.Entities[Line].P2), 4),
+      'commit: isolated line endpoint is trimmed to the boundary (' + Err + ')');
+    S.AddLineXY(8, -3, 8, 3);
+    Check(CADPlanLineEdit(S, Line, 4, 0, lemExtend, Plan, Err) and
+      CADApplyLineEdit(S, Plan, Err) and
+      Near(S.PointX(S.Entities[Line].P2), 8),
+      'commit: isolated line endpoint is extended (' + Err + ')');
+  finally
+    S.Free;
+  end;
+
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 10, 0);
+    S.AddLineXY(4, -3, 4, 3);
+    P2 := S.Entities[Line].P2;
+    S.AddLine(P2, S.AddPoint(12, 2));
+    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, Plan, Err) and
+      not CADApplyLineEdit(S, Plan, Err) and
+      Near(S.PointX(P2), 10),
+      'commit: shared endpoint is refused without moving connected line');
+  finally
+    S.Free;
+  end;
+
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 10, 0);
+    S.AddLineXY(4, -3, 4, 3);
+    P2 := S.Entities[Line].P2;
+    S.FixPoint(P2);
+    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, Plan, Err) and
+      not CADApplyLineEdit(S, Plan, Err) and
+      Near(S.PointX(P2), 10),
+      'commit: a fixed endpoint is refused');
+  finally
+    S.Free;
+  end;
+
+  S := TCADSketch.Create;
+  try
+    Line := S.AddLineXY(0, 0, 10, 0);
+    S.AddLineXY(4, -3, 4, 3);
+    S.Length(Line, 10);
+    Check(CADPlanLineEdit(S, Line, 9, 0, lemTrim, Plan, Err) and
+      not CADApplyLineEdit(S, Plan, Err) and
+      Near(S.PointX(S.Entities[Line].P2), 10),
+      'commit: length-constrained line is refused');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -132,6 +198,7 @@ begin
   TestMiddleTrim;
   TestExtend;
   TestNoBoundary;
+  TestCommitAndSafety;
   if Failures = 0 then
     WriteLn(Format('PASS  trim/extend planning: %d checks', [Checks]))
   else

@@ -7,11 +7,13 @@ program sketch_tests;
   2. Slot: 2 lines + 2 arcs, tangent, radius, centre distance.
   3. Every constraint kind on a small case with a known answer.
   4. Minimum-norm move: dragging a corner moves only what it must.
-  5. Plane mapping, errors, speed (INFO). }
+  5. Plane mapping, errors, speed (INFO).
+  6. Profiles: loops, faces, holes, islands, orientation, areas, errors. }
 
 uses
   {$ifdef unix}cthreads,{$endif}
-  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Constraints, CAD.Sketch.Solver;
+  SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Constraints, CAD.Sketch.Solver,
+  CAD.Sketch.Profile;
 
 var
   Checks, Failures: Integer;
@@ -404,6 +406,177 @@ begin
   end;
 end;
 
+{ ------------------------------------------------------------ profiles }
+
+{ Rectangle of four lines through new points; AClockwise walks it the other way. }
+procedure AddRect(S: TCADSketch; X0, Y0, W, H: Double; AClockwise: Boolean = False);
+var
+  P0, P1, P2, P3: Integer;
+begin
+  P0 := S.AddPoint(X0, Y0);
+  if AClockwise then
+  begin
+    P1 := S.AddPoint(X0, Y0 + H);
+    P2 := S.AddPoint(X0 + W, Y0 + H);
+    P3 := S.AddPoint(X0 + W, Y0);
+  end
+  else
+  begin
+    P1 := S.AddPoint(X0 + W, Y0);
+    P2 := S.AddPoint(X0 + W, Y0 + H);
+    P3 := S.AddPoint(X0, Y0 + H);
+  end;
+  S.AddLine(P0, P1);
+  S.AddLine(P1, P2);
+  S.AddLine(P2, P3);
+  S.AddLine(P3, P0);
+end;
+
+function Profile(S: TCADSketch; out P: TCADSketchProfile; const AName: string): Boolean;
+begin
+  Result := CADBuildProfile(S, P);
+  Check(Result, AName + ': profile builds (' + P.Error + ')');
+end;
+
+procedure TestProfiles;
+var
+  S: TCADSketch;
+  P: TCADSketchProfile;
+  A1, B1, A2, B2, C1, C2, Q0, Q1, I, Arcs: Integer;
+  Ok: Boolean;
+begin
+  { clockwise rectangle -> one face, outer loop turned counter-clockwise }
+  S := TCADSketch.Create;
+  try
+    AddRect(S, 0, 0, 60, 40, True);
+    if Profile(S, P, 'rectangle') then
+    begin
+      Check((Length(P.Loops) = 1) and (Length(P.Faces) = 1) and (Length(P.Loops[0].Edges) = 4),
+        'rectangle: 1 loop, 1 face, 4 edges');
+      Check(Near(P.Loops[0].Area, 2400) and Near(P.Faces[0].Area, 2400), 'rectangle: area 2400, counter-clockwise');
+      Ok := True;
+      for I := 0 to 3 do
+        Ok := Ok and Near(P.Loops[0].Edges[I].X2, P.Loops[0].Edges[(I + 1) mod 4].X1) and
+          Near(P.Loops[0].Edges[I].Y2, P.Loops[0].Edges[(I + 1) mod 4].Y1);
+      Check(Ok, 'rectangle: edges run end to start');
+    end;
+    { construction diagonal is ignored }
+    S.SetConstruction(S.AddLine(0, 2), True);
+    Check(Profile(S, P, 'rectangle + construction') and (Length(P.Faces) = 1), 'construction line ignored');
+    { a circle hole }
+    S.AddCircle(S.AddPoint(30, 20), 5);
+    if Profile(S, P, 'rectangle with hole') then
+    begin
+      Check((Length(P.Faces) = 1) and (Length(P.Faces[0].Holes) = 1), 'hole: 1 face with 1 hole');
+      Check(Near(P.Faces[0].Area, 2400 - 25 * Pi) and (P.Loops[P.Faces[0].Holes[0]].Area < 0),
+        'hole: face area 2400 - 25 pi, hole clockwise');
+    end;
+    { an open profile }
+    S.AddLine(S.AddPoint(100, 0), S.AddPoint(120, 0));
+    Check(not CADBuildProfile(S, P) and (Pos('open', P.Error) > 0) and (P.ErrorPoint >= 0),
+      'open line is an error with its point: ' + P.Error);
+  finally
+    S.Free;
+  end;
+
+  { slot: lines + arcs }
+  S := TCADSketch.Create;
+  try
+    A1 := S.AddPoint(0, -10);
+    B1 := S.AddPoint(50, -10);
+    A2 := S.AddPoint(50, 10);
+    B2 := S.AddPoint(0, 10);
+    C1 := S.AddPoint(0, 0);
+    C2 := S.AddPoint(50, 0);
+    S.AddLine(A1, B1);
+    S.AddArc(C2, B1, A2);
+    S.AddLine(A2, B2);
+    S.AddArc(C1, B2, A1);
+    if Profile(S, P, 'slot') then
+    begin
+      Arcs := 0;
+      for I := 0 to High(P.Loops[0].Edges) do
+        if P.Loops[0].Edges[I].Kind = pekArc then
+          Inc(Arcs);
+      Check((Length(P.Faces) = 1) and (Arcs = 2), 'slot: one face, 2 arcs');
+      Check(Near(P.Faces[0].Area, 1000 + 100 * Pi, 1e-9), Format('slot: area 1000 + 100 pi, got %.6f', [P.Faces[0].Area]));
+    end;
+  finally
+    S.Free;
+  end;
+
+  { D shape: a line and an arc between the same two points }
+  S := TCADSketch.Create;
+  try
+    Q0 := S.AddPoint(10, 0);
+    Q1 := S.AddPoint(-10, 0);
+    S.AddArc(S.AddPoint(0, 0), Q0, Q1);
+    S.AddLine(Q1, Q0);
+    Check(Profile(S, P, 'D shape') and Near(P.Faces[0].Area, 50 * Pi, 1e-9), 'D shape: half circle area');
+  finally
+    S.Free;
+  end;
+
+  { nesting: square, square hole, island; plus a separate square }
+  S := TCADSketch.Create;
+  try
+    AddRect(S, 0, 0, 100, 100);
+    AddRect(S, 20, 20, 60, 60, True);
+    AddRect(S, 40, 40, 20, 20);
+    AddRect(S, 200, 0, 10, 10);
+    if Profile(S, P, 'nested') then
+    begin
+      Check(Length(P.Faces) = 3, Format('nested: 3 faces (outer, island, separate), got %d', [Length(P.Faces)]));
+      Ok := False;
+      for I := 0 to High(P.Faces) do
+        if Near(P.Faces[I].Area, 10000 - 3600) and (Length(P.Faces[I].Holes) = 1) then
+          Ok := True;
+      Check(Ok, 'nested: outer face 10000 - 3600 with one hole');
+      Ok := False;
+      for I := 0 to High(P.Faces) do
+        if Near(P.Faces[I].Area, 400) and (P.Loops[P.Faces[I].Outer].Depth = 2) then
+          Ok := True;
+      Check(Ok, 'nested: island 400 at depth 2');
+    end;
+  finally
+    S.Free;
+  end;
+
+  { ends joined by Coincident and by position }
+  S := TCADSketch.Create;
+  try
+    A1 := S.AddLineXY(0, 0, 10, 0);
+    B1 := S.AddLineXY(10, 0.5, 10, 10);
+    C1 := S.AddLineXY(10, 10, 0, 10);       { joined to B1 by position }
+    C2 := S.AddLineXY(0, 10, 0, 0);
+    S.Coincident(S.Entities[A1].P2, S.Entities[B1].P1);
+    S.FixPoint(S.Entities[A1].P2);            { the solve moves B1's start onto it }
+    CADSolveSketch(S);
+    Check(Profile(S, P, 'joined ends') and Near(P.Faces[0].Area, 100, 1e-6), 'joined ends: one 10 x 10 face');
+  finally
+    S.Free;
+  end;
+
+  { errors }
+  S := TCADSketch.Create;
+  try
+    Check(not CADBuildProfile(S, P) and (P.Error <> ''), 'empty sketch is an error');
+    AddRect(S, 0, 0, 10, 10);
+    S.AddLine(0, S.AddPoint(-5, -5));
+    Check(not CADBuildProfile(S, P) and (Pos('branch', P.Error) > 0), 'branch is an error: ' + P.Error);
+  finally
+    S.Free;
+  end;
+  S := TCADSketch.Create;
+  try
+    AddRect(S, 0, 0, 10, 10);
+    AddRect(S, 5, 5, 10, 10);
+    Check(not CADBuildProfile(S, P) and (Pos('cross', P.Error) > 0), 'crossing loops are an error: ' + P.Error);
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -413,6 +586,7 @@ begin
   TestDrag;
   TestPlaneAndErrors;
   TestSpeed;
+  TestProfiles;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

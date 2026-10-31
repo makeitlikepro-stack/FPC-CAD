@@ -414,7 +414,8 @@ var
   Trial: TCADSketch;
   E: TCADSketchEntity;
   C: TCADSketchConstraint;
-  I, TargetIndex, P, L: Integer;
+  I, TargetIndex, P, L, PieceCount: Integer;
+  Pieces: array[0..1] of Integer;
   CX, CY, R, AStart, AEnd, Sweep, FromT, ToT: Double;
   HasSurvivors: Boolean;
   SolveResult: TCADSketchSolveResult;
@@ -425,6 +426,8 @@ var
     Dim: TCADSketchConstraint;
   begin
     L := Trial.AddArc(E.Center, AFirst, ALast);
+    Pieces[PieceCount] := L;
+    Inc(PieceCount);
     Trial.SetConstruction(L, E.Construction);
     for K := 0 to S.ConstraintCount - 1 do
     begin
@@ -488,7 +491,7 @@ begin
     begin
       C := S.Constraints[I];
       if C.Active and UsesCurve(C, TargetIndex) and not
-         (C.Kind in [sckArcRule, sckRadius, sckDiameter]) then
+         (C.Kind in [sckArcRule, sckRadius, sckDiameter, sckPointOnCircle]) then
       begin
         AError := 'curve has relations that need explicit remapping; trim refused';
         Exit;
@@ -500,6 +503,9 @@ begin
     try
       CADSketchFromText(CADSketchToText(S), Trial);
       E := Trial.Entities[TargetIndex];
+      PieceCount := 0;
+      Pieces[0] := -1;
+      Pieces[1] := -1;
       CenterRadius(Trial, TargetIndex, CX, CY, R);
       if R <= GeoEpsilon then
       begin
@@ -534,6 +540,7 @@ begin
           AddArcPiece(P, E.P2);
         end;
       end;
+      CADRelinkTrimDependencies(Trial, TargetIndex, Pieces);
       Trial.RemoveEntity(TargetIndex);
       SolveResult := CADSolveSketch(Trial);
       if SolveResult.Status <> cssSolved then

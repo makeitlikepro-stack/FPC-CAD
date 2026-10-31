@@ -48,12 +48,12 @@ type
     FSmartDim: Boolean;                  { Smart Dimension tool: clicks pick, then dimension }
     FOnSmartDimension: TNotifyEvent;
     FOnContextMenu: TCADViewPointEvent;
-    procedure SmartClick(U, V: Double);
-    function SmartReady: Boolean;
     { sketch undo: texts of the sketch after each change }
     FUndo: array of string;
     FUndoPos: Integer;
     FRestoring: Boolean;
+    procedure SmartClick(U, V: Double);
+    function SmartReady: Boolean;
     procedure Restore(const AText: string);
     procedure MouseDown(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
     procedure MouseUp(Sender: TObject; Button: TMouseButton; Shift: TShiftState; X, Y: Integer);

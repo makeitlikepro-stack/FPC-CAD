@@ -105,6 +105,9 @@ begin
   end;
   CenterRadius(S, AEntity, CX, CY, R);
   if R <= GeoEpsilon then Exit;
+  { Guard numerical tangency: a root must really lie on the circumference,
+    not merely inside the angular range of an arc. }
+  if Abs(Hypot(X - CX, Y - CY) - R) > 1e-7 * Max(1.0, R) then Exit;
   if E.Kind = sekCircle then
     Exit(True);
   { At an arc endpoint floating-point angle wrapping can map -epsilon

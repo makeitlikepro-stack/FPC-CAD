@@ -128,6 +128,28 @@ end;
 
 { Power Trim deletes precisely the clicked part, including between two
   intersections; the old line remains as an inactive stable-ID tombstone. }
+procedure TestOldSketchFormatStillLoads;
+var
+  S: TCADSketch;
+  OldFormat: string;
+begin
+  { Pre-trim FPCSKETCH 1 had no Active flag on points or entities. }
+  OldFormat := 'FPCSKETCH 1' + LineEnding +
+    'plane 0 0 0 1 0 0 0 0 1' + LineEnding +
+    'P 0 0 0' + LineEnding +
+    'P 10 0 0' + LineEnding +
+    'L 0 1 0' + LineEnding;
+  S := TCADSketch.Create;
+  try
+    CADSketchFromText(OldFormat, S);
+    Check((S.EntityCount = 1) and (S.PointCount = 2) and
+      S.Entities[0].Active and S.Points[0].Active and S.Points[1].Active,
+      'trim: legacy FPCSKETCH 1 reopens with visible geometry');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestCutMiddleAndUndoFormat;
 var
   S, Restored: TCADSketch;
@@ -319,6 +341,7 @@ begin
   TestCommitAndSafety;
   TestCutMiddleAndUndoFormat;
   TestCutEndWholeAndConstraints;
+  TestOldSketchFormatStillLoads;
   if Failures = 0 then
     WriteLn(Format('PASS  trim/extend planning: %d checks', [Checks]))
   else

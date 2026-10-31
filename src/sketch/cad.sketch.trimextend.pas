@@ -475,7 +475,8 @@ begin
        (not S.Points[P].Active) then Continue;
     Chosen := -1;
     for Endpoint := Low(ASurvivors) to High(ASurvivors) do
-      if CADTrimSurvivorContainsPoint(S, ASurvivors[Endpoint], P) then
+      if (ASurvivors[Endpoint] >= 0) and
+         CADTrimSurvivorContainsPoint(S, ASurvivors[Endpoint], P) then
       begin
         Chosen := ASurvivors[Endpoint];
         Break;
@@ -664,6 +665,8 @@ begin
     DX := Trial.PointX(Target.P2) - AX;
     DY := Trial.PointY(Target.P2) - AY;
     PieceCount := 0;
+    Pieces[0] := -1;
+    Pieces[1] := -1;
     { Keep original end point indices on the survivors. If the click is
       between two crossings, two pieces are retained, with a real gap. }
     if APlan.FromT > ParamEpsilon then
@@ -678,8 +681,7 @@ begin
         AX + APlan.ToT * DX, AY + APlan.ToT * DY);
       AddPiece(P, Target.P2);
     end;
-    CADRelinkTrimDependencies(Trial, APlan.TargetEntity,
-      Copy(Pieces, 0, PieceCount));
+    CADRelinkTrimDependencies(Trial, APlan.TargetEntity, Pieces);
     Trial.RemoveEntity(APlan.TargetEntity);
     SolveResult := CADSolveSketch(Trial);
     if SolveResult.Status <> cssSolved then

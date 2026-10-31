@@ -1,14 +1,11 @@
 unit CAD.Sketch.TrimExtend;
 {$mode objfpc}{$H+}
 
-{ ROLE: Pure planning of line Trim and Extend, in sketch millimetres.
-  Line/line intersections use the target line's infinite support and the
-  boundary line's finite segment. Planning does not mutate the sketch.
-  CADApplyLineEdit can commit the proposed endpoint only if it is unshared,
-  unfixed and free of incompatible constraints; otherwise the change is
-  refused and the geometry remains unchanged.
-  Currently: endpoint trim/extend for straight lines; trimming between two
-  crossings requires splitting the entity and is deliberately rejected. }
+{ ROLE: Click Trim of whole/end/middle straight-line spans and line Extend.
+  Trim finds the two crossings bracketing the click and deletes that span,
+  retaining left/right pieces as new geometry. Stable entity tombstones and
+  a trial-sketch solve allow undo and safe rollback. Extend adjusts an
+  eligible unshared endpoint. Curve trimming comes in a later stage. }
 
 interface
 
@@ -35,8 +32,8 @@ type
   end;
 
 { Plan the operation nearest the click on ALine.
-  Returns False with AError when no suitable boundary exists, the selection
-  is invalid, or trimming would require splitting a middle segment.
+  Legacy endpoint planner used for Extend. CADPlanLineTrim below handles
+  click-to-cut Trim, including middle segments.
   The caller owns validation and mutation; this function changes nothing. }
 function CADPlanLineEdit(ASketch: TCADSketch; ALine: Integer; AClickX, AClickY: Double;
   AMode: TCADLineEditMode; out APlan: TCADLineEditPlan; out AError: string): Boolean;
@@ -89,9 +86,9 @@ begin
     Exit;
   end;
   Target := ASketch.Entities[ALine];
-  if Target.Kind <> sekLine then
+  if (not Target.Active) or (Target.Kind <> sekLine) then
   begin
-    AError := 'Trim / Extend currently supports straight lines only';
+    AError := 'Trim / Extend currently supports active straight lines only';
     Exit;
   end;
   AX := ASketch.PointX(Target.P1);
@@ -122,7 +119,7 @@ begin
     if I = ALine then
       Continue;
     Boundary := ASketch.Entities[I];
-    if Boundary.Kind <> sekLine then
+    if (not Boundary.Active) or (Boundary.Kind <> sekLine) then
       Continue;
     CX := ASketch.PointX(Boundary.P1);
     CY := ASketch.PointY(Boundary.P1);
@@ -262,9 +259,9 @@ begin
     Exit;
   end;
   Target := ASketch.Entities[APlan.TargetEntity];
-  if Target.Kind <> sekLine then
+  if (not Target.Active) or (Target.Kind <> sekLine) then
   begin
-    AError := 'Trim / Extend currently supports straight lines only';
+    AError := 'Trim / Extend currently supports active straight lines only';
     Exit;
   end;
 

@@ -89,6 +89,10 @@ type
     function SketchFeatureOwner(const AFeature: TCADId): TCADObjectId;
     function TryBindSketchFeature(const ASketch: TCADObjectRef;
       const AFeature: TCADId; out AError: string): Boolean;
+    { Read-only iteration in stable creation order; includes tombstones so
+      tree callers must skip inactive entries. No ownership is transferred. }
+    function ObjectCount: Integer;
+    function ObjectAt(AIndex: Integer): TCADModelObject;
     function ActiveCount(AKind: TCADObjectKind): Integer;
     property PartId: TCADObjectId read FPartId;
     property OriginId: TCADObjectId read FOriginId;
@@ -432,6 +436,18 @@ begin
     O.FVisible := AVisible;
     Inc(FRevision);
   end;
+end;
+
+function TCADObjectModel.ObjectCount: Integer;
+begin
+  Result := FCount;
+end;
+
+function TCADObjectModel.ObjectAt(AIndex: Integer): TCADModelObject;
+begin
+  if (AIndex < 0) or (AIndex >= FCount) then
+    raise ERangeError.Create('CAD object index out of range');
+  Result := FSlots[AIndex];
 end;
 
 function TCADObjectModel.FeatureOwner(const AFeature: TCADId): TCADObjectId;

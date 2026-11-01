@@ -355,6 +355,7 @@ begin
   if not C.Active then
     Exit;
   case C.Kind of
+    sckCoincident: Result := 'Coin';
     sckHorizontal, sckHorizontalPts: Result := 'H';
     sckVertical, sckVerticalPts: Result := 'V';
     sckParallel: Result := '//';
@@ -398,6 +399,13 @@ begin
   if not Result then
     Exit;
   case C.Kind of
+    sckCoincident:
+      begin
+        { Both points coincide when solved; use their midpoint during
+          intermediate solver updates so the indicator stays attached. }
+        U := 0.5 * (S.PointX(C.A) + S.PointX(C.B));
+        V := 0.5 * (S.PointY(C.A) + S.PointY(C.B));
+      end;
     sckHorizontalPts, sckVerticalPts, sckMidpoint, sckPointOnLine, sckPointOnCircle:
       begin
         U := S.PointX(C.A);

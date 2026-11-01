@@ -67,10 +67,27 @@ begin
     'malformed number rejected');
 end;
 
+procedure TestProjectedGrip;
+begin
+  Check(Abs(CADDraggedExtrudeDepth(10, 0, -50, 0, -5) - 20) < 1e-7,
+    'depth grip: dragging 50 px along a -5 px/mm normal adds 10 mm');
+  Check(Abs(CADDraggedExtrudeDepth(10, 25, 0, -2.5, 0) - 0.01) < 1e-7,
+    'depth grip: reversed direction clamps at a safe positive depth');
+  Check(Abs(CADDraggedExtrudeDepth(10, 10, -10, 3, -4) - 12.8) < 1e-7,
+    'depth grip: diagonal drag projects onto the actual 3D extrusion axis');
+  Check(Abs(CADDraggedExtrudeDepth(10, 15, 20, 3, -4) - 8.6) < 1e-7,
+    'depth grip: perpendicular movement is projected, not taken as Y only');
+  Check(Abs(CADDraggedExtrudeDepth(10, 1000, 0, 0, 0) - 10) < 1e-7,
+    'depth grip: degenerate projection keeps the original depth');
+  Check(Abs(CADDraggedExtrudeDepth(10, 100, 0, 2.5, 0) - 50) < 1e-7,
+    'depth grip: symmetric half-size axis maps to twice the depth');
+end;
+
 begin
   Checks := 0;
   Failures := 0;
   TestDepthValidation;
+  TestProjectedGrip;
   if Failures = 0 then
     WriteLn(Format('PASS: extrusion depth/direction options (%d checks)',[Checks]))
   else

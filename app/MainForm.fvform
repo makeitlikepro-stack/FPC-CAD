@@ -132,7 +132,7 @@
       <Button id="ExitSketchCornerButton" left="0" top="0" width="38" height="38" text="" backgroundColor="#FFF4E5" borderColor="#F0B36A" borderWidth="1" borderRadius="6" iconFile="../assets/icons/png/24/exit-sketch.png" iconSize="24" iconPosition="center" hint="Exit sketch and keep it (Ctrl+Enter)"/>
       <Button id="DiscardSketchButton" left="42" top="0" width="38" height="38" text="" backgroundColor="#FCEFEF" borderColor="#F1CFCF" borderWidth="1" borderRadius="6" iconFile="../assets/icons/png/24/cancel.png" iconSize="24" iconPosition="center" hint="Exit sketch and discard its changes"/>
     </Panel>
-    <Button id="ExtrudePreviewButton" left="1168" top="168" width="172" height="38" text="Extrude Preview" fontSize="12" textColor="#1565C0" backgroundColor="#E3EFFC" borderColor="#B3D2F5" borderWidth="1" borderRadius="6" hint="Preview selected sketch contours as an OCCT solid and set extrusion depth"/>
+    <Button id="ExtrudePreviewButton" left="1168" top="168" width="172" height="38" text="Extrude Preview" fontSize="12" textColor="#1565C0" backgroundColor="#E3EFFC" borderColor="#B3D2F5" borderWidth="1" borderRadius="6" hint="E: preview selected contours as an OCCT solid; set depth, reverse or symmetric"/>
     <Panel id="ExtrudeOptionsPanel" left="1092" top="213" width="332" height="244" backgroundColor="#FFFFFF" borderColor="#A8C6E3" borderWidth="1" borderRadius="8" anchors="top,right">
       <Label id="ExtrudeOptionsTitle" left="14" top="12" width="300" height="23" text="Extrude selected contours" fontSize="14" textColor="#1F2329"/>
       <Label id="ExtrudeDepthLabel" left="14" top="48" width="98" height="24" text="Depth (mm)" textColor="#4A5260"/>

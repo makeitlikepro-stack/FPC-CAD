@@ -21,7 +21,7 @@ uses
   Classes, SysUtils, CAD.Core.Ids, CAD.Core.Values, CAD.Core.Feature,
   CAD.Core.Graph, CAD.Core.RecomputePlan, CAD.Core.WorkerPool,
   CAD.Core.ResultCache, CAD.Core.DisplayPass, CAD.Config.Performance,
-  CAD.Core.ObjectModel;
+  CAD.Core.ObjectModel, CAD.Core.ObjectIds;
 
 type
   TCADRecomputeReport = record
@@ -81,6 +81,9 @@ type
     function SetParam(const AId: TCADId; const AName: string; const AValue: TCADValue): Boolean;
     procedure Touch(const AId: TCADId);
     function UserCount(const AId: TCADId): Integer;
+    { Validate a Body tip transition against current feature graph. }
+    function TrySetBodyTip(const ABody: TCADObjectRef;
+      const ANewTip: TCADId; out AError: string): Boolean;
     { Show a feature mid-tree, hide it, or back to auto (end of a chain).
       Not an undo step: a view setting, like a camera. }
     function SetShowMode(const AId: TCADId; AMode: TCADShowMode): Boolean;
@@ -219,6 +222,11 @@ begin
   S := SlotOf(AId);
   if (S < 0) or (FGraph.UserCount(S) > 0) then
     Exit;
+  { A feature currently selected as a Body tip must not be detached. }
+  for I := 1 to Integer(FObjects.NextId)-1 do
+    if (FObjects.Find(CADObjectRef(cokBody,CADObjectId(I))) <> nil) and
+       CADIdEqual(FObjects.Find(CADObjectRef(cokBody,CADObjectId(I))).TipFeatureId,AId) then
+      Exit;
   Result := FSlots[S];
   { Keep the inputs on the feature: Reattach links them again. }
   Ins := Copy(Result.Inputs);
@@ -324,6 +332,42 @@ begin
   if SlotOf(AId) < 0 then
     Exit(0);
   Result := FGraph.UserCount(AId.Slot);
+end;
+
+function TCADDocument.TrySetBodyTip(const ABody: TCADObjectRef;
+  const ANewTip: TCADId; out AError: string): Boolean;
+var
+  O: TCADModelObject;
+  OldTip: TCADId;
+begin
+  AError := '';
+  O := FObjects.Find(ABody);
+  if (O = nil) or (O.Kind <> cokBody) then
+  begin
+    AError := 'missing Body or incorrect object kind';
+    Exit(False);
+  end;
+  OldTip := O.TipFeatureId;
+  if CADIdEqual(OldTip, ANewTip) then
+  begin
+    AError := 'tip unchanged';
+    Exit(False);
+  end;
+  if CADIdValid(ANewTip) and (Find(ANewTip) = nil) then
+  begin
+    AError := 'target feature does not exist';
+    Exit(False);
+  end;
+  { A forward transition must consume the old tip. A backward transition
+    is allowed for Undo when the old tip consumes the target feature. }
+  if CADIdValid(OldTip) and CADIdValid(ANewTip) and
+     not (FGraph.HasLink(ANewTip.Slot,OldTip.Slot) or
+          FGraph.HasLink(OldTip.Slot,ANewTip.Slot)) then
+  begin
+    AError := 'Body tip transition must follow a direct feature dependency';
+    Exit(False);
+  end;
+  Result := FObjects.TryAssignBodyTip(ABody, ANewTip, AError);
 end;
 
 function TCADDocument.SetShowMode(const AId: TCADId; AMode: TCADShowMode): Boolean;

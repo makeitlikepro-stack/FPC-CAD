@@ -160,7 +160,13 @@ begin
       if not CADBuildProfile(S, P) then
         if not CADBuildRegions(S, P) then
         begin
-          AError := 'Sketch regions: ' + P.Error;
+          { Both builders agree that an open contour has no closed face.
+            Keep the historic "open profile" diagnostic for callers and
+            regression tests; don't confuse this with an OCCT failure. }
+          if P.Error = 'no bounded sketch regions' then
+            AError := 'Sketch: open profile (no bounded sketch regions)'
+          else
+            AError := 'Sketch regions: ' + P.Error;
           Exit(False);
         end;
     end

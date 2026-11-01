@@ -1155,7 +1155,7 @@ end;
 procedure TestViewerRelationGlyphs;
 var
   S: TCADSketch;
-  P, Q, C: Integer;
+  P, Q, C, Centre, Arc, HorizontalLine, VerticalLine, OtherCircle: Integer;
   U, V: Double;
 begin
   S := TCADSketch.Create;
@@ -1167,6 +1167,24 @@ begin
       'VIEW-REL-001 Coincident shows visible relation glyph');
     Check(CADRelationAnchor(S,C,U,V) and Near(U,10) and Near(V,20),
       'VIEW-REL-002 Coincident glyph anchored to constrained points');
+
+    { Quarter arc touches the horizontal and vertical sides at different
+      endpoints. Both T glyphs must follow their OWN contact location. }
+    HorizontalLine := S.AddLineXY(0,0,30,0);
+    VerticalLine := S.AddLineXY(0,0,0,30);
+    Centre := S.AddPoint(5,5);
+    Arc := S.AddArc(Centre,S.AddPoint(0,5),S.AddPoint(5,0));
+    C := S.Tangent(HorizontalLine,Arc);
+    Check((CADRelationGlyph(S,C)='T') and
+      CADRelationAnchor(S,C,U,V) and Near(U,5) and Near(V,0),
+      'VIEW-REL-003 horizontal Tangent glyph at arc contact');
+    C := S.Tangent(VerticalLine,Arc);
+    Check(CADRelationAnchor(S,C,U,V) and Near(U,0) and Near(V,5),
+      'VIEW-REL-004 vertical Tangent glyph at arc contact');
+    OtherCircle := S.AddCircle(S.AddPoint(15,5),5);
+    C := S.TangentCircles(Arc,OtherCircle);
+    Check(CADRelationAnchor(S,C,U,V) and Near(U,10) and Near(V,5),
+      'VIEW-REL-005 outer circular Tangent glyph at contact');
   finally
     S.Free;
   end;

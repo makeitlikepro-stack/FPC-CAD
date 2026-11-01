@@ -22,6 +22,7 @@ uses
 
 type
   TCADFeatureEvent = procedure(Sender: TObject; const AId: TCADId) of object;
+  TCADBodyEvent = procedure(Sender: TObject; const AId: TCADObjectId) of object;
 
   TCADFeatureTree = class
   private
@@ -30,6 +31,7 @@ type
     FRevision, FObjectRevision: QWord;
     FHasRevision: Boolean;
     FOnEditFeature: TCADFeatureEvent;
+    FOnSelectBody: TCADBodyEvent;
     procedure Activate(Sender: TObject);
     procedure AddFeature(ADoc: TCADDocument; AParent: TUITreeNode; F: TCADFeature;
       ADepth: Integer);
@@ -39,6 +41,7 @@ type
     { Rebuilds the tree when the document changed (AForce: always). }
     procedure Refresh(ADoc: TCADDocument; AForce: Boolean = False);
     property OnEditFeature: TCADFeatureEvent read FOnEditFeature write FOnEditFeature;
+    property OnSelectBody: TCADBodyEvent read FOnSelectBody write FOnSelectBody;
   end;
 
 implementation
@@ -162,7 +165,8 @@ begin
     if (not O.Active) or (O.Kind <> cokBody) or
        (not CADSameObjectId(O.PartId,ParentObject.Id)) then Continue;
     BodyNode := FTree.AddChild(Part,UTF8String(O.Name),'part');
-    BodyNode.Tag := NoFeatureTag;
+    { Negative node tags distinguish logical Body IDs from feature slots. }
+    BodyNode.Tag := -2 - LongInt(O.Id.Value);
     HistoryNode := FTree.AddChild(BodyNode,'History','history');
     HistoryNode.Tag := NoFeatureTag;
     for J := 0 to O.FeatureCount-1 do
@@ -209,9 +213,15 @@ var
   N: TUITreeNode;
 begin
   N := FTree.SelectedNode;
-  if (N = nil) or (N.Tag < 0) or not Assigned(FOnEditFeature) then
+  if N = nil then Exit;
+  if N.Tag <= -3 then
+  begin
+    if Assigned(FOnSelectBody) then
+      FOnSelectBody(Self,CADObjectId(QWord(-2-N.Tag)));
     Exit;
-  FOnEditFeature(Self, CADId(LongInt(N.Tag)));
+  end;
+  if (N.Tag >= 0) and Assigned(FOnEditFeature) then
+    FOnEditFeature(Self,CADId(LongInt(N.Tag)));
 end;
 
 end.

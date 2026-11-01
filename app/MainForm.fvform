@@ -136,9 +136,9 @@
     <Panel id="ExtrudeOptionsPanel" left="1092" top="213" width="332" height="244" backgroundColor="#FFFFFF" borderColor="#A8C6E3" borderWidth="1" borderRadius="8" anchors="top,right">
       <Label id="ExtrudeOptionsTitle" left="14" top="12" width="300" height="23" text="Extrude selected contours" fontSize="14" textColor="#1F2329"/>
       <Label id="ExtrudeDepthLabel" left="14" top="48" width="98" height="24" text="Depth (mm)" textColor="#4A5260"/>
-      <Edit id="ExtrudeDepthEdit" left="112" top="42" width="122" height="31" text="10" hint="Type a positive extrusion depth in millimetres and press Enter"/>
+      <Edit id="ExtrudeDepthEdit" left="112" top="42" width="122" height="31" text="10"/>
       <Label id="ExtrudeDepthUnit" left="245" top="49" width="40" height="20" text="mm" textColor="#5B6470"/>
-      <Slider id="ExtrudeDepthSlider" left="14" top="82" width="304" height="27" minimum="1" maximum="200" step="1" value="10" hint="Drag to preview any depth from 1 to 200 mm; type for other values"/>
+      <Slider id="ExtrudeDepthSlider" left="14" top="82" width="304" height="27" minimum="1" maximum="200" step="1" value="10"/>
       <Button id="ExtrudeReverseButton" left="14" top="117" width="148" height="30" text="Reverse: Off" fontSize="11" textColor="#1F2329" backgroundColor="#EDF4FD" hint="Extrude in the opposite direction of the sketch normal"/>
       <Button id="ExtrudeSymmetricButton" left="171" top="117" width="147" height="30" text="Symmetric: Off" fontSize="11" textColor="#1F2329" backgroundColor="#EDF4FD" hint="Extrude half the depth on each side of the sketch plane"/>
       <Button id="ExtrudeConfirmButton" left="14" top="157" width="146" height="31" text="Accept Extrude" fontSize="12" textColor="#FFFFFF" backgroundColor="#217AC6" borderRadius="5" hint="Commit the preview settings and create the extrusion"/>

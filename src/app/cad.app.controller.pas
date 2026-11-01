@@ -730,6 +730,7 @@ begin
       VK_A: FSketchToolbar.Run(ctaArc);
       VK_T: FSketchToolbar.Run(ctaArc3);
       VK_P: FSketchToolbar.Run(ctaPoint);
+      VK_E: ExtrudePreviewClick(nil);      { E: live Extrude preview }
       VK_D: FSketchToolbar.Run(ctaDimension);
       VK_X: FSketchToolbar.Run(ctaDistX);
       VK_Y: FSketchToolbar.Run(ctaDistY);

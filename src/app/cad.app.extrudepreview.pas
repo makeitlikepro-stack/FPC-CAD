@@ -10,7 +10,8 @@ interface
 
 uses
   SysUtils, CAD.Sketch.Model, CAD.Sketch.Profile, CAD.Sketch.Regions,
-  CAD.Sketch.ContourSelection, CAD.Sketch.ExtrudeOptions,
+  CAD.Sketch.ContourSelection, CAD.Sketch.Outline,
+  CAD.Sketch.ExtrudeOptions,
   CAD.Features.Sketch, CAD.OCCT.Bridge, CAD.View.MeshConvert,
   OpenGL.Render.Viewport3DMeshData;
 
@@ -24,7 +25,7 @@ function CADBuildExtrudePreview(S: TCADSketch; const Seeds: TCADContourSeeds;
   const Options: TCADExtrudeOptions; AMesh: TV3DMeshData;
   out AError: string): Boolean;
 var
-  Profile: TCADSketchProfile;
+  Profile, UnionProfile: TCADSketchProfile;
   Plane, Edges: TCADDoubleArray;
   LoopSizes, FaceLoops: TCADLongIntArray;
   Selected: TCADRegionIndices;
@@ -77,6 +78,9 @@ begin
     AError := 'No closed contour to extrude';
     Exit;
   end;
+  { Preview and final feature must use identical outer boundaries. }
+  if not CADUnionSelectedOutlines(Profile, UnionProfile, AError) then Exit;
+  Profile := UnionProfile;
   CADProfileArrays(S, Profile, Plane, Edges, LoopSizes, FaceLoops);
 
   Faces := nil;

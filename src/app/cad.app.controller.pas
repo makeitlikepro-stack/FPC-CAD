@@ -104,6 +104,8 @@ type
     function ReadExtrudeDepth: Boolean;
     procedure NewSketch(Sender: TObject);
     procedure NewBody(Sender: TObject);
+    procedure PartUndoClick(Sender: TObject);
+    procedure PartRedoClick(Sender: TObject);
     procedure SelectBody(Sender: TObject; const AId: TCADObjectId);
     procedure FinishClick(Sender: TObject);
     procedure EditSketchClick(Sender: TObject);
@@ -312,6 +314,8 @@ begin
   FChrome.OnExitSketch := @FinishClick;
   FChrome.OnDiscardSketch := @DiscardClick;
   FChrome.OnNormalTo := @NormalToClick;
+  TUIButton(CADDesignWidget(FLookup,'PartUndoButton',TUIButton)).OnClick := @PartUndoClick;
+  TUIButton(CADDesignWidget(FLookup,'PartRedoButton',TUIButton)).OnClick := @PartRedoClick;
   FTree := TCADFeatureTree.Create(FLookup, FHost, UI,
     ExtractFilePath(ExpandFileName(ParamStr(0))) +
     'assets' + PathDelim + 'icons' + PathDelim + 'png' + PathDelim + '20' + PathDelim);
@@ -402,6 +406,16 @@ begin
     Result := Format('Under defined · DOF %d', [R.DOF]);
 end;
 
+procedure TCADAppController.PartUndoClick(Sender: TObject);
+begin
+  Run(cadUndo);
+end;
+
+procedure TCADAppController.PartRedoClick(Sender: TObject);
+begin
+  Run(cadRedo);
+end;
+
 procedure TCADAppController.Run(ACommand: TCADAppCommand);
 var
   UndoLabel: string;
@@ -410,7 +424,11 @@ begin
     Exit;
   case ACommand of
     cadUndo:
-      if FSketchMode.Active then FSketchToolbar.Run(ctaUndo)
+      if FSketchMode.Active then
+      begin
+        FSketchToolbar.Run(ctaUndo);
+        W.Status.Text := 'Undo: Sketch editor (not document History)';
+      end
       else if (FHistory <> nil) and FHistory.CanUndo then
       begin
         UndoLabel := FHistory.UndoDescription;
@@ -432,7 +450,9 @@ begin
           on E: Exception do
             W.Status.Text := 'Undo FAILED ['+UndoLabel+']: '+E.Message;
         end;
-      end;
+      end
+      else
+        W.Status.Text := 'Undo: no document History entry available';
     cadRedo:
       if FSketchMode.Active then FSketchToolbar.Run(ctaRedo)
       else if (FHistory <> nil) and FHistory.CanRedo then

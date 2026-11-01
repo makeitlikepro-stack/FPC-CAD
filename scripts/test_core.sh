@@ -14,7 +14,7 @@ fi
 OUT="${OUTDIR:-$(mktemp -d "${TMPDIR:-/tmp}/fpccad-core.XXXXXX")}"
 mkdir -p "$OUT"
 # -Sa: assertions on; -gl: line info in a crash trace; -O2 like a release build.
-for PROG in cad_core_tests cad_object_model_tests cad_body_tip_tests; do
+for PROG in cad_core_tests cad_object_model_tests cad_body_tip_tests cad_sketch_binding_tests; do
   if ! "$FPC" -Mobjfpc -Sa -gl -O2 \
       "-Fu$ROOT/src/core" "-Fu$ROOT/src/config" \
       "-FU$OUT" "-FE$OUT" "$ROOT/tests/core/$PROG.lpr" > "$OUT/build-$PROG.log" 2>&1; then

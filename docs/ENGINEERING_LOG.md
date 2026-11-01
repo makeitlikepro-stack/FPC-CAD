@@ -1,3 +1,11 @@
+## 2026-11-01 — Sketch Editor → bound evaluator commit (candidate; tests pending)
+
+- Added `CAD.Core.SketchGeometryCommands.TCADCommitSketchCommand`: an editor snapshot commit atomically updates the bound evaluator's existing `geometry` and `contours` text parameters as **one History entry**, with Undo/Redo preserving the original values. No-op commits are dropped. Stale/invalid evaluator bindings are rejected.
+- Integrated `TCADAppController.FinishSketch` edit path with the document History; new sketches get a logical Sketch object linked to their evaluator, and existing legacy sketches without an object are bound lazily on first save. The editor's per-stroke in-session Undo remains unchanged.
+- Added core tests COMMIT-001..COMMIT-012 for canonical geometry source, restoration, no-op, invalid reference, stale Redo and recompute revision.
+- Compatibility boundary: Extrude options still use their previous direct parameter updates; new Sketch/Extrude creation is not yet a single cross-object transaction. Support for legacy sketches defaults to XY plane pending true placement migration.
+- **Pending execution** of `scripts/test_core.sh`, `scripts/test_sketch.sh`, `scripts/test_occt.sh` and `scripts/build_app.sh` on FPC 3.2.2.
+
 ## 2026-11-01 — Sketch object ↔ evaluator binding (candidate; tests pending)
 
 Branch: `feature/cad-sketch-object-binding-2026-11-01`.

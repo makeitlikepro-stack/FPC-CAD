@@ -82,6 +82,7 @@ type
     FExtrudeStatus, FExtrudeHandleUnit: TUILabel;
     FExtrudeSaved, FExtrudeDraft: TCADExtrudeOptions;
     FUpdatingExtrudeControls: Boolean;
+    FExtrudeInlineInvalid: Boolean;
     procedure ExtrudePreviewClick(Sender: TObject);
     procedure ExtrudeDepthKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure ExtrudeHandleDepthKeyDown(Sender: TObject;
@@ -508,6 +509,7 @@ begin
   try
     FExtrudeDepthEdit.Text := FloatToStr(FExtrudeDraft.Depth);
     FExtrudeHandleValueEdit.Text := FloatToStr(FExtrudeDraft.Depth);
+    FExtrudeInlineInvalid := False;
     if FExtrudeDraft.Reversed then
       FExtrudeReverseButton.Text := 'Reverse: On'
     else
@@ -585,9 +587,11 @@ begin
   if not FExtrudePanel.Visible then Exit;
   if not CADParseExtrudeDepth(FExtrudeHandleValueEdit.Text, Depth) then
   begin
+    FExtrudeInlineInvalid := True;
     FExtrudeStatus.Text := 'Invalid grip depth; enter a positive mm value';
     Exit;
   end;
+  FExtrudeInlineInvalid := False;
   FExtrudeDraft.Depth := Depth;
   UpdateExtrudeControls;
   RefreshExtrudeDraft;
@@ -601,7 +605,13 @@ begin
     when the user did not press Enter first. Cancellation hides the panel
     before focus loss, so cancelled drafts never enter the CAD document. }
   if FUpdatingExtrudeControls or not FExtrudePanel.Visible then Exit;
-  if not CADParseExtrudeDepth(FExtrudeHandleValueEdit.Text,Depth) then Exit;
+  if not CADParseExtrudeDepth(FExtrudeHandleValueEdit.Text,Depth) then
+  begin
+    FExtrudeInlineInvalid:=True;
+    FExtrudeStatus.Text:='Invalid inline depth: use a positive number in mm';
+    Exit;
+  end;
+  FExtrudeInlineInvalid:=False;
   if Abs(Depth-FExtrudeDraft.Depth)<1e-10 then Exit;
   FExtrudeDraft.Depth:=Depth;
   UpdateExtrudeControls;
@@ -664,7 +674,13 @@ end;
 
 procedure TCADAppController.ExtrudeConfirmClick(Sender: TObject);
 begin
-  if not FExtrudePanel.Visible or not ReadExtrudeDepth then Exit;
+  if not FExtrudePanel.Visible then Exit;
+  if FExtrudeInlineInvalid then
+  begin
+    FExtrudeStatus.Text:='Correct the inline depth before accepting';
+    Exit;
+  end;
+  if not ReadExtrudeDepth then Exit;
   RefreshExtrudeDraft;
   if FSketchMode.ExtrudePreviewError <> '' then Exit;
   FinishClick(Sender);
@@ -687,6 +703,11 @@ var
 begin
   if (FExtrudePanel <> nil) and FExtrudePanel.Visible then
   begin
+    if FExtrudeInlineInvalid then
+    begin
+      FExtrudeStatus.Text:='Correct the inline depth before saving';
+      Exit;
+    end;
     { A typed value is committed even when the user clicks Exit Sketch
       directly instead of pressing Enter in the depth input. }
     if not ReadExtrudeDepth then Exit;

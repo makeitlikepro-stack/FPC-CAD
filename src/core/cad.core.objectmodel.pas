@@ -7,7 +7,7 @@ unit CAD.Core.ObjectModel;
 interface
 
 uses
-  SysUtils, CAD.Core.ObjectIds;
+  SysUtils, CAD.Core.ObjectIds, CAD.Core.Ids;
 
 type
   TCADDatumKind = (cdkXY, cdkXZ, cdkYZ, cdkCustom);
@@ -25,6 +25,7 @@ type
     FActive, FVisible, FIsDefault: Boolean;
     FDatumKind: TCADDatumKind;
     FFrame: TCADDatumFrame;
+    FTipFeatureId: TCADId; { Body's logical pointer; no result/shape ownership }
   public
     property Id: TCADObjectId read FId;
     property Kind: TCADObjectKind read FKind;
@@ -35,6 +36,7 @@ type
     property Visible: Boolean read FVisible;
     property IsDefault: Boolean read FIsDefault;
     property DatumKind: TCADDatumKind read FDatumKind;
+    property TipFeatureId: TCADId read FTipFeatureId;
     { Origin and Datum frames are in Part coordinates. A Sketch frame is
       local to SupportId (identity at creation), not a duplicated Datum. }
     property Frame: TCADDatumFrame read FFrame;
@@ -74,6 +76,9 @@ type
       out AError: string): Boolean;
     function TrySetVisible(const ARef: TCADObjectRef; AVisible: Boolean;
       out AError: string): Boolean;
+    { Called after feature-graph validation by the document. Never owns a result. }
+    function TryAssignBodyTip(const ABody: TCADObjectRef;
+      const AFeature: TCADId; out AError: string): Boolean;
     function ActiveCount(AKind: TCADObjectKind): Integer;
     property PartId: TCADObjectId read FPartId;
     property OriginId: TCADObjectId read FOriginId;
@@ -140,6 +145,7 @@ begin
   Result.FActive := True;
   Result.FVisible := True;
   Result.FIsDefault := ADefault;
+  Result.FTipFeatureId := CADNoId;
   FSlots[FCount] := Result;
   Inc(FCount);
   Inc(FNextId);
@@ -274,6 +280,11 @@ var
   O: TCADModelObject;
 begin
   AError := '';
+  if (AObject.Kind = cokBody) and CADIdValid(AObject.FTipFeatureId) then
+  begin
+    AError := 'Cannot remove a Body with an active feature tip';
+    Exit(False);
+  end;
   if AObject.FIsDefault then
   begin
     AError := 'Cannot remove a default Part, Origin or Datum';
@@ -392,6 +403,28 @@ begin
     O.FVisible := AVisible;
     Inc(FRevision);
   end;
+end;
+
+function TCADObjectModel.TryAssignBodyTip(const ABody: TCADObjectRef;
+  const AFeature: TCADId; out AError: string): Boolean;
+var
+  O: TCADModelObject;
+begin
+  O := CheckActive(ABody, AError);
+  if O = nil then Exit(False);
+  if O.Kind <> cokBody then
+  begin
+    AError := 'tip owner must be a Body';
+    Exit(False);
+  end;
+  if CADIdEqual(O.FTipFeatureId, AFeature) then
+  begin
+    AError := 'Body tip already equals requested feature';
+    Exit(False);
+  end;
+  O.FTipFeatureId := AFeature;
+  Inc(FRevision);
+  Result := True;
 end;
 
 function TCADObjectModel.ActiveCount(AKind: TCADObjectKind): Integer;

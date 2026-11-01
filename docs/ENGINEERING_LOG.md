@@ -1,3 +1,11 @@
+## 2026-11-01 — Tangent glyph geometry anchoring (candidate)
+
+- Screenshot showed two `T` badges floating near the midpoints of horizontal/vertical rectangle edges even though the quarter-circle arc touches those edges near one corner. Root cause: `CADRelationAnchor` fell back to `EntityAnchor(C.A)` for `sckTangentLine`, and `EntityAnchor` places line markers at the midpoint.
+- `sckTangentLine`: compute the perpendicular projection of the constrained circle/arc **centre** onto its linked line; clamp to its finite segment for visible placement. This is the actual contact location when the solver satisfies line-circle tangency, without modifying constraints/geometry.
+- `sckTangentCircles`: anchor on the first circle at the line-of-centres contact, including the smaller-first/internal case; concentric degenerate centres safely fall back to existing anchor.
+- Extended `VIEW-REL-003..005` regressions to check distinct horizontal, vertical and circular tangent anchor coordinates. The prior Coincident badge and viewport-edge placement changes remain in the same feature branch.
+- The **small curved region selection** bug is still open and is separate from the glyph placement. Local FPC and visual tests pending; no merges to dev/main.
+
 ## 2026-11-01 — Sketch Viewer relation glyph visibility (candidate)
 
 - User clarified missing constraint icons are **in the Sketch Viewport**, not the constraints list. Rendering path: `CAD.App.SketchDims.PlaceGlyphs` and `CAD.Sketch.Commands.CADRelationGlyph/Anchor`.

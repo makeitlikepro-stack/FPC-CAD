@@ -352,6 +352,43 @@ begin
   end;
 end;
 
+
+{ Reproducer: rectangle corner split by a quarter-circle joining the
+  horizontal top and vertical left sides tangentially. The narrow corner
+  cap and the large remainder MUST both be independently selectable. }
+procedure TestArcTangentRectangleCorner;
+var
+  S: TCADSketch;
+  P: TCADSketchProfile;
+  C, Arc, TopLine, LeftLine, Small, Large: Integer;
+begin
+  S := TCADSketch.Create;
+  try
+    Rectangle(S,0,0,20,20);
+    { Existing rectangle order: top = 2, left = 3. The short CCW arc
+      runs from top (5,20) to left (0,15). }
+    TopLine := 2;
+    LeftLine := 3;
+    C := S.AddPoint(5,15);
+    Arc := S.AddArc(C,S.AddPoint(5,20),S.AddPoint(0,15));
+    S.PointOnLine(S.Entities[Arc].P1,TopLine);
+    S.PointOnLine(S.Entities[Arc].P2,LeftLine);
+    S.Tangent(TopLine,Arc);
+    S.Tangent(LeftLine,Arc);
+    Check(CADBuildRegions(S,P),'REG-TAN-001 tangent arc in rectangle builds regions: '+P.Error);
+    Check(Length(P.Faces)=2,'REG-TAN-002 small corner + large remainder are two faces');
+    Small := CADPickRegion(P,1,19);
+    Large := CADPickRegion(P,10,10);
+    Check((Small>=0) and (Large>=0) and (Small<>Large),
+      'REG-TAN-003 small curved corner independently selectable');
+    if Length(P.Faces)=2 then
+      Check(Abs(P.Faces[0].Area + P.Faces[1].Area - 400)<1e-5,
+        'REG-TAN-004 tangent curve divides rectangle without area loss');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Total:=0; Failed:=0;
   TestFourAreas;
@@ -364,6 +401,7 @@ begin
   TestRegionSelectionPersistence;
   TestSelectedOutlineUnion;
   TestArcOutlineAndNestedHole;
+  TestArcTangentRectangleCorner;
   if Failed=0 then
     WriteLn(Format('PASS: non-destructive region extraction (%d checks)',[Total]))
   else

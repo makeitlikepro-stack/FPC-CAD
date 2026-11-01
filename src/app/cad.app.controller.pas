@@ -1079,25 +1079,48 @@ begin
   OpenSketchOf(Id);
 end;
 
-{ Feature tree: double click / Enter on a sketch or an extrude edits its
-  sketch. }
+{ Each tree feature activates its own editing tool. A Sketch opens
+  the sketch editor. An Extrude loads its profile for preview but opens the
+  Extrude options immediately, so the user edits Depth/Reverse/Symmetric
+  rather than having to discover the preview button manually. }
 procedure TCADAppController.EditFeature(Sender: TObject; const AId: TCADId);
 var
-  F: TCADFeature;
+  F, Profile: TCADFeature;
+  ExtrudeId: TCADId;
 begin
-  if (FDoc = nil) or FSketchMode.Active then
-    Exit;
+  if (FDoc = nil) or FSketchMode.Active then Exit;
   F := FDoc.Find(AId);
+  if F = nil then Exit;
   FEditExtrude := CADNoId;
-  if (F is TCADExtrudeFeature) and (Length(F.Inputs) > 0) then
-  begin
-    FEditExtrude := F.Id;
-    F := FDoc.Find(F.Inputs[0]);
-  end;
   if F is TCADSketchFeature then
-    OpenSketchOf(F.Id)
-  else if F <> nil then
-    W.Status.Text := F.Name + ': no sketch to edit (only sketches and extrudes for now)';
+  begin
+    OpenSketchOf(F.Id);
+    Exit;
+  end;
+  if F is TCADExtrudeFeature then
+  begin
+    if Length(F.Inputs) = 0 then
+    begin
+      W.Status.Text := F.Name + ': missing Sketch input';
+      Exit;
+    end;
+    Profile := FDoc.Find(F.Inputs[0]);
+    if not (Profile is TCADSketchFeature) then
+    begin
+      W.Status.Text := F.Name + ': Sketch input is unavailable';
+      Exit;
+    end;
+    ExtrudeId := F.Id;
+    FEditExtrude := ExtrudeId;
+    OpenSketchOf(Profile.Id);
+    if FSketchMode.Active and CADIdEqual(FEditExtrude,ExtrudeId) then
+    begin
+      ExtrudePreviewClick(nil);
+      W.Status.Text := 'Editing '+F.Name+' (Depth / Reverse / Symmetric)';
+    end;
+    Exit;
+  end;
+  W.Status.Text := F.Name + ': no editor for this feature type yet';
 end;
 
 { Editing an existing Sketch directly from the tree must load the settings

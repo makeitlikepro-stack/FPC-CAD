@@ -1,3 +1,10 @@
+## 2026-11-01 — Model tree single-click component activation (candidate)
+
+- Previous change dispatched Sketch/Extrude editors only through `TUITreeView.OnActivate`, which may not run on row clicks and may only expand a parent node such as Extrude rather than edit it. User confirmed activation did not work.
+- Wired `TUITreeView.OnClick` to the same selected-node dispatch while retaining `OnActivate` for keyboard/double-click. Sketch launches its sketch editor, Extrude opens its depth/reverse/symmetric preview, Body selects active Body.
+- **Pending local compilation and GUI test:** click Sketch row, Extrude row (including its text rather than chevron), Body row; confirm no repeated or unintended entry from tree expansion. This is activation-on-single-click, not a passive Properties Inspector.
+- No merge to dev/main.
+
 ## 2026-11-01 — Per-feature Model tree editing (candidate; tests pending)
 
 - Corrected `TCADAppController.EditFeature` dispatch on tree activation: Sketch opens Sketch Editor; Extrude resolves its actual Sketch input and immediately opens the existing Extrude options/OCCT preview panel (Depth, Reverse, Symmetric). Missing or non-Sketch inputs are rejected with status errors rather than silently editing unrelated geometry.

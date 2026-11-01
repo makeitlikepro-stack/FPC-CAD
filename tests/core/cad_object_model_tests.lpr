@@ -31,6 +31,7 @@ var
   XY,XZ,YZ: TCADModelObject;
   E: string;
   R: TCADRecomputeReport;
+  PendingBefore: Boolean;
 begin
   D := TCADDocument.Create;
   try
@@ -61,8 +62,9 @@ begin
       'OM-008: default reference datum cannot be deleted');
     Check(not M.TryRename(Ref(cokPart,M.PartId),'Else',E),
       'OM-008: default part is protected');
+    PendingBefore := D.NeedsRecompute;
     R := D.Recompute;
-    Check((not D.NeedsRecompute) and (R.Planned=0),
+    Check((not PendingBefore) and (R.Planned=0),
       'OM-012: logical default objects do not recompute features');
     Check(D.ObjectRevision=M.Revision,
       'OM-001: document exposes separate logical-object revision');
@@ -189,6 +191,7 @@ var
   E: string;
   Rev: QWord;
   R: TCADRecomputeReport;
+  PendingBefore: Boolean;
 begin
   D := TCADDocument.Create;
   H := TCADHistory.Create(D);
@@ -232,8 +235,9 @@ begin
       'OM-009: undo Sketch create');
     Check(H.Redo and (M.Find(Ref(cokSketch,SketchId))<>nil),
       'OM-009: redo Sketch create with same support and ID');
+    PendingBefore := D.NeedsRecompute;
     R := D.Recompute;
-    Check((not D.NeedsRecompute) and (R.Planned=0),
+    Check((not PendingBefore) and (R.Planned=0),
       'OM-007: object metadata/undo does not run feature computation');
   finally
     H.Free;

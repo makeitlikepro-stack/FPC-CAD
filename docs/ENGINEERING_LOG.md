@@ -1,3 +1,17 @@
+## 2026-11-01 — Ordered Body feature history (candidate; NOT YET TESTED)
+
+Branch: `feature/cad-body-tip-history-2026-11-01`.
+
+- Every logical Body now tracks a chronological `TCADIdArray` and its tip is always the last entry (or `CADNoId`).
+- Each live Feature may belong to only one Body history; attempts to claim an already-owned Feature are rejected before changing state.
+- Only one-step append/pop is supported. Document validates directed dependency on advance, while Undo restores the immediate predecessor.
+- DetachFeature and Unlink protect all owned history entries and adjacent history links.
+- Existing `TCADSetBodyTipCommand` continues to use `TCADHistory`; no OCCT shape ownership or recompute changes.
+- `cad_body_tip_tests` now checks ordered history, ownership, removal guards, independence and undo/redo.
+- Local FPC 3.2.2 suite and application build **must be rerun**; no PASS claim until real execution.
+
+Deferred: atomic Feature creation/link/tip transaction, persisted histories, visible Feature Tree and topological naming.
+
 # Engineering log (append only)
 
 ## 2026-10-31 — Stage 2: speed-first core (Candidate)

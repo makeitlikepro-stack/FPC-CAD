@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
-branch=main
-commit=2d4c39bbb227e15e0f8e06b007119738e70a2965
-checkpoint=2026-11-01 Released Engine main 2d4c39b: TreeView double-click accepted
-note=Pinned to approved Engine main; exact commit remains enforced by build_app.sh.
+branch=feature/deep-clipping-2026-11-01
+commit=540b0b06b08db64746185b4bee7607e788c210c6
+checkpoint=2026-11-01 Candidate: deep nested clip selection + Extrude overlay stacking
+note=Temporary experimental engine pin for local regression testing; do not merge before user PASS.

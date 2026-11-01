@@ -49,7 +49,7 @@ Sketch002 evaluator -> Extrude002 -----------------> Body002.Tip
 ```
 
 - `Part` owns **the logical object records**; `TCADDocument` owns the Part registry and the existing `TCADFeature` graph. A Part does *not* own OCCT result handles.
-- `Sketch` is a first-class document object. It owns/edit-commits `TCADSketch` geometry in a versioned sketch payload; its evaluator Feature produces profiles/faces from this data. In the migration stage, the existing `geometry` parameter remains the compatibility source until one authoritative storage path is implemented.
+- `Sketch` is a first-class document object. It owns/edit-commits `TCADSketch` geometry in a versioned sketch payload; its evaluator Feature produces profiles/faces from this data. In the migration stage, the existing `geometry` parameter remains the compatibility source until one authoritative storage path is implemented. The current foundation registry already provides a stable support Datum ID and an **identity local frame** (relative to that Datum), but not yet a geometry ownership adapter.
 - `Body` owns `Name`, `Id`, `PartId`, visibility, optional material and a **TipFeatureId**. It references a result, it never owns/duplicates an OCCT `TopoDS_Shape`. The same Body survives sketch dimension edits, recompute, Fillet, Cut and undo/redo.
 - `DatumPlane` is a persistent reference to a coordinate frame / support (base XY/XZ/YZ or user offset). It is **not** an artificial `TCADFeature` created for display only. Driven datums may eventually depend on Features.
 - `Feature history order` is an explicit ordered sequence per Part and optional Body, **not inferred solely from graph leaves or dependency nesting**. Graph dependencies retain their own independent topological order.

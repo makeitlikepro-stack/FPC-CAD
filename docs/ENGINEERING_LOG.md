@@ -1,3 +1,12 @@
+## 2026-11-01 — Atomic initial Sketch + Extrude creation (candidate, local tests pending)
+
+- Created `CAD.Core.SketchExtrudeCommand` with one `TCADCreateSketchExtrudeCommand` owning the new logical Sketch object, Sketch evaluator feature, and the existing `TCADAddBodyFeatureCommand`. The Sketch's Datum support and Body feature-history membership remain separate concepts.
+- Controller `FinishSketch` now submits exactly **one** command to `TCADHistory.Execute` for a newly created Sketch and its first Extrude, instead of separately attaching, binding, linking, and advancing the Body.
+- On successful Undo, the command removes the Extrude/Body Tip first, unbinds the Sketch evaluator, detaches the evaluator, and tombstones the logical Sketch. Redo restores the **same** logical object ID and feature IDs and reattaches the feature graph. A failed DoIt cleans up any newly created Sketch stages and never enters History.
+- Existing-Sketch edit mode is unchanged for this gate; updating Sketch geometry and changing Extrude parameters are **not yet** combined in one atomic edit command.
+- Added `ATOM-001..012` to `tests/core/cad_body_tip_tests.lpr` for single-undo chain removal, exact redo restoration, nonempty Body rejection, invalid Body, and invalid support.
+- Local FPC/Lazarus build and runtime tests are **pending**; no Actions or CI were created. Feature branch only; `dev`/`main` remain untouched.
+
 ## 2026-11-01 — Model tree interaction: select, double-click edit, right-click menu (candidate)
 
 - **Single click** only changes `TUITreeView.SelectedNode`, using `OnChange` without entering the sketch editor.

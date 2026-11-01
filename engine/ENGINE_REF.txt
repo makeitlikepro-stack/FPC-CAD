@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
-branch=main
-commit=f7ca183c1d5d79887a755d496853746e447f8767
-checkpoint=2026-11-01 Released Engine main f7ca183: user-approved GL_LINEAR Viewport3D RGBA8 color filtering; RG32UI picking preserved
-note=Engine source is not copied here. The build resolves this exact commit (scripts/test_view.sh: ENGINE_DIR).
+branch=feature/tree-double-click-2026-11-01
+commit=84fd7606802789750ca985198aac51e1b42c47c2
+checkpoint=2026-11-01 Engine feature branch: TreeView explicit OnNodeDoubleClick, no changes to Engine main
+note=Temporary pinned Engine feature ref for FPC-CAD GUI testing. Keep engine main untouched until user approval.

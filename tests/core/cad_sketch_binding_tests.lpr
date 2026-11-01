@@ -6,7 +6,7 @@ uses
   SysUtils, CAD.Core.Ids, CAD.Core.Values, CAD.Core.Feature,
   CAD.Core.Document, CAD.Core.ObjectIds, CAD.Core.ObjectModel,
   CAD.Core.History, CAD.Core.SketchBindingCommands,
-  CAD.Core.SketchGeometryCommands;
+  CAD.Core.SketchGeometryCommands, CAD.Core.FeatureEditCommand;
 
 type
   { Headless stand-in for CAD.Features.Sketch, avoiding OCCT in core tests. }
@@ -15,6 +15,12 @@ type
     procedure DefineParams; override;
     function Compute(const AInputs: array of TCADResult;
       out AResult: TCADResult; out AError: string): Boolean; override;
+  public
+    class function TypeName: string; override;
+  end;
+  TMockExtrude = class(TSketchEvaluator)
+  protected
+    procedure DefineParams; override;
   public
     class function TypeName: string; override;
   end;
@@ -39,6 +45,18 @@ end;
 class function TSketchEvaluator.TypeName: string;
 begin
   Result := 'Sketch';
+end;
+
+class function TMockExtrude.TypeName: string;
+begin
+  Result := 'Extrude';
+end;
+
+procedure TMockExtrude.DefineParams;
+begin
+  AddParam('length',CADFloat(10));
+  AddParam('symmetric',CADBool(False));
+  AddParam('reversed',CADBool(False));
 end;
 
 class function TNotSketch.TypeName: string;
@@ -249,9 +267,83 @@ begin
   end;
 end;
 
+procedure TestAtomicFeatureEdit;
+var
+  D: TCADDocument;
+  H: TCADHistory;
+  SId: TCADObjectId;
+  S, X: TCADId;
+  E: string;
+  Rev: QWord;
+begin
+  D := TCADDocument.Create;
+  H := TCADHistory.Create(D);
+  try
+    Check(D.Objects.TryAddSketch(CADObjectRef(cokPart,D.Objects.PartId),
+      CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
+      'EditableSketch',SId,E),'EDIT-001 logical Sketch');
+    S := D.AttachFeature(TSketchEvaluator.Create);
+    Check(D.TryBindSketchFeature(CADObjectRef(cokSketch,SId),S,E),
+      'EDIT-002 evaluator bound');
+    X := D.AttachFeature(TMockExtrude.Create);
+    Check(D.TryLink(X,S,E),'EDIT-003 Extrude input linked');
+    Check(H.Execute(TCADFeatureEditCommand.Create(
+      CADObjectRef(cokSketch,SId),X,'changed geometry','1,2,3',
+      25,True,True)),'EDIT-004 combined edit one History entry');
+    Check((D.Find(S).GetParamValue('geometry').S='changed geometry') and
+      (D.Find(S).GetParamValue('contours').S='1,2,3') and
+      (D.Find(X).GetParamValue('length').F=25) and
+      D.Find(X).GetParamValue('symmetric').B and
+      D.Find(X).GetParamValue('reversed').B,
+      'EDIT-005 all five parameters updated');
+    Check(H.Undo,'EDIT-006 single Undo');
+    Check((D.Find(S).GetParamValue('geometry').S='FPCSKETCH 1') and
+      (D.Find(S).GetParamValue('contours').S='ALL') and
+      (D.Find(X).GetParamValue('length').F=10) and
+      (not D.Find(X).GetParamValue('symmetric').B) and
+      (not D.Find(X).GetParamValue('reversed').B),
+      'EDIT-007 entire snapshot restored');
+    Check(H.Redo,'EDIT-008 single Redo');
+    Check((D.Find(S).GetParamValue('geometry').S='changed geometry') and
+      (D.Find(X).GetParamValue('length').F=25),
+      'EDIT-009 combined edit reapplied');
+    Rev := D.Revision;
+    Check(not H.Execute(TCADFeatureEditCommand.Create(
+      CADObjectRef(cokSketch,SId),X,'changed geometry','1,2,3',
+      25,True,True)) and (D.Revision=Rev),
+      'EDIT-010 no-op does not make History entry');
+    Check(H.Execute(TCADFeatureEditCommand.Create(
+      CADObjectRef(cokSketch,SId),X,'changed geometry','1,2,3',
+      30,True,True)),'EDIT-011 depth-only edit tracked');
+    Check(H.Undo and (D.Find(X).GetParamValue('length').F=25),
+      'EDIT-012 depth-only Undo');
+    Check(H.Redo and (D.Find(X).GetParamValue('length').F=30),
+      'EDIT-013 depth-only Redo');
+    Rev := D.Revision;
+    Check(not H.Execute(TCADFeatureEditCommand.Create(
+      CADObjectRef(cokSketch,SId),X,'other geometry','ALL',
+      -5,True,True)) and (D.Revision=Rev),
+      'EDIT-014 invalid depth rejected before mutation');
+    Check(not H.Execute(TCADFeatureEditCommand.Create(
+      CADObjectRef(cokSketch,SId),CADId(99999),'other geometry','ALL',
+      25,True,True)) and (D.Revision=Rev),
+      'EDIT-015 missing Extrude rejected before mutation');
+    Check(H.Undo and H.CanRedo,'EDIT-016 Undo creates redo entry');
+    Check(D.SetParam(S,'geometry',CADText('external modification')),
+      'EDIT-017 external geometry modification');
+    Rev := D.Revision;
+    Check(not H.Redo and H.CanRedo and (D.Revision=Rev),
+      'EDIT-018 stale Redo refused without mutation');
+  finally
+    H.Free;
+    D.Free;
+  end;
+end;
+
 begin
   TestBindings;
   TestEditorCommit;
+  TestAtomicFeatureEdit;
   TestTreeObjectEnumeration;
   if Failures=0 then
     WriteLn('PASS: CAD Sketch binding (',Checks,' checks)')

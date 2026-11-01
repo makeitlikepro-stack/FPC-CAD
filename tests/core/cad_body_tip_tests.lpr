@@ -80,7 +80,7 @@ begin
     Check(not D.TrySetBodyTip(CADObjectRef(cokBody,B),M,E) and
       (D.ObjectRevision=Rev) and (ObjB.FeatureCount=0),
       'HIST-006: cross-body duplicate rejected atomically');
-    Check(D.DetachFeature(R)=nil and D.DetachFeature(M)=nil,
+    Check((D.DetachFeature(R)=nil) and (D.DetachFeature(M)=nil),
       'HIST-007: non-tip history features cannot detach');
     Check(not D.Unlink(M,R),
       'HIST-008: active history dependency cannot unlink');

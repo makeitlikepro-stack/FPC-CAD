@@ -148,10 +148,12 @@ procedure TCADObjectModel.InitDefaults;
 var
   O: TCADModelObject;
 begin
-  FPartId := AddObject(cokPart, CADNoObjectId,
-    CADNoObjectId, 'Part001', True).Id;
-  FOriginId := AddObject(cokOrigin, FPartId,
-    CADNoObjectId, 'Origin', True).Id;
+  O := AddObject(cokPart, CADNoObjectId,
+    CADNoObjectId, 'Part001', True);
+  FPartId := O.Id;
+  O := AddObject(cokOrigin, FPartId,
+    CADNoObjectId, 'Origin', True);
+  FOriginId := O.Id;
   O := AddObject(cokDatumPlane, FPartId, FOriginId,
     'XY Plane', True);
   O.FDatumKind := cdkXY;
@@ -204,6 +206,7 @@ end;
 function TCADObjectModel.TryAddBody(const APart: TCADObjectRef;
   const AName: string; out AId: TCADObjectId;
   out AError: string): Boolean;
+var O: TCADModelObject;
 begin
   AId := CADNoObjectId;
   Result := CheckActive(APart,AError) <> nil;
@@ -218,7 +221,8 @@ begin
     AError := 'Body name cannot be empty';
     Exit(False);
   end;
-  AId := AddObject(cokBody, APart.Id, CADNoObjectId, AName, False).Id;
+  O := AddObject(cokBody, APart.Id, CADNoObjectId, AName, False);
+  AId := O.Id;
 end;
 
 function TCADObjectModel.TryAddSketch(const APart, ASupport: TCADObjectRef;
@@ -230,7 +234,11 @@ begin
   AId := CADNoObjectId;
   P := CheckActive(APart,AError);
   if P = nil then Exit(False);
-  if P.Kind <> cokPart then Exit(False);
+  if P.Kind <> cokPart then
+  begin
+    AError := 'Sketch must belong to a Part';
+    Exit(False);
+  end;
   D := CheckActive(ASupport,AError);
   if D = nil then Exit(False);
   if D.Kind <> cokDatumPlane then
@@ -248,7 +256,8 @@ begin
     AError := 'Sketch name cannot be empty';
     Exit(False);
   end;
-  AId := AddObject(cokSketch,P.Id,D.Id,AName,False).Id;
+  D := AddObject(cokSketch,P.Id,D.Id,AName,False);
+  AId := D.Id;
   Result := True;
 end;
 
@@ -283,9 +292,10 @@ function TCADObjectModel.TryRemove(const ARef: TCADObjectRef;
 var O: TCADModelObject;
 begin
   O := CheckActive(ARef,AError);
-  Result := (O <> nil) and CanRemove(O,AError);
-  if not Result then Exit;
+  if O = nil then Exit(False);
+  if not CanRemove(O,AError) then Exit(False);
   O.FActive := False;
+  Result := True;
   Inc(FRevision);
 end;
 

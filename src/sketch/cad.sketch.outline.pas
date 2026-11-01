@@ -75,6 +75,113 @@ begin
   end;
 end;
 
+{ Prismatic side faces are generated per CAD profile edge. The union
+  above cancels interior edges, but still retains vertices inserted at
+  intersections along a perfectly straight outer boundary. Merge those
+  vertices here, in the exact B-rep profile, not merely in the display mesh.
+  A genuine corner must always remain a separate edge. }
+function CanJoinBoundaryEdges(const E, F: TCADProfileEdge): Boolean;
+var
+  EX, EY, FX, FY, LenE, LenF, Cross, Dot, A0, A1: Double;
+begin
+  Result := False;
+  if (E.Kind <> F.Kind) or (E.Kind = pekCircle) then Exit;
+  if not SameXY(E.X2,E.Y2,F.X1,F.Y1) then Exit;
+  if E.Kind = pekArc then
+  begin
+    if (E.CCW <> F.CCW) or
+      (not SameXY(E.CX,E.CY,F.CX,F.CY)) or
+      (Abs(E.R-F.R) > EdgeTolerance) then Exit;
+    A0 := ArcTan2(E.Y1-E.CY,E.X1-E.CX);
+    A1 := ArcTan2(E.Y2-E.CY,E.X2-E.CX);
+    if E.CCW then
+      LenE := CCWSweep(A0,A1)
+    else
+      LenE := CCWSweep(A1,A0);
+    A0 := ArcTan2(F.Y1-F.CY,F.X1-F.CX);
+    A1 := ArcTan2(F.Y2-F.CY,F.X2-F.CX);
+    if F.CCW then
+      LenF := CCWSweep(A0,A1)
+    else
+      LenF := CCWSweep(A1,A0);
+    { No arc sweep may wrap more than one turn when merged. }
+    Result := LenE + LenF <= 2*Pi + 1e-9;
+    Exit;
+  end;
+  EX := E.X2-E.X1;
+  EY := E.Y2-E.Y1;
+  FX := F.X2-F.X1;
+  FY := F.Y2-F.Y1;
+  LenE := Hypot(EX,EY);
+  LenF := Hypot(FX,FY);
+  if (LenE <= EdgeTolerance) or (LenF <= EdgeTolerance) then Exit;
+  Cross := EX*FY-EY*FX;
+  Dot := EX*FX+EY*FY;
+  Result := (Dot > 0) and
+    (Abs(Cross) <= 1e-9 * LenE * LenF);
+end;
+
+function JoinedBoundaryEdge(const E, F: TCADProfileEdge): TCADProfileEdge;
+var
+  StartA, EndA, StartB, EndB, Total: Double;
+begin
+  Result := E;
+  Result.X2 := F.X2;
+  Result.Y2 := F.Y2;
+  if E.Kind <> pekArc then Exit;
+  StartA := ArcTan2(E.Y1-E.CY,E.X1-E.CX);
+  EndA := ArcTan2(E.Y2-E.CY,E.X2-E.CX);
+  StartB := ArcTan2(F.Y1-F.CY,F.X1-F.CX);
+  EndB := ArcTan2(F.Y2-F.CY,F.X2-F.CX);
+  if E.CCW then
+    Total := CCWSweep(StartA,EndA)+CCWSweep(StartB,EndB)
+  else
+    Total := CCWSweep(EndA,StartA)+CCWSweep(EndB,StartB);
+  if Abs(Total-2*Pi) <= 1e-9 then
+  begin
+    Result.Kind := pekCircle;
+    Result.X1 := E.CX+E.R;
+    Result.Y1 := E.CY;
+    Result.X2 := Result.X1;
+    Result.Y2 := Result.Y1;
+  end;
+end;
+
+procedure SimplifyBoundaryLoop(var L: TCADProfileLoop);
+var
+  I, J, K, N: Integer;
+  Changed: Boolean;
+begin
+  { The loop is cyclic: the final segment may also be collinear with the
+    first. Removing this seam is essential for clean exterior side walls. }
+  repeat
+    Changed := False;
+    N := Length(L.Edges);
+    if N < 2 then Break;
+    for I := 0 to N-1 do
+    begin
+      J := (I+1) mod N;
+      if not CanJoinBoundaryEdges(L.Edges[I],L.Edges[J]) then Continue;
+      if J = 0 then
+      begin
+        L.Edges[0] := JoinedBoundaryEdge(L.Edges[I],L.Edges[0]);
+        SetLength(L.Edges,N-1);
+      end
+      else
+      begin
+        L.Edges[I] := JoinedBoundaryEdge(L.Edges[I],L.Edges[J]);
+        for K := J to N-2 do L.Edges[K] := L.Edges[K+1];
+        SetLength(L.Edges,N-1);
+      end;
+      Changed := True;
+      Break;
+    end;
+  until not Changed;
+  L.Area := 0;
+  for I := 0 to High(L.Edges) do
+    L.Area := L.Area+SignedEdgeArea(L.Edges[I]);
+end;
+
 function ReverseMatches(const E, F: TCADProfileEdge): Boolean;
 begin
   Result := False;
@@ -279,6 +386,7 @@ begin
       end;
     until False;
 
+    SimplifyBoundaryLoop(L);
     if Abs(L.Area) <= MinArea then
     begin
       AError := 'selected contour union produced a degenerate ring';

@@ -1,3 +1,12 @@
+## 2026-11-01 — Atomic Body Feature command (candidate; compile/test pending)
+
+- Added `CAD.Core.BodyFeatureCommands.TCADAddBodyFeatureCommand`. One History command validates the Body/current tip and ordered inputs before publication, attaches or reattaches a Feature, connects graph inputs, advances Body tip/history, and compensates by detaching if linking/tip fails.
+- Undo first validates that the command's feature is still the Body tip and has no dependants, then restores the previous tip and detaches the exact same Feature. Redo reattaches the original ID.
+- Changed `TCADHistory.Undo/Redo` to keep commands in their source stack until successful execution; a failed Undo does not lose a detached-feature-owning command.
+- Added TX-001..TX-022 regression cases in `cad_body_tip_tests`, including preflight no-mutation and retry after failed Undo.
+- This gate does **not** create Sketch objects or implement user-visible OCCT operations; it is a headless transaction foundation. Failures during exceptionally rare low-level rollback paths still raise rather than claim successful rollback.
+- Local FPC 3.2.2 compile and all integration tests still required. No PASS or merge approval implied.
+
 ## 2026-11-01 — Ordered Body feature history (candidate; NOT YET TESTED)
 
 Branch: `feature/cad-body-tip-history-2026-11-01`.

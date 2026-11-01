@@ -1,3 +1,10 @@
+## 2026-11-01 — Actual TreeView selection event found in Engine (candidate; GUI test pending)
+
+- Source audit of `FPC-OpenGL-UI-Engine/src/ecs/widgets/opengl.ecs.widgets.navigation.inc` established the real behavior: `TUITreeView.RowClicked` calls `SetSelectedNode`; that setter fires `FOnChange(Self)`. Row buttons do **not** forward `TUITreeView.OnClick`, and `OnActivate` is reserved for keyboard activation.
+- Replaced the incorrect `OnClick` connection with `OnChange := @Activate`, retaining `OnActivate := @Activate`. Selection now routes to Sketch/Extrude/Body dispatch via the engine's actual event path.
+- Keyboard selection also emits OnChange and can open the editor upon a selection change; this is consistent with the user's current request for immediate component editing, but a passive inspector/editor separation may supersede it.
+- Requires local build and GUI verification; no change to Engine and no dev/main merge.
+
 ## 2026-11-01 — Model tree single-click component activation (candidate)
 
 - Previous change dispatched Sketch/Extrude editors only through `TUITreeView.OnActivate`, which may not run on row clicks and may only expand a parent node such as Extrude rather than edit it. User confirmed activation did not work.

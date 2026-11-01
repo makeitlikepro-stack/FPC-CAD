@@ -543,7 +543,8 @@ end;
 
 procedure TCADAppController.ExtrudePreviewClick(Sender: TObject);
 begin
-  if (FSketchMode = nil) or not FSketchMode.Active then Exit;
+  if (FSketchMode = nil) or not FSketchMode.Active or
+     FExtrudePanel.Visible then Exit;
   FExtrudeDraft := FExtrudeSaved;
   FExtrudePanel.Visible := True;
   FSketchMode.SetTool(sktSelect); { contour picking is available in Select }
@@ -740,7 +741,9 @@ begin
         begin
           { first Esc drops the shape being drawn (Smart Dimension: the
             picked items), the next one goes to Select }
-          if FSketchMode.LineEditActive then
+          if (FExtrudePanel <> nil) and FExtrudePanel.Visible then
+            ExtrudeCancelClick(nil)
+          else if FSketchMode.LineEditActive then
             FSketchToolbar.Run(ctaSelect)
           else if FSketchMode.Editor.Busy then
             FSketchToolbar.Run(ctaCancel)
@@ -901,7 +904,17 @@ begin
   if FChrome <> nil then
     FChrome.SetDof(DofText);
   if FSketchMode.Active then
-    W.Status.Text := FSketchMode.StatusText
+  begin
+    W.Status.Text := FSketchMode.StatusText;
+    if (FExtrudePanel <> nil) and FExtrudePanel.Visible then
+    begin
+      if FSketchMode.ExtrudePreviewError <> '' then
+        FExtrudeStatus.Text := FSketchMode.ExtrudePreviewError
+      else
+        FExtrudeStatus.Text := Format('OCCT preview | %.3f mm',
+          [FExtrudeDraft.Depth]);
+    end;
+  end
   else
     W.Status.Text := NavigationHint;
 end;

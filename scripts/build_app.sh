@@ -18,12 +18,12 @@ if [[ "$HAVE" != "$WANT" ]]; then
   echo "BLOCKED: wrong FPC-OpenGL-UI-Engine revision." >&2
   echo "  Found:    $HAVE" >&2
   echo "  Required: $WANT" >&2
-  echo "  This CAD branch pins a specific Engine test revision, not necessarily Engine main." >&2
-  echo "  After checking the engine checkout has no uncommitted work:" >&2
+  echo "  This CAD release pins an exact Engine commit from ENGINE_REF.txt." >&2
+  echo "  Check the engine checkout has no uncommitted work, then run:" >&2
   echo "    git -C \"$ENGINE_DIR\" fetch origin" >&2
-  echo "    git -C \"$ENGINE_DIR\" switch --track origin/$ENGINE_BRANCH" >&2
+  echo "    git -C \"$ENGINE_DIR\" switch \"$ENGINE_BRANCH\"" >&2
   echo "    git -C \"$ENGINE_DIR\" pull --ff-only origin \"$ENGINE_BRANCH\"" >&2
-  echo "  (If the local Engine branch already exists, use git switch $ENGINE_BRANCH.)" >&2
+  echo "  If the local branch does not exist, track origin/$ENGINE_BRANCH first." >&2
   exit 2
 fi
 bash "$ROOT/external/occt_bridge/build.sh"

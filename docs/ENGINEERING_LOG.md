@@ -1,3 +1,11 @@
+## 2026-11-01 — Sketch Viewer relation glyph visibility (candidate)
+
+- User clarified missing constraint icons are **in the Sketch Viewport**, not the constraints list. Rendering path: `CAD.App.SketchDims.PlaceGlyphs` and `CAD.Sketch.Commands.CADRelationGlyph/Anchor`.
+- `Coincident` had no glyph mapping at all. Added `Coin` marker and midpoint anchor between its two constrained points.
+- The previous overlay hid a whole glyph whenever its default right-of-anchor placement crossed the viewport bounds, even though its associated sketch point was visible. The new placement clamps it into viewport bounds; anchors outside the viewport remain hidden. Overlapping glyphs still use stacking.
+- Added two `VIEW-REL` regression checks for Coincident glyph text and geometry anchor in `sketch_tests`.
+- The separate **arc tangent split/region selection** report remains OPEN; this change does not claim to fix its planar-region topology. FPC local compilation and visual verification pending. No changes to dev/main.
+
 ## 2026-11-01 — Undo result not visible: direct document controls and persistent route indicator
 
 - User observed no status message after Undo, so the previous transient `StatusLabel` diagnostic was insufficient to determine whether `Ctrl+Z` reached document history.

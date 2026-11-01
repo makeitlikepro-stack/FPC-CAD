@@ -82,6 +82,10 @@ type
     procedure Touch(const AId: TCADId);
     function UserCount(const AId: TCADId): Integer;
     { Validate a Body tip transition against current feature graph. }
+    { Binds a logical Sketch to its existing Sketch evaluator. Geometry
+      stays exclusively in the evaluator's 'geometry' parameter for now. }
+    function TryBindSketchFeature(const ASketch: TCADObjectRef;
+      const AFeature: TCADId; out AError: string): Boolean;
     function TrySetBodyTip(const ABody: TCADObjectRef;
       const ANewTip: TCADId; out AError: string): Boolean;
     { Show a feature mid-tree, hide it, or back to auto (end of a chain).
@@ -223,7 +227,8 @@ begin
   if (S < 0) or (FGraph.UserCount(S) > 0) then
     Exit;
   { Any entry in Body history remains owned, including non-tip features. }
-  if CADObjectIdValid(FObjects.FeatureOwner(AId)) then Exit;
+  if CADObjectIdValid(FObjects.FeatureOwner(AId)) or
+     CADObjectIdValid(FObjects.SketchFeatureOwner(AId)) then Exit;
   Result := FSlots[S];
   { Keep the inputs on the feature: Reattach links them again. }
   Ins := Copy(Result.Inputs);
@@ -343,6 +348,37 @@ begin
   if SlotOf(AId) < 0 then
     Exit(0);
   Result := FGraph.UserCount(AId.Slot);
+end;
+
+function TCADDocument.TryBindSketchFeature(const ASketch: TCADObjectRef;
+  const AFeature: TCADId; out AError: string): Boolean;
+var
+  O: TCADModelObject;
+  F: TCADFeature;
+begin
+  O := FObjects.Find(ASketch);
+  if (O = nil) or (O.Kind <> cokSketch) then
+  begin
+    AError := 'missing Sketch object or incorrect kind';
+    Exit(False);
+  end;
+  if CADIdValid(AFeature) then
+  begin
+    F := Find(AFeature);
+    if (F = nil) or (F.TypeName <> 'Sketch') or
+       not F.HasParam('geometry') or
+       (F.GetParamValue('geometry').Kind <> cvkText) then
+    begin
+      AError := 'feature is not a Sketch geometry evaluator';
+      Exit(False);
+    end;
+    if CADObjectIdValid(FObjects.FeatureOwner(AFeature)) then
+    begin
+      AError := 'Sketch evaluator cannot be a Body history feature';
+      Exit(False);
+    end;
+  end;
+  Result := FObjects.TryBindSketchFeature(ASketch,AFeature,AError);
 end;
 
 function TCADDocument.TrySetBodyTip(const ABody: TCADObjectRef;

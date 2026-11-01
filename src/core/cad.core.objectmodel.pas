@@ -26,6 +26,7 @@ type
     FDatumKind: TCADDatumKind;
     FFrame: TCADDatumFrame;
     FTipFeatureId: TCADId; { Body's logical pointer; no result/shape ownership }
+    FFeatureHistory: TCADIdArray; { chronological Body operations, not DAG order }
   public
     property Id: TCADObjectId read FId;
     property Kind: TCADObjectKind read FKind;
@@ -37,6 +38,8 @@ type
     property IsDefault: Boolean read FIsDefault;
     property DatumKind: TCADDatumKind read FDatumKind;
     property TipFeatureId: TCADId read FTipFeatureId;
+    function FeatureCount: Integer;
+    function FeatureAt(AIndex: Integer): TCADId;
     { Origin and Datum frames are in Part coordinates. A Sketch frame is
       local to SupportId (identity at creation), not a duplicated Datum. }
     property Frame: TCADDatumFrame read FFrame;
@@ -79,6 +82,8 @@ type
     { Called after feature-graph validation by the document. Never owns a result. }
     function TryAssignBodyTip(const ABody: TCADObjectRef;
       const AFeature: TCADId; out AError: string): Boolean;
+    { Includes non-tip features. Prevent detachment while in a Body history. }
+    function FeatureOwner(const AFeature: TCADId): TCADObjectId;
     function ActiveCount(AKind: TCADObjectKind): Integer;
     property PartId: TCADObjectId read FPartId;
     property OriginId: TCADObjectId read FOriginId;
@@ -92,6 +97,19 @@ type
 function CADDefaultDatumFrame(AKind: TCADDatumKind): TCADDatumFrame;
 
 implementation
+
+function TCADModelObject.FeatureCount: Integer;
+begin
+  Result := Length(FFeatureHistory);
+end;
+
+function TCADModelObject.FeatureAt(AIndex: Integer): TCADId;
+begin
+  if (FKind <> cokBody) or (AIndex < 0) or
+     (AIndex >= Length(FFeatureHistory)) then
+    raise ERangeError.Create('Body feature history index out of range');
+  Result := FFeatureHistory[AIndex];
+end;
 
 function CADDefaultDatumFrame(AKind: TCADDatumKind): TCADDatumFrame;
 begin
@@ -280,7 +298,7 @@ var
   O: TCADModelObject;
 begin
   AError := '';
-  if (AObject.Kind = cokBody) and CADIdValid(AObject.FTipFeatureId) then
+  if (AObject.Kind = cokBody) and (AObject.FeatureCount > 0) then
   begin
     AError := 'Cannot remove a Body with an active feature tip';
     Exit(False);
@@ -405,25 +423,71 @@ begin
   end;
 end;
 
+function TCADObjectModel.FeatureOwner(const AFeature: TCADId): TCADObjectId;
+var
+  I, J: Integer;
+  O: TCADModelObject;
+begin
+  Result := CADNoObjectId;
+  if not CADIdValid(AFeature) then Exit;
+  for I := 0 to FCount-1 do
+  begin
+    O := FSlots[I];
+    if (not O.Active) or (O.Kind <> cokBody) then Continue;
+    for J := 0 to O.FeatureCount-1 do
+      if CADIdEqual(O.FFeatureHistory[J], AFeature) then
+        Exit(O.Id);
+  end;
+end;
+
 function TCADObjectModel.TryAssignBodyTip(const ABody: TCADObjectRef;
   const AFeature: TCADId; out AError: string): Boolean;
 var
   O: TCADModelObject;
+  N: Integer;
+  OwnerId: TCADObjectId;
 begin
+  Result := False;
   O := CheckActive(ABody, AError);
-  if O = nil then Exit(False);
+  if O = nil then Exit;
   if O.Kind <> cokBody then
   begin
     AError := 'tip owner must be a Body';
-    Exit(False);
+    Exit;
   end;
   if CADIdEqual(O.FTipFeatureId, AFeature) then
   begin
     AError := 'Body tip already equals requested feature';
-    Exit(False);
+    Exit;
   end;
-  O.FTipFeatureId := AFeature;
+  N := O.FeatureCount;
+  { An undo removes precisely the last operation. An edit appends one new
+    operation. No arbitrary rewinding, branching or duplicate membership. }
+  if (N > 0) and
+     (((N = 1) and not CADIdValid(AFeature)) or
+      ((N > 1) and CADIdEqual(AFeature,O.FFeatureHistory[N-2]))) then
+    SetLength(O.FFeatureHistory,N-1)
+  else
+  begin
+    if not CADIdValid(AFeature) then
+    begin
+      AError := 'Cannot clear a nonempty Body history in one step';
+      Exit;
+    end;
+    OwnerId := FeatureOwner(AFeature);
+    if CADObjectIdValid(OwnerId) then
+    begin
+      AError := 'Feature already belongs to a Body';
+      Exit;
+    end;
+    SetLength(O.FFeatureHistory,N+1);
+    O.FFeatureHistory[N] := AFeature;
+  end;
+  N := O.FeatureCount;
+  if N = 0 then O.FTipFeatureId := CADNoId
+  else O.FTipFeatureId := O.FFeatureHistory[N-1];
   Inc(FRevision);
+  AError := '';
   Result := True;
 end;
 

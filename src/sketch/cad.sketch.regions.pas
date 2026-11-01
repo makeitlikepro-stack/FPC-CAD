@@ -261,6 +261,35 @@ var
     Splits[AEntity][Q].Node:=Idx;
   end;
 
+  { A tangent contact is a single (double) intersection. Numeric line-circle
+    quadratic roots may not survive finite-curve filtering when a solver
+    places the arc end a few nanometres from the line. Connect the arc's
+    actual endpoints to a finite line segment explicitly, in the *virtual*
+    topological graph. No Sketch point or constraint is changed. }
+  procedure SplitArcEndpointOnLine(AArc, ALine: Integer; AT: Double);
+  var
+    PX, PY, AX, AY, DX, DY, D2, TLine, FX, FY: Double;
+    L: TCADSketchEntity;
+  begin
+    L := S.Entities[ALine];
+    if L.Kind <> sekLine then Exit;
+    SketchPointAt(S,AArc,AT,PX,PY);
+    AX := S.PointX(L.P1);
+    AY := S.PointY(L.P1);
+    DX := S.PointX(L.P2)-AX;
+    DY := S.PointY(L.P2)-AY;
+    D2 := Sqr(DX)+Sqr(DY);
+    if D2 <= 1e-20 then Exit;
+    TLine := ((PX-AX)*DX+(PY-AY)*DY)/D2;
+    if (TLine < -ParamTol) or (TLine > 1+ParamTol) then Exit;
+    TLine := EnsureRange(TLine,0.0,1.0);
+    FX := AX+TLine*DX;
+    FY := AY+TLine*DY;
+    if Hypot(FX-PX,FY-PY)>NodeTol then Exit;
+    SplitAt(AArc,AT);
+    SplitAt(ALine,TLine);
+  end;
+
   procedure AddPart(AEntity,A,B:Integer; P0,P1:Double);
   var E:TCADSketchEntity;
       F:TCADProfileEdge;
@@ -364,7 +393,9 @@ begin
   for I:=0 to S.PointCount-1 do
     if S.Points[I].Active then
       Scale:=Max(Scale,Max(Abs(S.PointX(I)),Abs(S.PointY(I))));
-  NodeTol:=Max(1e-8,Scale*1e-9);
+  { Graph welding tolerance is looser than the solver's geometric
+    precision: near-coincident arc endpoints must refer to ONE node. }
+  NodeTol:=Max(1e-6,Scale*1e-8);
   SetLength(Splits,S.EntityCount);
   for I:=0 to S.EntityCount-1 do
   begin
@@ -385,6 +416,18 @@ begin
       begin
         SplitAt(I,SketchParameter(S,I,IP[K].X,IP[K].Y));
         SplitAt(J,SketchParameter(S,J,IP[K].X,IP[K].Y));
+      end;
+      { Include tangencies at existing arc ends even when the numerical
+        quadratic produced no finite-curve intersection. }
+      if (S.Entities[I].Kind=sekArc) and (S.Entities[J].Kind=sekLine) then
+      begin
+        SplitArcEndpointOnLine(I,J,0);
+        SplitArcEndpointOnLine(I,J,1);
+      end;
+      if (S.Entities[J].Kind=sekArc) and (S.Entities[I].Kind=sekLine) then
+      begin
+        SplitArcEndpointOnLine(J,I,0);
+        SplitArcEndpointOnLine(J,I,1);
       end;
     end;
   end;

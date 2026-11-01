@@ -29,7 +29,8 @@ uses
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Core.ObjectIds, CAD.Core.History,
-  CAD.Core.SketchGeometryCommands, CAD.Core.ObjectCommands, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
+  CAD.Core.SketchGeometryCommands, CAD.Core.ObjectCommands,
+  CAD.Core.ObjectModel, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
@@ -827,13 +828,27 @@ end;
 procedure TCADAppController.NewBody(Sender: TObject);
 var
   C: TCADCreateBodyCommand;
-  N: Integer;
+  N, I: Integer;
+  O: TCADModelObject;
   Name: string;
 begin
   if (FDoc = nil) or (FHistory = nil) or FSketchMode.Active then Exit;
   { An empty Body has no BRep. It becomes the home for later features. }
-  N := FDoc.Objects.ActiveCount(cokBody) + 1;
-  Name := Format('Body%.3d',[N]);
+  N := 1;
+  repeat
+    Name := Format('Body%.3d',[N]);
+    Inc(N);
+    { Names are labels, but avoid collisions even after deleting a Body.
+      Reusing a label never implies reusing its stable Object ID. }
+    I := 0;
+    while I < FDoc.Objects.ObjectCount do
+    begin
+      O := FDoc.Objects.ObjectAt(I);
+      if O.Active and (O.Kind = cokBody) and (O.Name = Name) then
+        Break;
+      Inc(I);
+    end;
+  until I = FDoc.Objects.ObjectCount;
   C := TCADCreateBodyCommand.Create(
     CADObjectRef(cokPart,FDoc.Objects.PartId),Name);
   if FHistory.Execute(C) then

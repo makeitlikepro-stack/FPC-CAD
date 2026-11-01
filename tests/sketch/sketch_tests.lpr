@@ -1151,6 +1151,27 @@ begin
   end;
 end;
 
+
+procedure TestViewerRelationGlyphs;
+var
+  S: TCADSketch;
+  P, Q, C: Integer;
+  U, V: Double;
+begin
+  S := TCADSketch.Create;
+  try
+    P := S.AddPoint(10, 20);
+    Q := S.AddPoint(10, 20);
+    C := S.Coincident(P,Q);
+    Check(CADRelationGlyph(S,C)='Coin',
+      'VIEW-REL-001 Coincident shows visible relation glyph');
+    Check(CADRelationAnchor(S,C,U,V) and Near(U,10) and Near(V,20),
+      'VIEW-REL-002 Coincident glyph anchored to constrained points');
+  finally
+    S.Free;
+  end;
+end;
+
 begin
   Checks := 0;
   Failures := 0;
@@ -1168,6 +1189,7 @@ begin
   TestTypedInput;
   TestDimGraphic;
   TestSmartDimension;
+  TestViewerRelationGlyphs;
   if Failures = 0 then
     WriteLn(Format('PASS  sketch: %d checks', [Checks]))
   else

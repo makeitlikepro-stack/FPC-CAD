@@ -133,14 +133,9 @@ end;
 
 function CADExtrudeHandleDepth(const Frame: TCADExtrudeHandleFrame;
   X0, Y0, X1, Y1, AStartDepth: Double): Double;
-var
-  Den: Double;
 begin
-  Den := Sqr(Frame.PixelsXPerMM)+Sqr(Frame.PixelsYPerMM);
-  if Den <= 1e-12 then Exit(AStartDepth);
-  Result := EnsureRange(AStartDepth +
-    ((X1-X0)*Frame.PixelsXPerMM+(Y1-Y0)*Frame.PixelsYPerMM)/Den,
-    0.01,1000000.0);
+  Result := CADDraggedExtrudeDepth(AStartDepth,
+    X1-X0,Y1-Y0,Frame.PixelsXPerMM,Frame.PixelsYPerMM);
 end;
 
 procedure CADBuildExtrudeHandleMesh(const Frame: TCADExtrudeHandleFrame;

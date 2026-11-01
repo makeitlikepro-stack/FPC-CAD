@@ -24,7 +24,7 @@ uses
   OpenGL.Render.Material, CAD.App.SketchFill, CAD.Sketch.TrimExtend,
   CAD.Sketch.CurveTrim, CAD.Sketch.Profile, CAD.Sketch.Regions,
   CAD.Sketch.ContourSelection, CAD.Sketch.ExtrudeOptions,
-  CAD.App.ExtrudePreview;
+  CAD.App.ExtrudePreview, CAD.App.ExtrudeGizmo;
 
 const
   CAD_SKETCH_PREVIEW_ID = 900002;      { far above feature ids (slot + 1) }
@@ -33,6 +33,7 @@ const
   CAD_SKETCH_DIM_ID = 900031;          { drafting dimensions }
   CAD_SKETCH_SELECTED_ID = 900032;     { selected contour fill overlay }
   CAD_SKETCH_EXTRUDE_ID = 900033;      { OCCT solid preview in Sketch mode }
+  CAD_SKETCH_EXTRUDE_GRIP_ID = 900034; { depth drag handle over the top face }
   { every sketch-mode object id is at or above this }
   CAD_SKETCH_FIRST_ID = 900000;
 
@@ -40,6 +41,7 @@ type
   TCADEntityEvent = procedure(Sender: TObject; AEntity: Integer) of object;
   { right click in the view (local pixels, top-left origin) }
   TCADViewPointEvent = procedure(Sender: TObject; AX, AY: Integer) of object;
+  TCADExtrudeDepthEvent = procedure(Sender: TObject; ADepth: Double) of object;
 
   TCADSketchMode = class
   private
@@ -65,6 +67,13 @@ type
     FLastExtrudeRevision: Cardinal;
     FLastExtrudeContours: string;
     FLastExtrudeOptions: TCADExtrudeOptions;
+    FExtrudeGrip: TCADExtrudeHandleFrame;
+    FExtrudeGripValid: Boolean;
+    FExtrudeGripDragging: Boolean;
+    FExtrudeGripStartX, FExtrudeGripStartY: Integer;
+    FExtrudeGripStartDepth: Double;
+    FExtrudeGripStartFrame: TCADExtrudeHandleFrame;
+    FOnExtrudeDepthChanged: TCADExtrudeDepthEvent;
     FOnSmartDimension: TNotifyEvent;
     FOnContextMenu: TCADViewPointEvent;
     { sketch undo: texts of the sketch after each change }
@@ -85,6 +94,8 @@ type
     function ObjectMesh(AId: Cardinal; const AMaterial: string = ''): TV3DMeshData;
     procedure RefreshFill;
     procedure RefreshExtrudePreview;
+    procedure RefreshExtrudeGrip;
+    procedure UpdateSketchOverlayVisibility;
     procedure RefreshSketch;
     procedure RefreshPreview;
     procedure Changed;
@@ -142,6 +153,9 @@ type
       const AOptions: TCADExtrudeOptions);
     property ExtrudePreviewActive: Boolean read FExtrudePreviewActive;
     property ExtrudePreviewError: string read FExtrudePreviewError;
+    property OnExtrudeDepthChanged: TCADExtrudeDepthEvent
+      read FOnExtrudeDepthChanged write FOnExtrudeDepthChanged;
+    function ExtrudeGripScreen(out AX, AY: Double): Boolean;
     property ContourCount:Integer read FContourCount;
     property LineEditActive: Boolean read FLineEditActive;
     property LineEditMode: TCADLineEditMode read FLineEditMode;
@@ -226,6 +240,8 @@ begin
   FExtrudePreviewError:='';
   FLastExtrudeRevision:=High(Cardinal);
   FLastExtrudeContours:='';
+  FExtrudeGripValid:=False;
+  FExtrudeGripDragging:=False;
   FEditor.Resolve;                         { states and DOF of a loaded sketch }
   SetLength(FUndo, 1);
   FUndo[0] := CADSketchToText(FSketch);
@@ -309,6 +325,8 @@ begin
   FLineEditMessage := '';
   FExtrudePreviewActive:=False;
   FExtrudePreviewError:='';
+  FExtrudeGripDragging:=False;
+  FExtrudeGripValid:=False;
   FView.OnMouseDown := nil;
   FView.OnMouseUp := nil;
   FView.OnMouseMove := nil;
@@ -332,6 +350,9 @@ begin
   if O <> nil then
     O.Visible := False;
   O := FView.FindObject(CAD_SKETCH_EXTRUDE_ID);
+  if O <> nil then
+    O.Visible := False;
+  O := FView.FindObject(CAD_SKETCH_EXTRUDE_GRIP_ID);
   if O <> nil then
     O.Visible := False;
   FView.Invalidate3D;

@@ -1,3 +1,11 @@
+## 2026-11-01 — Show Sketch under its consuming Body Extrude (candidate; pending GUI test)
+
+- Fixed Model tree hierarchy: a Sketch referenced by an Extrude in a Body's ordered Feature History is now displayed beneath that Extrude in `Part → Body → History → Extrude → Sketch`.
+- Relationship is derived from `Body.FeatureAt → Feature.Inputs → SketchFeatureOwner`; no name matching, fragile slot assumptions, or duplicate geometry storage.
+- A Sketch referenced by multiple operations is rendered at each dependency site; an unreferenced logical Sketch remains directly under Part. Sketch node keeps its evaluator Feature ID as activation tag (double-click editing unchanged).
+- This **changes only the presentation hierarchy**: Sketch remains a separate logical document object supported by its Datum Plane. A permanent explicit Sketch↔Body association and commands for moving/assigning Sketch to Body remain architectural follow-ups.
+- FPC application build and interactive Model-tree inspection pending. `dev`/`main` unchanged.
+
 ## 2026-11-01 — Initial Extrude attached to active Body (candidate; tests pending)
 
 - The Model tree's Body node now emits its logical Object ID on activation (double-click or Enter), separately from feature tags; controller stores `FActiveBody`. Newly created Bodies become active automatically.

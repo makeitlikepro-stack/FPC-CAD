@@ -371,12 +371,24 @@ begin
   end;
   { A forward transition must consume the old tip. A backward transition
     is allowed for Undo when the old tip consumes the target feature. }
-  if CADIdValid(OldTip) and CADIdValid(ANewTip) and
-     not (FGraph.HasLink(ANewTip.Slot,OldTip.Slot) or
-          FGraph.HasLink(OldTip.Slot,ANewTip.Slot)) then
+  if CADIdValid(OldTip) and CADIdValid(ANewTip) then
   begin
-    AError := 'Body tip transition must follow a direct feature dependency';
-    Exit(False);
+    { The registry only accepts a one-step pop or append. For an append
+      the new feature must use the old tip, never the reverse. }
+    if (O.FeatureCount > 1) and
+       CADIdEqual(ANewTip,O.FeatureAt(O.FeatureCount-2)) then
+    begin
+      if not FGraph.HasLink(OldTip.Slot,ANewTip.Slot) then
+      begin
+        AError := 'previous Body history dependency is missing';
+        Exit(False);
+      end;
+    end
+    else if not FGraph.HasLink(ANewTip.Slot,OldTip.Slot) then
+    begin
+      AError := 'new Body tip must depend on the current tip';
+      Exit(False);
+    end;
   end;
   Result := FObjects.TryAssignBodyTip(ABody, ANewTip, AError);
 end;

@@ -50,7 +50,7 @@ type
     RadiusLabel: TUILabel;
     Radius: TUISlider;
     Selected, Hover, Recompute, Computed, Meshes, Sync: TUILabel;
-    Status: TUILabel;
+    Status, UndoTrace: TUILabel;
   end;
 
   TCADAppController = class
@@ -192,6 +192,7 @@ begin
   W.Meshes := L('MeshesLabel');
   W.Sync := L('SyncLabel');
   W.Status := L('StatusLabel');
+  W.UndoTrace := L('UndoTraceLabel');
   FEditSketch := CADNoId;
   FEditExtrude := CADNoId;
   FExtrudeSaved := CADDefaultExtrudeOptions;
@@ -428,6 +429,7 @@ begin
       begin
         FSketchToolbar.Run(ctaUndo);
         W.Status.Text := 'Undo: Sketch editor (not document History)';
+        W.UndoTrace.Text := 'UNDO > Sketch editor';
       end
       else if (FHistory <> nil) and FHistory.CanUndo then
       begin
@@ -445,14 +447,22 @@ begin
             W.Status.Text := 'Undo: '+UndoLabel+
               Format(' | Sketch objects: %d',
                 [FDoc.Objects.ActiveCount(cokSketch)]);
+            W.UndoTrace.Text := Format('UNDO > %s | Sketches: %d',
+              [UndoLabel,FDoc.Objects.ActiveCount(cokSketch)]);
           end;
         except
           on E: Exception do
+          begin
             W.Status.Text := 'Undo FAILED ['+UndoLabel+']: '+E.Message;
+            W.UndoTrace.Text := 'UNDO FAILED: '+UndoLabel;
+          end;
         end;
       end
       else
+      begin
         W.Status.Text := 'Undo: no document History entry available';
+        W.UndoTrace.Text := 'UNDO > no document action';
+      end;
     cadRedo:
       if FSketchMode.Active then FSketchToolbar.Run(ctaRedo)
       else if (FHistory <> nil) and FHistory.CanRedo then

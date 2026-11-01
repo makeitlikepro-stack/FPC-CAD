@@ -127,7 +127,8 @@ procedure TCADSketchDims.Tick(Sender: TObject);
 var
   K: string;
 begin
-  if not FMode.Active or (FChipCount + FGlyphCount = 0) then
+  if not FMode.Active or FMode.ExtrudePreviewActive or
+     (FChipCount + FGlyphCount = 0) then
     Exit;
   K := CameraKey;
   if K <> FCameraKey then
@@ -139,6 +140,15 @@ var
   S: TCADSketch;
   I, N: Integer;
 begin
+  if FMode.ExtrudePreviewActive then
+  begin
+    { A clean solid preview should not show sketch relation glyphs and
+      dimension chips through the merged top face. }
+    for I := 0 to High(FChips) do FChips[I].Visible := False;
+    for I := 0 to High(FGlyphs) do FGlyphs[I].Visible := False;
+    FEdit.Visible := False;
+    Exit;
+  end;
   N := 0;
   if FMode.Active and (FMode.Sketch <> nil) then
   begin
@@ -243,6 +253,7 @@ var
   I: Integer;
   U, V, X, Y, W: Double;
 begin
+  if FMode.ExtrudePreviewActive then Exit;
   FCameraKey := CameraKey;
   { drafting dimension lines follow the zoom; the chips sit on their text }
   FMode.RefreshDimensions;

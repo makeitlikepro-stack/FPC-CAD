@@ -228,14 +228,24 @@ begin
       if Ok[K] and (Abs(FGlyphX[K] - X) < 2) and (Abs(FGlyphY[K] - Y) < 2) then
         Inc(Stack);
     W := 10 + 8 * Length(string(FGlyphs[I].Text));
-    X := FView.Left + X + 8 + Stack * (W + 2);
-    Y := FView.Top + Y + 6;
+    { The geometry anchor may be visible even when the glyph's default
+      right-hand placement crosses the viewport border. Keep that glyph
+      on screen; do not silently hide a valid constraint. }
+    X := X + 8 + Stack * (W + 2);
+    Y := Y + 6;
+    if (FGlyphX[I] < 0) or (FGlyphX[I] >= FView.Width) or
+       (FGlyphY[I] < 0) or (FGlyphY[I] >= FView.Height) then
+    begin
+      FGlyphs[I].Visible := False;
+      Continue;
+    end;
+    X := EnsureRange(X, 0.0, Max(0.0, FView.Width - W));
+    Y := EnsureRange(Y, 0.0, Max(0.0, FView.Height - GlyphH));
     FGlyphs[I].Width := W;
     FGlyphs[I].Height := GlyphH;
-    FGlyphs[I].Left := X;
-    FGlyphs[I].Top := Y;
-    FGlyphs[I].Visible := (X >= FView.Left) and (Y >= FView.Top) and
-      (X + W <= FView.Left + FView.Width) and (Y + GlyphH <= FView.Top + FView.Height);
+    FGlyphs[I].Left := FView.Left + X;
+    FGlyphs[I].Top := FView.Top + Y;
+    FGlyphs[I].Visible := True;
   end;
 end;
 

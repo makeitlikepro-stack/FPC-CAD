@@ -424,7 +424,9 @@ begin
   CADBuildSketchLayers(FEditor, PointPixels * WorldPerPixel, Meshes);
   RefreshFill;
   RefreshExtrudePreview;
+  RefreshExtrudeGrip;
   RefreshDimensions;
+  UpdateSketchOverlayVisibility;
   FView.Invalidate3D;
 end;
 
@@ -537,6 +539,76 @@ begin
   FView.Invalidate3D;
 end;
 
+const
+  ExtrudeGripMaterial = 'cad-extrude-depth-grip';
+
+procedure TCADSketchMode.UpdateSketchOverlayVisibility;
+var
+  L: TCADSketchLayer;
+  O: TViewport3DObject;
+
+  procedure SetObjectVisibility(AId: Cardinal);
+  begin
+    O := FView.FindObject(AId);
+    if O <> nil then O.Visible := not FExtrudePreviewActive;
+  end;
+
+begin
+  { When Extrude is active, the original overlapping sketch lines must not
+    be displayed across the unioned B-rep top face. They remain untouched
+    in the model and reappear when the preview is cancelled. }
+  for L := Low(TCADSketchLayer) to High(TCADSketchLayer) do
+    SetObjectVisibility(CAD_SKETCH_LAYER_ID + Ord(L));
+  SetObjectVisibility(CAD_SKETCH_FILL_ID);
+  SetObjectVisibility(CAD_SKETCH_SELECTED_ID);
+  SetObjectVisibility(CAD_SKETCH_DIM_ID);
+  SetObjectVisibility(CAD_SKETCH_PREVIEW_ID);
+end;
+
+function TCADSketchMode.ExtrudeGripScreen(out AX, AY: Double): Boolean;
+begin
+  Result := FActive and FExtrudePreviewActive and
+    (FExtrudePreviewError = '') and
+    CADExtrudeHandleFrame(FSketch, FContourSeeds, FExtrudeOptions,
+      FView.Camera, Round(FView.Width), Round(FView.Height), FExtrudeGrip);
+  FExtrudeGripValid := Result;
+  if Result then
+  begin
+    AX := FExtrudeGrip.TipX;
+    AY := FExtrudeGrip.TipY;
+  end;
+end;
+
+procedure TCADSketchMode.RefreshExtrudeGrip;
+var
+  O: TViewport3DObject;
+  M: TRenderMaterial;
+  Err: string;
+  AX, AY: Double;
+begin
+  O := FView.FindObject(CAD_SKETCH_EXTRUDE_GRIP_ID);
+  if not ExtrudeGripScreen(AX, AY) then
+  begin
+    if O <> nil then O.Visible := False;
+    Exit;
+  end;
+  if FView.Materials.Find(ExtrudeGripMaterial) = nil then
+  begin
+    M := TRenderMaterial.Create(ExtrudeGripMaterial, msFlat);
+    M.BaseColor := MaterialColor(0.95, 0.44, 0.12, 1.0);
+    if not FView.Materials.Register(M, Err) then M.Free;
+  end;
+  ObjectMesh(CAD_SKETCH_EXTRUDE_GRIP_ID, ExtrudeGripMaterial);
+  O := FView.FindObject(CAD_SKETCH_EXTRUDE_GRIP_ID);
+  O.CullBackFaces := False;
+  O.UseEdgeColor := True;
+  O.EdgeColor := Viewport3DRGBA(1.0, 0.36, 0.04, 1.0);
+  CADBuildExtrudeHandleMesh(FExtrudeGrip, 8 * WorldPerPixel,
+    FView.Camera, O.Mesh);
+  O.Visible := True;
+  FView.Invalidate3D;
+end;
+
 procedure TCADSketchMode.SetExtrudePreview(AEnabled: Boolean;
   const AOptions: TCADExtrudeOptions);
 var
@@ -557,7 +629,9 @@ begin
     FExtrudeSavedYaw := FView.Camera.YawDeg;
     FExtrudeSavedPitch := FView.Camera.PitchDeg;
     FView.Camera.Orbit(25, -24);
-    FView.OnPointerDrag := nil;            { built-in left-drag orbits }
+    { Keep drag callback: the grip claims left-drags near its tip;
+      elsewhere the viewport's standard orbit remains active. }
+    FView.OnPointerDrag := @PointerDrag;
     FView.Invalidate3D;
   end
   else if (not AEnabled) and FExtrudePreviewActive then
@@ -568,9 +642,12 @@ begin
     FView.Invalidate3D;
   end;
   FExtrudePreviewActive := AEnabled;
+  FExtrudeGripDragging := False;
   FExtrudeOptions := AOptions;
   FExtrudePreviewError := '';
   RefreshExtrudePreview;
+  RefreshExtrudeGrip;
+  UpdateSketchOverlayVisibility;
   Changed;
 end;
 

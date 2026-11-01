@@ -595,14 +595,13 @@ begin
   if FView.Materials.Find(ExtrudeGripMaterial) = nil then
   begin
     M := TRenderMaterial.Create(ExtrudeGripMaterial, msFlat);
-    M.BaseColor := MaterialColor(0.95, 0.44, 0.12, 1.0);
+    M.BaseColor := MaterialColor(0.97, 0.48, 0.13, 1.0);
     if not FView.Materials.Register(M, Err) then M.Free;
   end;
   ObjectMesh(CAD_SKETCH_EXTRUDE_GRIP_ID, ExtrudeGripMaterial);
   O := FView.FindObject(CAD_SKETCH_EXTRUDE_GRIP_ID);
   O.CullBackFaces := False;
-  O.UseEdgeColor := True;
-  O.EdgeColor := Viewport3DRGBA(1.0, 0.36, 0.04, 1.0);
+  O.UseEdgeColor := False;       { keep the rounded arrow smooth, no wireframe }
   CADBuildExtrudeHandleMesh(FExtrudeGrip, 8 * WorldPerPixel,
     FView.Camera, O.Mesh);
   O.Visible := True;
@@ -802,7 +801,10 @@ begin
           NewDepth := CADExtrudeHandleDepth(FExtrudeGripStartFrame,
             FExtrudeGripStartX,FExtrudeGripStartY,AX,AY,
             FExtrudeGripStartDepth);
-          if Abs(NewDepth - FExtrudeOptions.Depth) >= 0.01 then
+          { Direct manipulation is intentionally stepped at 0.1 mm for a
+            stable, readable live badge. The numeric field remains exact. }
+          NewDepth := Max(0.1, Round(NewDepth*10)/10);
+          if Abs(NewDepth - FExtrudeOptions.Depth) >= 0.001 then
           begin
             FExtrudeOptions.Depth := NewDepth;
             RefreshExtrudePreview;

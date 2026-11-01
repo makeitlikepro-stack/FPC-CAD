@@ -1,3 +1,10 @@
+## 2026-11-01 — Report: Sketch remains after Undo (diagnostic gate)
+
+- User reported that a Sketch remains after undoing Sketch+Extrude. Inspection confirms the composite command removes Extrude, unbinds the Sketch evaluator, detaches its feature and tombstones the Sketch object, so a retained Sketch may mean a different History entry was undone, a pre-existing independent Sketch was present, or Undo failed partway.
+- Controller now reports the **actual UndoDescription** and remaining active logical Sketch count in the status bar and clears stale `FLastSketch` when its evaluator was removed. Exceptions report `Undo FAILED [operation]: reason`, distinguishing a rejected Undo from successful removal of a different entry.
+- Added ATOM-013 asserting zero active Sketch objects and zero Sketch/Body owner references after a single Undo in a fresh document.
+- **This is diagnostic and stale-reference cleanup, not yet a verified fix for the reported GUI behavior.** Next action: user rebuild/test and capture Undo status, then resolve any remaining core or UI issue. Main/dev unchanged.
+
 ## 2026-11-01 — Atomic initial Sketch + Extrude creation (candidate, local tests pending)
 
 - Created `CAD.Core.SketchExtrudeCommand` with one `TCADCreateSketchExtrudeCommand` owning the new logical Sketch object, Sketch evaluator feature, and the existing `TCADAddBodyFeatureCommand`. The Sketch's Datum support and Body feature-history membership remain separate concepts.

@@ -486,7 +486,8 @@ begin
      (FLastExtrudeOptions.Symmetric = FExtrudeOptions.Symmetric) and
      (FLastExtrudeOptions.Reversed = FExtrudeOptions.Reversed) then
   begin
-    O.Visible := True;
+    { A cached failure must not turn the previously empty mesh visible. }
+    O.Visible := FExtrudePreviewError = '';
     Exit;
   end;
 

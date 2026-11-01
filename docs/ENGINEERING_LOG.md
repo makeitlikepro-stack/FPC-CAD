@@ -1,3 +1,11 @@
+## 2026-11-01 — Blank document startup (candidate; local tests pending)
+
+- Removed default `BuildDemoScene` invocation: the application opens with a clean `TCADDocument` containing only its logical Part, Origin and XY/XZ/YZ Datum planes.
+- The Model tree refreshes at startup so these real objects are visible without needing a recompute; the historical radius slider and its label are hidden and their handler no longer mutates geometry.
+- Recompute error reporting scans live document features instead of relying on a demo-scene `Last` ID. Empty documents do not perform `FitAll`.
+- New Sketch/Extrude creation remains available via existing Sketch workflow. **There is not yet a UI action to create a Body or another Part, nor a fully atomic new Sketch/Extrude/Body creation command.** Do not imply the UI already supports professional Body creation.
+- Pending: FPC build, tests and manual visual confirmation of blank viewport, Part/Datum tree, new Sketch and Extrude flows.
+
 ## 2026-11-01 — Model tree renders the logical object registry (candidate; tests pending)
 
 - Root cause: `CAD.App.FeatureTree.Refresh` used hardcoded `Part1` / planes and only scanned Feature Graph, ignoring `TCADObjectModel`; the existing model changes were invisible in the Model tab.

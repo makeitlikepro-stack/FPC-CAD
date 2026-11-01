@@ -25,6 +25,7 @@ type
     FActive, FVisible, FIsDefault: Boolean;
     FDatumKind: TCADDatumKind;
     FFrame: TCADDatumFrame;
+    FSketchFeatureId: TCADId; { Sketch object references its evaluator feature }
     FTipFeatureId: TCADId; { Body's logical pointer; no result/shape ownership }
     FFeatureHistory: TCADIdArray; { chronological Body operations, not DAG order }
   public
@@ -37,6 +38,7 @@ type
     property Visible: Boolean read FVisible;
     property IsDefault: Boolean read FIsDefault;
     property DatumKind: TCADDatumKind read FDatumKind;
+    property SketchFeatureId: TCADId read FSketchFeatureId;
     property TipFeatureId: TCADId read FTipFeatureId;
     function FeatureCount: Integer;
     function FeatureAt(AIndex: Integer): TCADId;
@@ -84,6 +86,9 @@ type
       const AFeature: TCADId; out AError: string): Boolean;
     { Includes non-tip features. Prevent detachment while in a Body history. }
     function FeatureOwner(const AFeature: TCADId): TCADObjectId;
+    function SketchFeatureOwner(const AFeature: TCADId): TCADObjectId;
+    function TryBindSketchFeature(const ASketch: TCADObjectRef;
+      const AFeature: TCADId; out AError: string): Boolean;
     function ActiveCount(AKind: TCADObjectKind): Integer;
     property PartId: TCADObjectId read FPartId;
     property OriginId: TCADObjectId read FOriginId;
@@ -164,6 +169,7 @@ begin
   Result.FVisible := True;
   Result.FIsDefault := ADefault;
   Result.FTipFeatureId := CADNoId;
+  Result.FSketchFeatureId := CADNoId;
   FSlots[FCount] := Result;
   Inc(FCount);
   Inc(FNextId);
@@ -298,6 +304,11 @@ var
   O: TCADModelObject;
 begin
   AError := '';
+  if (AObject.Kind = cokSketch) and CADIdValid(AObject.FSketchFeatureId) then
+  begin
+    AError := 'Cannot remove a Sketch bound to an active evaluator feature';
+    Exit(False);
+  end;
   if (AObject.Kind = cokBody) and (AObject.FeatureCount > 0) then
   begin
     AError := 'Cannot remove a Body with an active feature tip';
@@ -438,6 +449,56 @@ begin
       if CADIdEqual(O.FFeatureHistory[J], AFeature) then
         Exit(O.Id);
   end;
+end;
+
+function TCADObjectModel.SketchFeatureOwner(
+  const AFeature: TCADId): TCADObjectId;
+var
+  I: Integer;
+  O: TCADModelObject;
+begin
+  Result := CADNoObjectId;
+  if not CADIdValid(AFeature) then Exit;
+  for I := 0 to FCount-1 do
+  begin
+    O := FSlots[I];
+    if O.Active and (O.Kind = cokSketch) and
+       CADIdEqual(O.FSketchFeatureId,AFeature) then Exit(O.Id);
+  end;
+end;
+
+function TCADObjectModel.TryBindSketchFeature(const ASketch: TCADObjectRef;
+  const AFeature: TCADId; out AError: string): Boolean;
+var
+  O: TCADModelObject;
+  Owner: TCADObjectId;
+begin
+  Result := False;
+  O := CheckActive(ASketch,AError);
+  if O = nil then Exit;
+  if O.Kind <> cokSketch then
+  begin
+    AError := 'evaluator owner must be a Sketch object';
+    Exit;
+  end;
+  if CADIdEqual(O.FSketchFeatureId,AFeature) then
+  begin
+    AError := 'Sketch evaluator unchanged';
+    Exit;
+  end;
+  if CADIdValid(AFeature) then
+  begin
+    Owner := SketchFeatureOwner(AFeature);
+    if CADObjectIdValid(Owner) then
+    begin
+      AError := 'evaluator already bound to a Sketch';
+      Exit;
+    end;
+  end;
+  O.FSketchFeatureId := AFeature;
+  Inc(FRevision);
+  AError := '';
+  Result := True;
 end;
 
 function TCADObjectModel.TryAssignBodyTip(const ABody: TCADObjectRef;

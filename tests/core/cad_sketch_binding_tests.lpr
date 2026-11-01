@@ -99,6 +99,9 @@ begin
     R := Doc.ObjectRevision;
     Check(not Doc.TryBindSketchFeature(CADObjectRef(cokSketch,S2),F1,E) and
       (Doc.ObjectRevision=R),'BIND-007 reject duplicate evaluator without edits');
+    Check(not Doc.TrySetBodyTip(
+      CADObjectRef(cokBody,CADNoObjectId),F1,E),
+      'BIND-008 invalid Body rejected');
     Check(Doc.DetachFeature(F1)=nil,
       'BIND-008 attached evaluator cannot detach');
     Check(not Doc.Objects.TryRemove(CADObjectRef(cokSketch,S1),E),

@@ -228,6 +228,9 @@ begin
       'union outline: two neighbouring regions share one clean outer boundary ('+Err+')');
     Check(Length(Outlined.Faces[0].Holes)=0,
       'union outline: adjacent regions create no artificial hole');
+    if Length(Outlined.Faces)=1 then
+      Check(Length(Outlined.Loops[Outlined.Faces[0].Outer].Edges)=4,
+        'outline simplify: adjacent quadrants form FOUR long sides, not six small edges');
 
     Diagonal[0] := A[0]; Diagonal[1] := A[3];
     Subset := CADRegionProfileSubset(P,Diagonal);
@@ -242,6 +245,9 @@ begin
       (Length(Outlined.Faces)=1) and
       Near(Outlined.Faces[0].Area,100),
       'union outline: all four quadrants become one connected 100 mm2 face');
+    if Length(Outlined.Faces)=1 then
+      Check(Length(Outlined.Loops[Outlined.Faces[0].Outer].Edges)=4,
+        'outline simplify: cyclic boundary merges all collinear splits, retains four corners');
   finally
     S.Free;
   end;
@@ -268,6 +274,10 @@ begin
       (Length(Outlined.Faces)=1) and
       Near(Outlined.Faces[0].Area,25*Pi),
       'union circle: two curved regions become one complete disk ('+Err+')');
+    if Length(Outlined.Faces)=1 then
+      Check((Length(Outlined.Loops[Outlined.Faces[0].Outer].Edges)=1) and
+        (Outlined.Loops[Outlined.Faces[0].Outer].Edges[0].Kind=pekCircle),
+        'outline simplify: contiguous circular arcs form one exact OCCT circle edge');
   finally
     S.Free;
   end;

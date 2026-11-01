@@ -747,8 +747,16 @@ procedure TCADSketchMode.MouseMove(Sender: TObject; Shift: TShiftState; X, Y: In
 var
   U, V: Double;
 begin
-  if not FActive or not ToSketch(X, Y, U, V) then
+  if not FActive then Exit;
+  if FExtrudePreviewActive then
+  begin
+    { Follow camera orbit/zoom so the world-anchored numeric input can
+      follow the top-face grip without rebuilding the OCCT solid. }
+    RefreshExtrudeGrip;
+    if Assigned(FOnChanged) then FOnChanged(Self);
     Exit;
+  end;
+  if not ToSketch(X, Y, U, V) then Exit;
   FEditor.SnapTolerance := SnapPixels * WorldPerPixel;
   FEditor.Move(U, V);
   if FLineEditActive then
@@ -764,15 +772,52 @@ end;
 procedure TCADSketchMode.PointerDrag(Sender: TObject; APhase: TViewport3DDragPhase;
   AX, AY: Integer; var AHandled: Boolean);
 var
-  U, V: Double;
+  U, V, NewDepth, X, Y: Double;
 begin
   if not FActive then
     Exit;
   if FExtrudePreviewActive then
   begin
-    { Live solid preview: allow the viewport's normal left-drag orbit.
-      Turn preview off to resume sketch-point drag manipulation. }
-    AHandled := False;
+    case APhase of
+      vdpBegin:
+        begin
+          { Only drags touching the orange 3D grip take ownership. Every
+            other drag is left to the normal camera-orbit implementation. }
+          FExtrudeGripDragging :=
+            ExtrudeGripScreen(X, Y) and
+            CADExtrudeHandleHit(FExtrudeGrip, AX, AY, 19.0);
+          AHandled := FExtrudeGripDragging;
+          if FExtrudeGripDragging then
+          begin
+            FExtrudeGripStartX := AX;
+            FExtrudeGripStartY := AY;
+            FExtrudeGripStartDepth := FExtrudeOptions.Depth;
+            FExtrudeGripStartFrame := FExtrudeGrip;
+          end;
+        end;
+      vdpMove:
+        if FExtrudeGripDragging then
+        begin
+          AHandled := True;
+          NewDepth := CADExtrudeHandleDepth(FExtrudeGripStartFrame,
+            FExtrudeGripStartX,FExtrudeGripStartY,AX,AY,
+            FExtrudeGripStartDepth);
+          if Abs(NewDepth - FExtrudeOptions.Depth) >= 0.01 then
+          begin
+            FExtrudeOptions.Depth := NewDepth;
+            RefreshExtrudePreview;
+            RefreshExtrudeGrip;
+            if Assigned(FOnExtrudeDepthChanged) then
+              FOnExtrudeDepthChanged(Self,NewDepth);
+            Changed;
+          end;
+        end;
+      vdpEnd:
+        begin
+          AHandled := FExtrudeGripDragging;
+          FExtrudeGripDragging := False;
+        end;
+    end;
     Exit;
   end;
   AHandled := True;                         { sketch mode: the view does not orbit }

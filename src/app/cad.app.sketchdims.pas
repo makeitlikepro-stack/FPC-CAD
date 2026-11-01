@@ -35,6 +35,8 @@ type
     { relation glyphs (H, V, //, T ...) next to the geometry }
     FGlyphs: array of TUIButton;
     FGlyphConstraint: array of Integer;
+    FGlyphTangentIcon: array of Boolean;
+    FTangentIconFile: string;
     FGlyphX, FGlyphY: array of Double;
     FGlyphCount: Integer;
     FOnConstraintClick: TCADConstraintEvent;
@@ -87,6 +89,9 @@ begin
   FParent := AParent;
   FView := AView;
   FMode := AMode;
+  FTangentIconFile := ExtractFilePath(ExpandFileName(ParamStr(0))) +
+    'assets' + PathDelim + 'icons' + PathDelim + 'svg' + PathDelim +
+    'constraints' + PathDelim + 'tangent.svg';
   FMode.OnEntityDoubleClick := @EntityDoubleClick;
   FEdit := UI.CreateEdit(AParent, EditW, ChipH + 4);
   FEdit.Visible := False;
@@ -139,6 +144,7 @@ procedure TCADSketchDims.Refresh;
 var
   S: TCADSketch;
   I, N: Integer;
+  TangentIcon: Boolean;
 begin
   if FMode.ExtrudePreviewActive then
   begin
@@ -186,11 +192,28 @@ begin
         begin
           SetLength(FGlyphs, N + 1);
           SetLength(FGlyphConstraint, N + 1);
-          FGlyphs[N] := FUI.CreateButton(FParent, 26, GlyphH);
+          SetLength(FGlyphTangentIcon, N + 1);
+          FGlyphs[N] := FUI.CreateButton(FParent, 30, GlyphH);
+          FGlyphTangentIcon[N] := False;
           FGlyphs[N].StyleClass := 'cad-relation-glyph';
           FGlyphs[N].OnClick := @GlyphClick;
         end;
-        FGlyphs[N].Text := UTF8String(CADRelationGlyph(S, I));
+        TangentIcon := S.Constraints[I].Kind in
+          [sckTangentLine, sckTangentCircles];
+        if TangentIcon <> FGlyphTangentIcon[N] then
+        begin
+          if TangentIcon then
+          begin
+            FGlyphs[N].IconSize := 18;
+            FGlyphs[N].IconPosition := uipCenter;
+            FGlyphs[N].LoadIconSVG(FTangentIconFile);
+          end
+          else
+            FGlyphs[N].ClearIconImage;
+          FGlyphTangentIcon[N] := TangentIcon;
+        end;
+        if TangentIcon then FGlyphs[N].Text := ''
+        else FGlyphs[N].Text := UTF8String(CADRelationGlyph(S, I));
         FGlyphs[N].Tag := N;
         FGlyphConstraint[N] := I;
         Inc(N);

@@ -28,15 +28,22 @@ type
   private
     FTree: TUITreeView;
     FIcons: TUIImageList;
+    FMenu: TUIContextMenu;
+    FMenuNodeTag: LongInt;
     FRevision, FObjectRevision: QWord;
     FHasRevision: Boolean;
     FOnEditFeature: TCADFeatureEvent;
     FOnSelectBody: TCADBodyEvent;
     procedure Activate(Sender: TObject);
+    procedure SelectionChanged(Sender: TObject);
+    procedure ContextMenu(Sender: TObject; ANode: TUITreeNode;
+      AX, AY: Integer);
+    procedure ContextEdit(Sender: TObject);
     procedure AddFeature(ADoc: TCADDocument; AParent: TUITreeNode; F: TCADFeature;
       ADepth: Integer);
   public
-    constructor Create(ALookup: TCADWidgetLookup; const AIconFolder: string);
+    constructor Create(ALookup: TCADWidgetLookup; AUI: TUIWidgetFactory;
+      const AIconFolder: string);
     destructor Destroy; override;
     { Rebuilds the tree when the document changed (AForce: always). }
     procedure Refresh(ADoc: TCADDocument; AForce: Boolean = False);
@@ -51,22 +58,25 @@ const
   IconKeys: array[0..6] of string = ('part', 'origin', 'plane', 'edit-sketch', 'extrude',
     'cut', 'history');
 
-constructor TCADFeatureTree.Create(ALookup: TCADWidgetLookup; const AIconFolder: string);
+constructor TCADFeatureTree.Create(ALookup: TCADWidgetLookup;
+  AUI: TUIWidgetFactory; const AIconFolder: string);
 var
   K: string;
 begin
   inherited Create;
   FTree := TUITreeView(CADDesignWidget(ALookup, 'FeatureTree', TUITreeView));
   FIcons := TUIImageList.Create;
+  FMenu := AUI.CreateContextMenu(190,28);
   for K in IconKeys do
     if FileExists(AIconFolder + K + '.png') then
       FIcons.Add(K, AIconFolder + K + '.png');
   FTree.ImageList := FIcons;
-  { TUITreeView.RowClicked selects the node and fires OnChange from
-    SetSelectedNode. The inherited OnClick is NOT sent by row buttons.
-    OnActivate remains for Enter on an already selected node. }
-  FTree.OnChange := @Activate;
+  { Selection must not enter edit mode. Double-click and Enter edit,
+    right-click opens actions for the actual node. }
+  FTree.OnChange := @SelectionChanged;
+  FTree.OnNodeDoubleClick := @Activate;
   FTree.OnActivate := @Activate;
+  FTree.OnNodeContextMenu := @ContextMenu;
 end;
 
 destructor TCADFeatureTree.Destroy;
@@ -239,6 +249,45 @@ begin
   end;
   Part.Expanded := True;
   FTree.RefreshLayout;
+end;
+
+procedure TCADFeatureTree.SelectionChanged(Sender: TObject);
+begin
+  { Single click only selects the item; Properties Inspector comes later. }
+end;
+
+procedure TCADFeatureTree.ContextMenu(Sender: TObject;
+  ANode: TUITreeNode; AX, AY: Integer);
+var
+  LabelText: string;
+begin
+  if ANode = nil then Exit;
+  FMenu.ClearItems;
+  FMenuNodeTag := ANode.Tag;
+  if ANode.Tag <= -3 then
+    LabelText := 'Activate Body'
+  else if ANode.Tag >= 0 then
+    LabelText := 'Edit '+string(ANode.Caption)
+  else
+    Exit;
+  FMenu.AddItem(UTF8String(LabelText));
+  FMenu.ItemCommand[0] := @ContextEdit;
+  FMenu.OpenAtScreen(AX,AY,1920,1080);
+end;
+
+procedure TCADFeatureTree.ContextEdit(Sender: TObject);
+var
+  TagValue: LongInt;
+begin
+  { Menu closure is allowed to move focus; dispatch the saved node tag. }
+  TagValue := FMenuNodeTag;
+  if TagValue <= -3 then
+  begin
+    if Assigned(FOnSelectBody) then
+      FOnSelectBody(Self,CADObjectId(QWord(-2-TagValue)));
+  end
+  else if (TagValue >= 0) and Assigned(FOnEditFeature) then
+    FOnEditFeature(Self,CADId(TagValue));
 end;
 
 procedure TCADFeatureTree.Activate(Sender: TObject);

@@ -62,7 +62,7 @@ procedure TestBindings;
 var
   Doc: TCADDocument;
   History: TCADHistory;
-  S1, S2: TCADObjectId;
+  S1, S2, BodyId: TCADObjectId;
   F1, F2, Other: TCADId;
   E: string;
   O1, O2: TCADModelObject;
@@ -102,6 +102,11 @@ begin
     Check(not Doc.TrySetBodyTip(
       CADObjectRef(cokBody,CADNoObjectId),F1,E),
       'BIND-008 invalid Body rejected');
+    Check(Doc.Objects.TryAddBody(
+      CADObjectRef(cokPart,Doc.Objects.PartId),'Body',BodyId,E),
+      'BIND-008 creates Body for exclusivity test');
+    Check(not Doc.TrySetBodyTip(CADObjectRef(cokBody,BodyId),F1,E),
+      'BIND-008 bound Sketch evaluator cannot become Body tip');
     Check(Doc.DetachFeature(F1)=nil,
       'BIND-008 attached evaluator cannot detach');
     Check(not Doc.Objects.TryRemove(CADObjectRef(cokSketch,S1),E),

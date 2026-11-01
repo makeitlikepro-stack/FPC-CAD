@@ -5,7 +5,8 @@ uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, CAD.Core.Ids, CAD.Core.Values, CAD.Core.Feature,
   CAD.Core.Document, CAD.Core.ObjectIds, CAD.Core.ObjectModel,
-  CAD.Core.History, CAD.Core.SketchBindingCommands;
+  CAD.Core.History, CAD.Core.SketchBindingCommands,
+  CAD.Core.SketchGeometryCommands;
 
 type
   { Headless stand-in for CAD.Features.Sketch, avoiding OCCT in core tests. }
@@ -48,6 +49,7 @@ end;
 procedure TSketchEvaluator.DefineParams;
 begin
   AddParam('geometry',CADText('FPCSKETCH 1'));
+  AddParam('contours',CADText('ALL'));
 end;
 
 function TSketchEvaluator.Compute(const AInputs: array of TCADResult;
@@ -140,8 +142,70 @@ begin
   end;
 end;
 
+
+procedure TestEditorCommit;
+var
+  D: TCADDocument;
+  H: TCADHistory;
+  SketchId: TCADObjectId;
+  FeatureId, Other: TCADId;
+  Rev, BeforeRev: QWord;
+  E: string;
+begin
+  D := TCADDocument.Create;
+  H := TCADHistory.Create(D);
+  try
+    Check(D.Objects.TryAddSketch(
+      CADObjectRef(cokPart,D.Objects.PartId),
+      CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
+      'CommitSketch',SketchId,E),'COMMIT-001 logical Sketch created');
+    FeatureId := D.AttachFeature(TSketchEvaluator.Create);
+    Other := D.AttachFeature(TSketchEvaluator.Create);
+    Check(D.TryBindSketchFeature(CADObjectRef(cokSketch,SketchId),
+      FeatureId,E),'COMMIT-002 evaluator bound');
+    D.Recompute;
+    BeforeRev := D.Revision;
+    Check(H.Execute(TCADCommitSketchCommand.Create(
+      CADObjectRef(cokSketch,SketchId),'FPCSKETCH 2','seed:10')),
+      'COMMIT-003 geometry and contours updated together');
+    Check((D.Find(FeatureId).GetParamValue('geometry').S='FPCSKETCH 2') and
+      (D.Find(FeatureId).GetParamValue('contours').S='seed:10'),
+      'COMMIT-004 canonical values in evaluator');
+    Check((D.Revision>BeforeRev) and D.NeedsRecompute,
+      'COMMIT-005 downstream recompute triggered');
+    Check(H.Undo and
+      (D.Find(FeatureId).GetParamValue('geometry').S='FPCSKETCH 1') and
+      (D.Find(FeatureId).GetParamValue('contours').S='ALL'),
+      'COMMIT-006 undo restores both original values');
+    Check(H.Redo and
+      (D.Find(FeatureId).GetParamValue('geometry').S='FPCSKETCH 2') and
+      (D.Find(FeatureId).GetParamValue('contours').S='seed:10'),
+      'COMMIT-007 redo restores both edits');
+    Rev := D.Revision;
+    Check(not H.Execute(TCADCommitSketchCommand.Create(
+      CADObjectRef(cokSketch,SketchId),'FPCSKETCH 2','seed:10')) and
+      (D.Revision=Rev),
+      'COMMIT-008 unchanged editor commit has no History entry');
+    Check(H.Undo and H.CanRedo,'COMMIT-009 undo remains available');
+    D.SetParam(FeatureId,'geometry',CADText('external edit'));
+    Rev := D.Revision;
+    Check(not H.Redo and H.CanRedo and (D.Revision=Rev),
+      'COMMIT-010 redo rejects stale geometry without data loss');
+    Check(D.Find(Other)<>nil and
+      not CADObjectIdValid(D.Objects.SketchFeatureOwner(Other)),
+      'COMMIT-011 other evaluator unaffected');
+    Check(not H.Execute(TCADCommitSketchCommand.Create(
+      CADObjectRef(cokSketch,CADNoObjectId),'abc','ALL')),
+      'COMMIT-012 invalid Sketch object rejected');
+  finally
+    H.Free;
+    D.Free;
+  end;
+end;
+
 begin
   TestBindings;
+  TestEditorCommit;
   if Failures=0 then
     WriteLn('PASS: CAD Sketch binding (',Checks,' checks)')
   else

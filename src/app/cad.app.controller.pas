@@ -241,11 +241,10 @@ begin
   UI := FHost.UI;
   W.View.OnSelectionChanged := @PickChanged;
   W.View.OnPreselectionChanged := @PickChanged;
-  W.Radius.Minimum := CAD_DEMO_MIN_RADIUS;
-  W.Radius.Maximum := CAD_DEMO_MAX_RADIUS;
-  W.Radius.Step := 0.25;
-  W.Radius.Value := StartRadius;
-  W.RadiusLabel.Text := Format('Hole radius: %.2f mm', [StartRadius]);
+  { Old demo-only controls remain in the designed form for compatibility,
+    but must not appear or mutate a new blank document. }
+  W.Radius.Visible := False;
+  W.RadiusLabel.Visible := False;
   { The dimension chips are made per dimension while sketching. The
     design's widgets get paint bands when the design loads, so a widget made
     later would paint under the view: the chips live on a see-through
@@ -323,12 +322,11 @@ begin
   FHistory := TCADHistory.Create(FDoc);
   FTarget := TCADViewportTarget.Create(W.View);
   FSync := TCADViewSync.Create(FDoc, FTarget, @CADFillMeshFromResult);
-  if Err = '' then
-  begin
-    FSceneOk := BuildDemoScene(FDoc, StartRadius, FScene, Err);
-    if FSceneOk then
-      Rebuild(True);
-  end;
+  { A professional CAD document starts empty: only Part, Origin and
+    its three Datum planes exist. No demonstration features are attached. }
+  FSceneOk := False;
+  if FTree <> nil then
+    FTree.Refresh(FDoc,True);
   if Err <> '' then
     W.Status.Text := Err
   else if FOCCT <> nil then
@@ -465,14 +463,22 @@ var
   S: TCADViewSyncReport;
   F: TCADFeature;
   Err: string;
+  I: Integer;
 begin
   R := FDoc.Recompute;
   S := FSync.Sync;
   Err := '';
-  F := FDoc.Find(FScene.Last);
-  if (F <> nil) and (F.LastError <> '') then
-    Err := F.Name + ': ' + F.LastError
-  else if S.Failed > 0 then
+  { Errors come from actual document features, never a demo-only ID. }
+  for I := 0 to FDoc.SlotCount-1 do
+  begin
+    F := FDoc.Find(CADId(I));
+    if (F <> nil) and (F.LastError <> '') then
+    begin
+      Err := F.Name + ': ' + F.LastError;
+      Break;
+    end;
+  end;
+  if (Err = '') and (S.Failed > 0) then
     Err := FSync.LastError;
   W.Recompute.Text := Format('Recompute: %d ms', [R.Milliseconds]);
   W.Computed.Text := Format('  computed %d, cache hits %d', [R.Computed, R.CacheHits]);
@@ -480,7 +486,7 @@ begin
   W.Sync.Text := Format('Sync: %d ms (converted %d)', [S.Milliseconds, S.Updated]);
   if Err <> '' then
     W.Status.Text := 'Error: ' + Err;
-  if AFit then
+  if AFit and (FDoc.SlotCount > 0) then
     W.View.FitAll;
   if FTree <> nil then
     FTree.Refresh(FDoc);
@@ -1079,11 +1085,8 @@ end;
 
 procedure TCADAppController.RadiusChanged;
 begin
-  W.RadiusLabel.Text := Format('Hole radius: %.2f mm', [W.Radius.Value]);
-  if not FSceneOk then
-    Exit;
-  SetHoleRadius(FDoc, FScene, W.Radius.Value);
-  Rebuild(False);
+  { Historical designer event handler. No demo geometry is created or
+    modified in a normal document. }
 end;
 
 function TCADAppController.Describe(const AId: TPick3DId): string;

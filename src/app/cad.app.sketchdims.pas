@@ -227,7 +227,8 @@ begin
     for K := 0 to I - 1 do
       if Ok[K] and (Abs(FGlyphX[K] - X) < 2) and (Abs(FGlyphY[K] - Y) < 2) then
         Inc(Stack);
-    W := 10 + 8 * Length(string(FGlyphs[I].Text));
+    { Fixed icon width: UTF-8 byte length is not a glyph count. }
+    W := 30;
     { The geometry anchor may be visible even when the glyph's default
       right-hand placement crosses the viewport border. Keep that glyph
       on screen; do not silently hide a valid constraint. }

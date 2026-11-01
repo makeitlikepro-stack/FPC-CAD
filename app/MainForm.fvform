@@ -144,8 +144,10 @@
       <Button id="ExtrudeCancelButton" left="171" top="126" width="147" height="31" text="Cancel Preview" fontSize="12" textColor="#1F2329" backgroundColor="#ECEFF3" borderRadius="5" hint="Close preview and continue editing Sketch without committing these settings"/>
       <Label id="ExtrudePreviewStatus" left="14" top="169" width="301" height="28" text="Select regions, then adjust depth" fontSize="11" textColor="#4A5260"/>
     </Panel>
-    <Edit id="ExtrudeHandleValueEdit" left="780" top="340" width="85" height="30" text="10"/>
-    <Label id="ExtrudeHandleUnit" left="869" top="345" width="26" height="22" text="mm" textColor="#245D91"/>
+    <Panel id="ExtrudeGripBadge" left="755" top="325" width="162" height="42" backgroundColor="#FFFFFFF2" borderColor="#97B8D3" borderWidth="1" borderRadius="9">
+      <Edit id="ExtrudeHandleValueEdit" left="8" top="6" width="111" height="30" text="10"/>
+      <Label id="ExtrudeHandleUnit" left="127" top="10" width="28" height="22" text="mm" fontSize="12" textColor="#3E6381"/>
+    </Panel>
     <Edit id="DrawValueEdit" left="760" top="360" width="170" height="28" placeholder="length, angle, Enter"/>
     <Panel id="StatusBar" left="0" top="874" width="1440" height="26" backgroundColor="#FFFFFF" anchors="left,right,bottom">
       <Label id="StatusLabel" left="12" top="3" width="880" height="20" text="" textColor="#4A5260" anchors="left,top,right"/>

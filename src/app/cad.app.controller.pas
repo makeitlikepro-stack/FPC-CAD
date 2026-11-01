@@ -311,7 +311,8 @@ begin
   FChrome.OnExitSketch := @FinishClick;
   FChrome.OnDiscardSketch := @DiscardClick;
   FChrome.OnNormalTo := @NormalToClick;
-  FTree := TCADFeatureTree.Create(FLookup, ExtractFilePath(ExpandFileName(ParamStr(0))) +
+  FTree := TCADFeatureTree.Create(FLookup, FHost, UI,
+    ExtractFilePath(ExpandFileName(ParamStr(0))) +
     'assets' + PathDelim + 'icons' + PathDelim + 'png' + PathDelim + '20' + PathDelim);
   FTree.OnEditFeature := @EditFeature;
   FTree.OnSelectBody := @SelectBody;

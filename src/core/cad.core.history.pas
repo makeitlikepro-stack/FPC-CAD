@@ -98,8 +98,11 @@ begin
   Result := FUndo.Count > 0;
   if not Result then
     Exit;
-  C := TCADCommand(FUndo.Extract(FUndo.Last));
+  { Leave the command in Undo until UndoIt succeeds. In particular,
+    a failed Body detach must not silently discard the only restore path. }
+  C := TCADCommand(FUndo.Last);
   C.UndoIt(FDoc);
+  FUndo.Extract(C);
   FRedo.Add(C);
 end;
 
@@ -110,13 +113,14 @@ begin
   Result := FRedo.Count > 0;
   if not Result then
     Exit;
-  C := TCADCommand(FRedo.Extract(FRedo.Last));
-  if C.DoIt(FDoc) then
-    FUndo.Add(C)
-  else
+  { A rejected Redo stays available. A failure must not destroy the
+    command and its detached Feature before the user can repair context. }
+  C := TCADCommand(FRedo.Last);
+  Result := C.DoIt(FDoc);
+  if Result then
   begin
-    C.Free;
-    Result := False;
+    FRedo.Extract(C);
+    FUndo.Add(C);
   end;
 end;
 

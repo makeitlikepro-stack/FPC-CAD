@@ -1035,7 +1035,7 @@ begin
     EndLine := S.EntityCount - 1;
     A := S.Entities[Arc];
     Check(S.Entities[EndLine].Active and S.Entities[Arc].Active and
-      S.Entities[EndLine].P2 = A.P2 and
+      (S.Entities[EndLine].P2 = A.P2) and
       Near(S.PointX(S.Entities[EndLine].P2), 5),
       'consecutive screenshot circle: line and surviving arc keep shared endpoint');
   finally

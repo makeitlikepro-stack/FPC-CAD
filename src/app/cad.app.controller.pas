@@ -403,6 +403,8 @@ begin
 end;
 
 procedure TCADAppController.Run(ACommand: TCADAppCommand);
+var
+  UndoLabel: string;
 begin
   if FSketchMode = nil then
     Exit;
@@ -411,17 +413,24 @@ begin
       if FSketchMode.Active then FSketchToolbar.Run(ctaUndo)
       else if (FHistory <> nil) and FHistory.CanUndo then
       begin
+        UndoLabel := FHistory.UndoDescription;
         try
           if FHistory.Undo then
           begin
-            { Undo may remove the currently active Body. }
+            { Clear references to features which the history has detached. }
             if FDoc.Objects.Find(CADObjectRef(cokBody,FActiveBody)) = nil then
               FActiveBody := CADNoObjectId;
+            if CADIdValid(FLastSketch) and (FDoc.Find(FLastSketch) = nil) then
+              FLastSketch := CADNoId;
             FTree.Refresh(FDoc,True);
             Rebuild(False);
+            W.Status.Text := 'Undo: '+UndoLabel+
+              Format(' | Sketch objects: %d',
+                [FDoc.Objects.ActiveCount(cokSketch)]);
           end;
         except
-          on E: Exception do W.Status.Text := 'Undo: '+E.Message;
+          on E: Exception do
+            W.Status.Text := 'Undo FAILED ['+UndoLabel+']: '+E.Message;
         end;
       end;
     cadRedo:

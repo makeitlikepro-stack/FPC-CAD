@@ -20,6 +20,14 @@
   silently re-point to wrong faces (topological naming is an open risk, see ROADMAP).
 - Every mutation goes through a command object so Undo/Redo stays correct.
 - Build resolves the pinned engine commit; never compile against a moving HEAD.
+- A logical Part/Body/Sketch/Datum object has an ID independent of Feature slot
+  IDs and OCCT Shape handles. `CAD.Core.ObjectModel` owns logical objects,
+  while `CAD.Core.ResultCache` continues owning evaluated results.
+- The new Document `Objects` registry is headless and initially separate
+  from the UI Feature Tree. Body tip / operation target semantics are **not
+  implemented** in this gate.
+- See [OBJECT_MODEL_DESIGN.md](OBJECT_MODEL_DESIGN.md) and
+  [OBJECT_MODEL_TEST_PLAN.md](OBJECT_MODEL_TEST_PLAN.md).
 
 ## Status
 

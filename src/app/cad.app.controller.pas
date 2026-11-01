@@ -651,6 +651,9 @@ begin
   if (FSketchMode = nil) or not FSketchMode.Active or
      FExtrudePanel.Visible then Exit;
   FExtrudeDraft := FExtrudeSaved;
+  { Typed drawing input is not an Extrude control. Never leave it floating
+    above the preview or its options when switching modes. }
+  if FTyped <> nil then FTyped.Hide;
   FExtrudePanel.Visible := True;
   FSketchMode.SetTool(sktSelect); { contour picking is available in Select }
   UpdateExtrudeControls;
@@ -743,6 +746,31 @@ begin
     Max(6.0, W.View.Width - 169.0));
   Y := W.View.Top + EnsureRange(AY - 19, 6.0,
     Max(6.0, W.View.Height - 48.0));
+  { The depth grip is a viewer overlay, not a floating dialog.
+    Never place it over the editable Extrude options panel. Prefer a
+    position to the panel's left, then above it; if neither fits, hide
+    the badge while the panel itself remains fully accessible. }
+  if (FExtrudePanel <> nil) and FExtrudePanel.Visible and
+     (X < FExtrudePanel.Left + FExtrudePanel.Width) and
+     (X + 162 > FExtrudePanel.Left) and
+     (Y < FExtrudePanel.Top + FExtrudePanel.Height) and
+     (Y + 42 > FExtrudePanel.Top) then
+  begin
+    X := FExtrudePanel.Left - 162 - 8;
+    if X < W.View.Left then
+    begin
+      X := W.View.Left + EnsureRange(AX + 34, 6.0,
+        Max(6.0, W.View.Width - 169.0));
+      Y := FExtrudePanel.Top - 42 - 8;
+    end;
+    if (X < W.View.Left) or (Y < W.View.Top) or
+       (X + 162 > W.View.Left + W.View.Width) or
+       (Y + 42 > W.View.Top + W.View.Height) then
+    begin
+      FExtrudeGripBadge.Visible := False;
+      Exit;
+    end;
+  end;
   FExtrudeGripBadge.SetBounds(X, Y, 162, 42);
 end;
 

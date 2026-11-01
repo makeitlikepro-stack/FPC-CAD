@@ -222,11 +222,8 @@ begin
   S := SlotOf(AId);
   if (S < 0) or (FGraph.UserCount(S) > 0) then
     Exit;
-  { A feature currently selected as a Body tip must not be detached. }
-  for I := 1 to Integer(FObjects.NextId)-1 do
-    if (FObjects.Find(CADObjectRef(cokBody,CADObjectId(I))) <> nil) and
-       CADIdEqual(FObjects.Find(CADObjectRef(cokBody,CADObjectId(I))).TipFeatureId,AId) then
-      Exit;
+  { Any entry in Body history remains owned, including non-tip features. }
+  if CADObjectIdValid(FObjects.FeatureOwner(AId)) then Exit;
   Result := FSlots[S];
   { Keep the inputs on the feature: Reattach links them again. }
   Ins := Copy(Result.Inputs);
@@ -286,9 +283,23 @@ function TCADDocument.Unlink(const AUser, AInput: TCADId): Boolean;
 var
   F: TCADFeature;
   Ins: TCADIdArray;
-  I, J: Integer;
+  I, J, K: Integer;
+  O: TCADModelObject;
+  OwnerId: TCADObjectId;
 begin
   F := Find(AUser);
+  { The chain between consecutive Body history entries is structural.
+    Do not silently break it with a general-purpose Unlink command. }
+  OwnerId := FObjects.FeatureOwner(AUser);
+  if CADObjectIdValid(OwnerId) and
+     CADSameObjectId(OwnerId,FObjects.FeatureOwner(AInput)) then
+  begin
+    O := FObjects.Find(CADObjectRef(cokBody,OwnerId));
+    if O <> nil then
+      for K := 1 to O.FeatureCount-1 do
+        if CADIdEqual(O.FeatureAt(K),AUser) and
+           CADIdEqual(O.FeatureAt(K-1),AInput) then Exit(False);
+  end;
   Result := (F <> nil) and FGraph.Unlink(AUser.Slot, AInput.Slot);
   if not Result then
     Exit;

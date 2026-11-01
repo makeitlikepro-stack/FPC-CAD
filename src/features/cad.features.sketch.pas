@@ -19,7 +19,7 @@ uses
   SysUtils, CAD.Core.Values, CAD.Core.Feature, CAD.Core.FeatureRegistry,
   CAD.OCCT.Bridge, CAD.Features.OCCTBase,
   CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Solver, CAD.Sketch.Profile,
-  CAD.Sketch.Regions, CAD.Sketch.ContourSelection;
+  CAD.Sketch.Regions, CAD.Sketch.ContourSelection, CAD.Sketch.Outline;
 
 type
   TCADLongIntArray = array of LongInt;
@@ -125,7 +125,7 @@ function TCADSketchFeature.Compute(const AInputs: array of TCADResult;
 var
   S: TCADSketch;
   R: TCADSketchSolveResult;
-  P: TCADSketchProfile;
+  P, UnionProfile: TCADSketchProfile;
   Plane, Edges: TCADDoubleArray;
   LoopSizes, FaceLoops: TCADLongIntArray;
   I: Integer;
@@ -185,6 +185,14 @@ begin
       end;
       P := CADRegionProfileSubset(P, Indices);
     end;
+    { Adjacent chosen faces share internal sketch crossings. Remove those
+      virtual edges BEFORE OCCT, so a connected selection is one solid. }
+    if not CADUnionSelectedOutlines(P, UnionProfile, AError) then
+    begin
+      AError := 'Sketch outline: ' + AError;
+      Exit(False);
+    end;
+    P := UnionProfile;
     CADProfileArrays(S, P, Plane, Edges, LoopSizes, FaceLoops);
     Result := WrapShape(OCCT.MakePlanarFaces(Plane, Edges, LoopSizes, FaceLoops),
       'Sketch', AResult, AError);

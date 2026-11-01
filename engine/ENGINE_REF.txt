@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
-branch=feature/tree-double-click-2026-11-01
+branch=main
 commit=2d4c39bbb227e15e0f8e06b007119738e70a2965
-checkpoint=2026-11-01 Engine feature branch: TreeView explicit OnNodeDoubleClick, no changes to Engine main
-note=Temporary pinned Engine feature ref for FPC-CAD GUI testing. Keep engine main untouched until user approval.
+checkpoint=2026-11-01 Released Engine main 2d4c39b: TreeView double-click accepted
+note=Pinned to approved Engine main; exact commit remains enforced by build_app.sh.

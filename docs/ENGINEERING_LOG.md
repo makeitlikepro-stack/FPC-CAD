@@ -1,3 +1,12 @@
+## 2026-11-01 — Region still whole rectangle: endpoint topology welding (candidate)
+
+- User confirmed previous outgoing-angle tie-break did **not** make the small arc/rectangle corner selectable. This follow-up addresses a different failure: numeric line/circle intersection near a tangent arc ENDPOINT can return no usable intersection despite the endpoint being on the finite line to solver precision.
+- `CADBuildRegions` now explicitly projects each active arc endpoint onto each finite line during graph splitting. When within a conservative sketch-scale welding tolerance, it inserts corresponding virtual splits on BOTH objects and assigns them to one node. It does not change the user's sketch geometry, point IDs, constraints or solver.
+- Virtual node coincidence tolerance raised to `max(1e-6 mm, scale*1e-8)`, separate from sketch solver tolerance, to avoid a sub-micron gap between topological vertices. The previous outgoing halfedge tangent-angle tie-break remains.
+- Existing `REG-TAN-001..004` tests cover the quarter arc + rectangle, two selectable faces and area sum. **Not yet verified on the user's machine**; previous visual report is a FAIL. Run `scripts/test_sketch.sh` first, then UI.
+- If this still fails: capture test failure names and inspect actual solver geometry vs geometric region count; do not treat a green rectangle fill as proof that only one face exists, because all neutral faces are drawn with the same green material.
+- No merge to main/dev.
+
 ## 2026-11-01 — Tangent arc bounded-region regression and relation symbols (candidate)
 
 - Diagnosed a topological ambiguity in `CAD.Sketch.Regions`: at a tangent junction, a straight segment and circular arc have the same mathematical outgoing tangent. Half-edge walking previously sorted solely by that derivative, so it could choose the wrong edge and miss the small corner face. `TopologyOutgoingAngle` now uses an infinitesimal chord direction for arcs while preserving the exact geometry and analytic area of original edges.

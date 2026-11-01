@@ -75,7 +75,7 @@ type
     FLastSketch: TCADId;
     FSketchCount: Integer;
     FEditExtrude: TCADId;               { linked Extrude being edited, if any }
-    FExtrudePanel: TUIPanel;
+    FExtrudePanel, FExtrudeGripBadge: TUIPanel;
     FExtrudePreviewButton, FExtrudeReverseButton, FExtrudeSymmetricButton: TUIButton;
     FExtrudeConfirmButton, FExtrudeCancelButton: TUIButton;
     FExtrudeDepthEdit, FExtrudeHandleValueEdit: TUIEdit;
@@ -254,6 +254,8 @@ begin
   FSketchMode.OnExtrudeDepthChanged := @ExtrudeGripDepthChanged;
   FExtrudePanel := TUIPanel(CADDesignWidget(FLookup,
     'ExtrudeOptionsPanel', TUIPanel));
+  FExtrudeGripBadge := TUIPanel(CADDesignWidget(FLookup,
+    'ExtrudeGripBadge', TUIPanel));
   FExtrudePreviewButton := TUIButton(CADDesignWidget(FLookup,
     'ExtrudePreviewButton', TUIButton));
   FExtrudeDepthEdit := TUIEdit(CADDesignWidget(FLookup,
@@ -281,8 +283,7 @@ begin
   FExtrudeConfirmButton.OnClick := @ExtrudeConfirmClick;
   FExtrudeCancelButton.OnClick := @ExtrudeCancelClick;
   FExtrudePanel.Visible := False;
-  FExtrudeHandleValueEdit.Visible := False;
-  FExtrudeHandleUnit.Visible := False;
+  FExtrudeGripBadge.Visible := False;
   FExtrudePreviewButton.Visible := False;
   FSketchPanel := TCADSketchPanel.Create(UI, FLookup, FSketchMode);
   FSketchPanel.OnNewSketch := @NewSketch;
@@ -507,8 +508,8 @@ begin
   if FExtrudeDepthEdit = nil then Exit;
   FUpdatingExtrudeControls := True;
   try
-    FExtrudeDepthEdit.Text := FloatToStr(FExtrudeDraft.Depth);
-    FExtrudeHandleValueEdit.Text := FloatToStr(FExtrudeDraft.Depth);
+    FExtrudeDepthEdit.Text := FloatToStrF(FExtrudeDraft.Depth, ffGeneral, 13, 0);
+    FExtrudeHandleValueEdit.Text := FloatToStrF(FExtrudeDraft.Depth, ffGeneral, 13, 0);
     FExtrudeInlineInvalid := False;
     if FExtrudeDraft.Reversed then
       FExtrudeReverseButton.Text := 'Reverse: On'
@@ -635,7 +636,7 @@ var
   AX, AY, X, Y: Double;
   Show: Boolean;
 begin
-  if (FExtrudeHandleValueEdit = nil) or (FExtrudeHandleUnit = nil) then Exit;
+  if (FExtrudeGripBadge = nil) or (FExtrudeHandleValueEdit = nil) then Exit;
   Show := (FExtrudePanel <> nil) and FExtrudePanel.Visible and
           (FSketchMode <> nil) and FSketchMode.ExtrudePreviewActive;
   if Show then
@@ -645,15 +646,15 @@ begin
       Show := (AX >= 0) and (AY >= 0) and
               (AX < W.View.Width) and (AY < W.View.Height);
   end;
-  FExtrudeHandleValueEdit.Visible := Show;
-  FExtrudeHandleUnit.Visible := Show;
+  FExtrudeGripBadge.Visible := Show;
   if not Show then Exit;
-  { View is a direct child of the designed root. Both widgets remain next
-    to the projected top-face grip while the camera is orbited or zoomed. }
-  X := W.View.Left + EnsureRange(AX + 24, 8.0, W.View.Width - 118);
-  Y := W.View.Top + EnsureRange(AY - 14, 8.0, W.View.Height - 36);
-  FExtrudeHandleValueEdit.SetBounds(X, Y, 84, 30);
-  FExtrudeHandleUnit.SetBounds(X + 87, Y + 4, 29, 23);
+  { Move one container instead of independently placing text and units:
+    the designer's relative positions can no longer overlap. }
+  X := W.View.Left + EnsureRange(AX + 34, 6.0,
+    Max(6.0, W.View.Width - 169.0));
+  Y := W.View.Top + EnsureRange(AY - 19, 6.0,
+    Max(6.0, W.View.Height - 48.0));
+  FExtrudeGripBadge.SetBounds(X, Y, 162, 42);
 end;
 
 procedure TCADAppController.ExtrudeReverseClick(Sender: TObject);

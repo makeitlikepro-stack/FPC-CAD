@@ -1,5 +1,6 @@
 unit CAD.Sketch.Commands;
 {$mode objfpc}{$H+}
+{$codepage utf8}
 
 { ROLE:      what the constraint buttons do: hit test for picking, a
              selection (points + entities), one command per button that
@@ -355,18 +356,18 @@ begin
   if not C.Active then
     Exit;
   case C.Kind of
-    sckCoincident: Result := 'Coin';
-    sckHorizontal, sckHorizontalPts: Result := 'H';
-    sckVertical, sckVerticalPts: Result := 'V';
-    sckParallel: Result := '//';
-    sckPerpendicular: Result := '90';
-    sckCollinear: Result := '--';
-    sckEqualLength, sckEqualRadius: Result := '=';
-    sckTangentLine, sckTangentCircles: Result := 'T';
-    sckConcentric: Result := 'O';
-    sckMidpoint: Result := 'M';
-    sckPointOnLine, sckPointOnCircle: Result := 'On';
-    sckSymmetric: Result := 'S';
+    sckCoincident: Result := '●';
+    sckHorizontal, sckHorizontalPts: Result := '━';
+    sckVertical, sckVerticalPts: Result := '┃';
+    sckParallel: Result := '∥';
+    sckPerpendicular: Result := '⊥';
+    sckCollinear: Result := '═';
+    sckEqualLength, sckEqualRadius: Result := '≡';
+    sckTangentLine, sckTangentCircles: Result := '◯─';
+    sckConcentric: Result := '◎';
+    sckMidpoint: Result := '◇';
+    sckPointOnLine, sckPointOnCircle: Result := '⊙';
+    sckSymmetric: Result := '⋈';
   end;
 end;
 

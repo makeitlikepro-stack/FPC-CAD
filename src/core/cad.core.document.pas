@@ -59,6 +59,7 @@ type
     procedure ReleaseResult(AFeature: TCADFeature);
     procedure RebuildPool;
     function SlotOf(const AId: TCADId): LongInt;
+    function GetObjectRevision: QWord;
   public
     constructor Create;
     constructor CreateWithOptions(const AOptions: TCADPerformanceOptions);
@@ -102,9 +103,11 @@ type
     { Logical objects own no OCCT handles. Existing feature slots,
       graph, cache and display remain unchanged in this foundation gate. }
     property Objects: TCADObjectModel read FObjects;
+    { Logical object metadata has its own revision; not a recompute trigger. }
+    property ObjectRevision: QWord read GetObjectRevision;
     property Graph: TCADDependencyGraph read FGraph;
     property SlotCount: LongInt read FSlotCount;
-    { Bumped by every structural or parameter change (UI refresh hint). }
+    { Feature graph/parameter revision (legacy API, unchanged by object edits). }
     property Revision: QWord read FRevision;
   end;
 
@@ -138,6 +141,11 @@ begin
   FPlan.Free;
   FGraph.Free;
   inherited Destroy;
+end;
+
+function TCADDocument.GetObjectRevision: QWord;
+begin
+  Result := FObjects.Revision;
 end;
 
 procedure TCADDocument.RebuildPool;

@@ -30,7 +30,8 @@ uses
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Core.ObjectIds, CAD.Core.History,
   CAD.Core.SketchGeometryCommands, CAD.Core.ObjectCommands,
-  CAD.Core.ObjectModel, CAD.Core.BodyFeatureCommands, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
+  CAD.Core.ObjectModel, CAD.Core.BodyFeatureCommands,
+  CAD.Core.SketchExtrudeCommand, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
@@ -770,11 +771,10 @@ end;
 
 procedure TCADAppController.FinishSketch;
 var
-  Sk: TCADId;
   SketchObjectId: TCADObjectId;
   BodyObject: TCADModelObject;
-  AddExtrude: TCADAddBodyFeatureCommand;
-  F: TCADFeature;
+  NewOperation: TCADCreateSketchExtrudeCommand;
+  SketchFeature, ExtrudeFeature, F: TCADFeature;
   Err: string;
 begin
   if (FExtrudePanel <> nil) and FExtrudePanel.Visible then
@@ -843,45 +843,30 @@ begin
       W.Status.Text := 'Active Body is not empty: use New Body for a separate Extrude';
       Exit;
     end;
+    SketchFeature := TCADSketchFeature.Create;
+    SketchFeature.Name := Format('Sketch %d',[FSketchCount+1]);
+    SketchFeature.SetParamValue('geometry',
+      CADSketchValue(FSketchMode.Sketch));
+    SketchFeature.SetParamValue('contours',
+      CADText(FSketchMode.ContoursText));
+    ExtrudeFeature := TCADExtrudeFeature.Create;
+    ExtrudeFeature.Name := Format('Extrude %d',[FSketchCount+1]);
+    ExtrudeFeature.SetParamValue('length',CADFloat(FExtrudeSaved.Depth));
+    ExtrudeFeature.SetParamValue('symmetric',CADBool(FExtrudeSaved.Symmetric));
+    ExtrudeFeature.SetParamValue('reversed',CADBool(FExtrudeSaved.Reversed));
+    NewOperation := TCADCreateSketchExtrudeCommand.Create(
+      CADObjectRef(cokBody,FActiveBody),
+      CADObjectRef(cokPart,FDoc.Objects.PartId),
+      CADObjectRef(cokDatumPlane,FDoc.Objects.XYPlaneId),
+      SketchFeature,ExtrudeFeature);
+    { History owns the composite command, including both feature instances. }
+    if not FHistory.Execute(NewOperation) then
+    begin
+      W.Status.Text := 'Cannot create Sketch and Extrude in Body';
+      Exit;
+    end;
     Inc(FSketchCount);
-    F := TCADSketchFeature.Create;
-    F.Name := Format('Sketch %d', [FSketchCount]);
-    F.SetParamValue('geometry', CADSketchValue(FSketchMode.Sketch));
-    F.SetParamValue('contours', CADText(FSketchMode.ContoursText));
-    Sk := FDoc.AttachFeature(F);
-    if not EnsureSketchObject(Sk,SketchObjectId,Err) then
-    begin
-      { Prevent saving an evaluator with no logical Sketch identity. }
-      F := FDoc.DetachFeature(Sk);
-      F.Free;
-      W.Status.Text := 'Cannot create Sketch object: '+Err;
-      Exit;
-    end;
-    FLastSketch := Sk;
-    F := TCADExtrudeFeature.Create;
-    F.Name := Format('Extrude %d', [FSketchCount]);
-    F.SetParamValue('length', CADFloat(FExtrudeSaved.Depth));
-    F.SetParamValue('symmetric', CADBool(FExtrudeSaved.Symmetric));
-    F.SetParamValue('reversed', CADBool(FExtrudeSaved.Reversed));
-    AddExtrude := TCADAddBodyFeatureCommand.Create(
-      CADObjectRef(cokBody,FActiveBody),F,[Sk]);
-    if not FHistory.Execute(AddExtrude) then
-    begin
-      { The new Sketch is not consumed and may safely be discarded. }
-      if not FDoc.TryBindSketchFeature(
-        CADObjectRef(cokSketch,SketchObjectId),CADNoId,Err) then
-        raise Exception.Create('Sketch rollback unbind failed: '+Err);
-      if not FDoc.Objects.TryRemove(
-        CADObjectRef(cokSketch,SketchObjectId),Err) then
-        raise Exception.Create('Sketch rollback remove failed: '+Err);
-      F := FDoc.DetachFeature(Sk);
-      if F = nil then
-        raise Exception.Create('Sketch rollback detach failed');
-      F.Free;
-      FLastSketch := CADNoId;
-      W.Status.Text := 'Cannot add Extrude to Body history';
-      Exit;
-    end;
+    FLastSketch := NewOperation.SketchFeatureId;
   end;
   FSketchMode.Leave;
   FExtrudePanel.Visible := False;

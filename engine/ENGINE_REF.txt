@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
-branch=main
-commit=910d08c3346c718a01c682fa3cd0633044d385b9
-checkpoint=2026-11-01 Released Engine main 910d08c: drag hook, edge colour, background, XML icons/hints, anchors
+branch=feature/viewport3d-color-filter-2026-11-01
+commit=9fe39b160c64404b77241240cf681b0cd0aeb973
+checkpoint=2026-11-01 Experimental Engine viewport3d RGBA8 color filter (GL_LINEAR vs GL_NEAREST A/B); no changes to picking
 note=Engine source is not copied here. The build resolves this exact commit (scripts/test_view.sh: ENGINE_DIR).

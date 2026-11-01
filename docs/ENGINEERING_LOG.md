@@ -1,3 +1,10 @@
+## 2026-11-01 — Extrude preview input/overlay stacking candidate
+
+- User screenshot: typed drawing value (`DrawValueEdit`) and inline depth grip badge overlap the Extrude options panel.
+- CAD now hides the drawing-only typed value field when entering Extrude preview. Depth badge is repositioned to the left (or above when necessary) of the options panel and hidden if no safe position exists; the options panel remains accessible. `MainForm.fvform` moves the depth badge/drawing entry before the options panel in sibling painter order.
+- Temporary pin to the experimental engine `540b0b06b08db64746185b4bee7607e788c210c6`, which preserves deep clip viewport limits through conditional ancestor selection.
+- Test overlapping badge near the options dialog at various CAD window sizes, plus the IDE Designer canvas leak. FPC/native GUI verification pending. No merge.
+
 ## 2026-11-01 — Tangent glyph SVG contact icon (candidate)
 
 - User confirmed the two region picks now work and requested the Tangent constraint icon to show an actual touching line and circle, not two disjoint Unicode symbols (`◯─`).

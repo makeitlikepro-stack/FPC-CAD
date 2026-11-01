@@ -133,18 +133,19 @@
       <Button id="DiscardSketchButton" left="42" top="0" width="38" height="38" text="" backgroundColor="#FCEFEF" borderColor="#F1CFCF" borderWidth="1" borderRadius="6" iconFile="../assets/icons/png/24/cancel.png" iconSize="24" iconPosition="center" hint="Exit sketch and discard its changes"/>
     </Panel>
     <Button id="ExtrudePreviewButton" left="1168" top="168" width="172" height="38" text="Extrude Preview" fontSize="12" textColor="#1565C0" backgroundColor="#E3EFFC" borderColor="#B3D2F5" borderWidth="1" borderRadius="6" hint="E: preview selected contours as an OCCT solid; set depth, reverse or symmetric"/>
-    <Panel id="ExtrudeOptionsPanel" left="1092" top="213" width="332" height="244" backgroundColor="#FFFFFF" borderColor="#A8C6E3" borderWidth="1" borderRadius="8" anchors="top,right">
+    <Panel id="ExtrudeOptionsPanel" left="1092" top="213" width="332" height="211" backgroundColor="#FFFFFF" borderColor="#A8C6E3" borderWidth="1" borderRadius="8" anchors="top,right">
       <Label id="ExtrudeOptionsTitle" left="14" top="12" width="300" height="23" text="Extrude selected contours" fontSize="14" textColor="#1F2329"/>
       <Label id="ExtrudeDepthLabel" left="14" top="48" width="98" height="24" text="Depth (mm)" textColor="#4A5260"/>
       <Edit id="ExtrudeDepthEdit" left="112" top="42" width="122" height="31" text="10"/>
       <Label id="ExtrudeDepthUnit" left="245" top="49" width="40" height="20" text="mm" textColor="#5B6470"/>
-      <Slider id="ExtrudeDepthSlider" left="14" top="82" width="304" height="27" minimum="1" maximum="200" value="10"/>
-      <Button id="ExtrudeReverseButton" left="14" top="117" width="148" height="30" text="Reverse: Off" fontSize="11" textColor="#1F2329" backgroundColor="#EDF4FD" hint="Extrude in the opposite direction of the sketch normal"/>
-      <Button id="ExtrudeSymmetricButton" left="171" top="117" width="147" height="30" text="Symmetric: Off" fontSize="11" textColor="#1F2329" backgroundColor="#EDF4FD" hint="Extrude half the depth on each side of the sketch plane"/>
-      <Button id="ExtrudeConfirmButton" left="14" top="157" width="146" height="31" text="Accept Extrude" fontSize="12" textColor="#FFFFFF" backgroundColor="#217AC6" borderRadius="5" hint="Commit the preview settings and create the extrusion"/>
-      <Button id="ExtrudeCancelButton" left="171" top="157" width="147" height="31" text="Cancel Preview" fontSize="12" textColor="#1F2329" backgroundColor="#ECEFF3" borderRadius="5" hint="Close preview and continue editing Sketch without committing these settings"/>
-      <Label id="ExtrudePreviewStatus" left="14" top="201" width="301" height="28" text="Select regions, then adjust depth" fontSize="11" textColor="#4A5260"/>
+      <Button id="ExtrudeReverseButton" left="14" top="85" width="148" height="30" text="Reverse: Off" fontSize="11" textColor="#1F2329" backgroundColor="#EDF4FD" hint="Extrude in the opposite direction of the sketch normal"/>
+      <Button id="ExtrudeSymmetricButton" left="171" top="85" width="147" height="30" text="Symmetric: Off" fontSize="11" textColor="#1F2329" backgroundColor="#EDF4FD" hint="Extrude half the depth on each side of the sketch plane"/>
+      <Button id="ExtrudeConfirmButton" left="14" top="126" width="146" height="31" text="Accept Extrude" fontSize="12" textColor="#FFFFFF" backgroundColor="#217AC6" borderRadius="5" hint="Commit the preview settings and create the extrusion"/>
+      <Button id="ExtrudeCancelButton" left="171" top="126" width="147" height="31" text="Cancel Preview" fontSize="12" textColor="#1F2329" backgroundColor="#ECEFF3" borderRadius="5" hint="Close preview and continue editing Sketch without committing these settings"/>
+      <Label id="ExtrudePreviewStatus" left="14" top="169" width="301" height="28" text="Select regions, then adjust depth" fontSize="11" textColor="#4A5260"/>
     </Panel>
+    <Edit id="ExtrudeHandleValueEdit" left="780" top="340" width="85" height="30" text="10"/>
+    <Label id="ExtrudeHandleUnit" left="869" top="345" width="26" height="22" text="mm" textColor="#245D91"/>
     <Edit id="DrawValueEdit" left="760" top="360" width="170" height="28" placeholder="length, angle, Enter"/>
     <Panel id="StatusBar" left="0" top="874" width="1440" height="26" backgroundColor="#FFFFFF" anchors="left,right,bottom">
       <Label id="StatusLabel" left="12" top="3" width="880" height="20" text="" textColor="#4A5260" anchors="left,top,right"/>

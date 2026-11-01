@@ -15,7 +15,7 @@ interface
 
 uses
   Classes, SysUtils,
-  OpenGL.ECS.Widgets,
+  OpenGL.ECS.Widgets, OpenGL.UI.Host,
   CAD.Core.Ids, CAD.Core.ObjectIds, CAD.Core.ObjectModel,
   CAD.Core.Feature, CAD.Core.Document,
   CAD.Features.Sketch, CAD.Features.Extrude, CAD.App.DesignLookup;
@@ -27,6 +27,7 @@ type
   TCADFeatureTree = class
   private
     FTree: TUITreeView;
+    FHost: TUIHostControl;
     FIcons: TUIImageList;
     FMenu: TUIContextMenu;
     FMenuNodeTag: LongInt;
@@ -42,7 +43,8 @@ type
     procedure AddFeature(ADoc: TCADDocument; AParent: TUITreeNode; F: TCADFeature;
       ADepth: Integer);
   public
-    constructor Create(ALookup: TCADWidgetLookup; AUI: TUIWidgetFactory;
+    constructor Create(ALookup: TCADWidgetLookup; AHost: TUIHostControl;
+      AUI: TUIWidgetFactory;
       const AIconFolder: string);
     destructor Destroy; override;
     { Rebuilds the tree when the document changed (AForce: always). }
@@ -59,11 +61,13 @@ const
     'cut', 'history');
 
 constructor TCADFeatureTree.Create(ALookup: TCADWidgetLookup;
-  AUI: TUIWidgetFactory; const AIconFolder: string);
+  AHost: TUIHostControl; AUI: TUIWidgetFactory;
+  const AIconFolder: string);
 var
   K: string;
 begin
   inherited Create;
+  FHost := AHost;
   FTree := TUITreeView(CADDesignWidget(ALookup, 'FeatureTree', TUITreeView));
   FIcons := TUIImageList.Create;
   FMenu := AUI.CreateContextMenu(190,28);
@@ -272,7 +276,7 @@ begin
     Exit;
   FMenu.AddItem(UTF8String(LabelText));
   FMenu.ItemCommand[0] := @ContextEdit;
-  FMenu.OpenAtScreen(AX,AY,1920,1080);
+  FMenu.OpenAtScreen(AX,AY,FHost.Width,FHost.Height);
 end;
 
 procedure TCADFeatureTree.ContextEdit(Sender: TObject);

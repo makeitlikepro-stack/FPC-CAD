@@ -1,3 +1,13 @@
+## 2026-11-01 — Initial Extrude attached to active Body (candidate; tests pending)
+
+- The Model tree's Body node now emits its logical Object ID on activation (double-click or Enter), separately from feature tags; controller stores `FActiveBody`. Newly created Bodies become active automatically.
+- Finishing a **new** Sketch requires an active, empty Body. Instead of directly calling `AttachFeature`/`TryLink` for Extrude, the controller calls the existing `TCADAddBodyFeatureCommand` with the Sketch evaluator as input. The resulting Extrude is really stored in the Body's ordered history and becomes Body Tip; it appears under that Body in the registry-backed tree.
+- The Sketch evaluator is kept separate from the Body Feature: it continues to be owned by its Sketch object and supplies the first input to the OCCT Extrude evaluator.
+- A subsequent Extrude on the **same nonempty Body is rejected** at UI level. The current evaluator makes an independent solid and does not perform Additive Fuse with the previous Body Tip; accepting a second Body history entry would misrepresent the solid. Use New Body for independent Extrude until additive/subtractive solid features are implemented.
+- A failed initial Extrude command compensates by unbinding/removing/detaching the just-created Sketch object/evaluator; the editor remains open for repair. New Sketch + Extrude creation is still not a **single History entry**; Undo of Extrude leaves the Sketch object and evaluator, so compound Undo/Redo and robust rollback in exceptional cases remain pending.
+- Added UIBODY-001..UIBODY-010 headless core tests for genuine Body ownership, first Sketch dependency, independent Body histories and exact undo/redo identities.
+- Pending `scripts/test_core.sh`, `scripts/test_sketch.sh`, `scripts/test_occt.sh`, `scripts/build_app.sh` and a manual two-Body GUI smoke test. No `main`/`dev` changes.
+
 ## 2026-11-01 — New Body UI (candidate; tests pending)
 
 - Branch `feature/cad-body-ui-2026-11-01` was created after merging the approved Sketch/Editor/ModelTree/blank-start branch into both `dev` and `main` (same SHA `2200874bd1f03d793d6332ad382c49a4eeac576f`).

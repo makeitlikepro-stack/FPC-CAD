@@ -30,6 +30,7 @@ var
   M: TCADObjectModel;
   XY,XZ,YZ: TCADModelObject;
   E: string;
+  R: TCADRecomputeReport;
 begin
   D := TCADDocument.Create;
   try
@@ -60,8 +61,11 @@ begin
       'OM-008: default reference datum cannot be deleted');
     Check(not M.TryRename(Ref(cokPart,M.PartId),'Else',E),
       'OM-008: default part is protected');
-    Check(not D.NeedsRecompute and (D.Recompute.Planned=0),
+    R := D.Recompute;
+    Check((not D.NeedsRecompute) and (R.Planned=0),
       'OM-012: logical default objects do not recompute features');
+    Check(D.ObjectRevision=M.Revision,
+      'OM-001: document exposes separate logical-object revision');
   finally D.Free; end;
 end;
 
@@ -83,6 +87,15 @@ begin
     Check((A.Value<>B.Value) and
       (M.ActiveCount(cokBody)=2),
       'OM-002: Body IDs unique and Part membership tracked');
+    RevisionBefore := M.Revision;
+    Check(not M.TryRename(Ref(cokBody,B),'Body002',E) and
+      (M.Revision=RevisionBefore),
+      'OM-007: identical rename is a no-op without revision bump');
+    Check(not M.TrySetVisible(Ref(cokBody,B),True,E) and
+      (M.Revision=RevisionBefore),
+      'OM-007: identical visibility is a no-op without revision bump');
+    Check(D.ObjectRevision=M.Revision,
+      'OM-007: document object revision tracks registry changes');
     O := M.Find(Ref(cokBody,B));
     if O <> nil then
       Check(CADSameObjectId(O.PartId,M.PartId),
@@ -136,9 +149,14 @@ begin
       'OM-005: sketch references a real datum');
     O := M.Find(Ref(cokSketch,A));
     if O<>nil then
+    begin
       Check(CADSameObjectId(O.SupportId,M.XYPlaneId) and
         CADSameObjectId(O.PartId,M.PartId),
         'OM-005: sketch support and Part are stable IDs');
+      Check((O.Frame.XDir[0]=1) and (O.Frame.XDir[1]=0) and
+        (O.Frame.Normal[0]=0) and (O.Frame.Normal[2]=1),
+        'OM-005: Sketch has a valid identity frame local to support Datum');
+    end;
     Check(not M.TryRemove(Ref(cokDatumPlane,M.XYPlaneId),E),
       'OM-008: a datum referenced by Sketch cannot be removed');
     NextBefore := M.NextId;
@@ -170,6 +188,7 @@ var
   B,SketchId: TCADObjectId;
   E: string;
   Rev: QWord;
+  R: TCADRecomputeReport;
 begin
   D := TCADDocument.Create;
   H := TCADHistory.Create(D);
@@ -213,7 +232,8 @@ begin
       'OM-009: undo Sketch create');
     Check(H.Redo and (M.Find(Ref(cokSketch,SketchId))<>nil),
       'OM-009: redo Sketch create with same support and ID');
-    Check(not D.NeedsRecompute and (D.Recompute.Planned=0),
+    R := D.Recompute;
+    Check((not D.NeedsRecompute) and (R.Planned=0),
       'OM-007: object metadata/undo does not run feature computation');
   finally
     H.Free;

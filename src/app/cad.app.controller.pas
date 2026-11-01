@@ -86,6 +86,7 @@ type
     procedure ExtrudeDepthKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure ExtrudeHandleDepthKeyDown(Sender: TObject;
       var Key: Word; Shift: TShiftState);
+    procedure ExtrudeHandleDepthExit(Sender: TObject);
     procedure ExtrudeGripDepthChanged(Sender: TObject; ADepth: Double);
     procedure UpdateExtrudeGripPosition;
     procedure ExtrudeReverseClick(Sender: TObject);
@@ -273,6 +274,7 @@ begin
   FExtrudePreviewButton.OnClick := @ExtrudePreviewClick;
   FExtrudeDepthEdit.OnKeyDown := @ExtrudeDepthKeyDown;
   FExtrudeHandleValueEdit.OnKeyDown := @ExtrudeHandleDepthKeyDown;
+  FExtrudeHandleValueEdit.OnExit := @ExtrudeHandleDepthExit;
   FExtrudeReverseButton.OnClick := @ExtrudeReverseClick;
   FExtrudeSymmetricButton.OnClick := @ExtrudeSymmetricClick;
   FExtrudeConfirmButton.OnClick := @ExtrudeConfirmClick;
@@ -587,6 +589,21 @@ begin
     Exit;
   end;
   FExtrudeDraft.Depth := Depth;
+  UpdateExtrudeControls;
+  RefreshExtrudeDraft;
+end;
+
+procedure TCADAppController.ExtrudeHandleDepthExit(Sender: TObject);
+var
+  Depth: Double;
+begin
+  { Accept/another-widget click must commit a typed inline value even
+    when the user did not press Enter first. Cancellation hides the panel
+    before focus loss, so cancelled drafts never enter the CAD document. }
+  if FUpdatingExtrudeControls or not FExtrudePanel.Visible then Exit;
+  if not CADParseExtrudeDepth(FExtrudeHandleValueEdit.Text,Depth) then Exit;
+  if Abs(Depth-FExtrudeDraft.Depth)<1e-10 then Exit;
+  FExtrudeDraft.Depth:=Depth;
   UpdateExtrudeControls;
   RefreshExtrudeDraft;
 end;

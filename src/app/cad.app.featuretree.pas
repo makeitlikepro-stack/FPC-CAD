@@ -62,6 +62,9 @@ begin
     if FileExists(AIconFolder + K + '.png') then
       FIcons.Add(K, AIconFolder + K + '.png');
   FTree.ImageList := FIcons;
+  { A row click must edit the selected component. OnActivate alone depends
+    on the engine's double-click / keyboard activation semantics. }
+  FTree.OnClick := @Activate;
   FTree.OnActivate := @Activate;
 end;
 

@@ -14,6 +14,31 @@ only after the user accepts a stage.
 - **Stage 5:** sketch with constraints (2D solver), Revolve, Fillet, Chamfer.
 - **Stage 6:** STEP import and export, feature tree editing with rebuild.
 
+## Current priority: CAD object model foundation (design candidate)
+
+After the user-approved Sketch/Trim/Selected-Contours/Extrude development and
+the Viewport3D color-filter fix, **pause new modelling features** until the
+Document has first-class logical entities.
+
+1. **Design gate (this branch):** `OBJECT_MODEL_DESIGN.md` and
+   `OBJECT_MODEL_TEST_PLAN.md`: ownership, IDs, Body tips, typed Sketch and
+   Datum references, migration and regression gates. Documentation only.
+2. **Core registry gate:** pure FPC `Part`, `Body`, `SketchObject`,
+   `DatumPlane` and nonreused `ObjectId`; command-driven atomic mutations;
+   headless tests OM-001..012. No GUI or OCCT modification.
+3. **Evaluation gate:** Body tip management, Feature graph isolation and
+   atomic history, then the Sketch compatibility adapter. Existing feature
+   and cache tests must remain PASS.
+4. **Presentation and persistence gate:** proper Feature Tree, Body-based
+   viewport identity and versioned project Save/Load. Preserve legacy
+   `FPCSKETCH 1/2` payloads.
+5. **Topology references gate:** persistent Face/Edge selection semantics
+   and ambiguity reporting before advanced Fillet/Chamfer parametrization.
+
+The existing Stage 5/6 ideas (Revolve, Fillet, Chamfer, STEP, etc.) remain
+backlog, **not architectural prerequisites**. Do not implement them to work
+around missing Body ownership.
+
 ## Known risks
 
 - Topological naming: references to faces/edges must survive rebuilds.

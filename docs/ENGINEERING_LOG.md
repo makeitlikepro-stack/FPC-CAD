@@ -1,3 +1,15 @@
+## 2026-11-01 — Sketch object ↔ evaluator binding (candidate; tests pending)
+
+Branch: `feature/cad-sketch-object-binding-2026-11-01`.
+
+- Added a typed `SketchFeatureId` reference to the document-owned `cokSketch` logical object. No Sketch geometry is copied into the logical object: **the existing Sketch feature `geometry` parameter remains the sole authoritative storage** in this compatibility gate.
+- `TCADDocument.TryBindSketchFeature` validates the Sketch object, existing evaluator Feature type and `geometry` text parameter, rejects duplicate ownership, and prevents the same Feature being assigned to Body History.
+- A bound evaluator cannot be detached. A bound Sketch object cannot be removed. Body Tip assignment rejects an evaluator currently owned by a Sketch object.
+- `TCADBindSketchFeatureCommand` integrates binding changes with existing Undo/Redo History. Binding is pure metadata; no OCCT/solver code was modified.
+- Added `tests/core/cad_sketch_binding_tests.lpr` and included it in `scripts/test_core.sh`.
+- This is **not** the final geometry ownership migration: the editor still works with its own editable `TCADSketch` instance and `TCADSketchFeature` still evaluates text snapshots. Future steps must integrate editor commit, atomic Sketch object/feature creation, Sketch-specific undo, and then ownership migration without creating a second canonical geometry store.
+- **Not locally compiled or executed in this session**; full core, sketch, OCCT and app-build gates remain pending.
+
 ## 2026-11-01 — Atomic Body Feature command (candidate; compile/test pending)
 
 - Added `CAD.Core.BodyFeatureCommands.TCADAddBodyFeatureCommand`. One History command validates the Body/current tip and ordered inputs before publication, attaches or reattaches a Feature, connects graph inputs, advances Body tip/history, and compensates by detaching if linking/tip fails.

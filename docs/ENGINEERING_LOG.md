@@ -1,3 +1,10 @@
+## 2026-11-01 — Tangent glyph SVG contact icon (candidate)
+
+- User confirmed the two region picks now work and requested the Tangent constraint icon to show an actual touching line and circle, not two disjoint Unicode symbols (`◯─`).
+- Added `assets/icons/svg/constraints/tangent.svg`: vector technical icon with a **diagonal tangent line touching the upper-right perimeter of a circle**. No font-dependent symbol is used for the on-screen Tangent badge.
+- In `CAD.App.SketchDims`, Tangent relation buttons now load the SVG through the engine's `TUIButton.LoadIconSVG`, centre it in the same existing clickable overlay and clear/reload icons only when the reused glyph row changes between Tangent and other constraint types. Existing geometric contact anchors remain unchanged.
+- Other constraint badges still use symbols. Source pushed to feature branch only; local Lazarus build and viewer inspection pending. No main/dev merge.
+
 ## 2026-11-01 — Region still whole rectangle: endpoint topology welding (candidate)
 
 - User confirmed previous outgoing-angle tie-break did **not** make the small arc/rectangle corner selectable. This follow-up addresses a different failure: numeric line/circle intersection near a tangent arc ENDPOINT can return no usable intersection despite the endpoint being on the finite line to solver precision.

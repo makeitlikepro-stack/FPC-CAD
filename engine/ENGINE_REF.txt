@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
-branch=feature/viewport3d-color-filter-2026-11-01
-commit=dd0ff8c506f56a19910b2684e4d96c63126a29c5
-checkpoint=2026-11-01 Experimental Engine viewport3d RGBA8 color filter (GL_LINEAR vs GL_NEAREST A/B); no changes to picking
+branch=main
+commit=f7ca183c1d5d79887a755d496853746e447f8767
+checkpoint=2026-11-01 Released Engine main f7ca183: user-approved GL_LINEAR Viewport3D RGBA8 color filtering; RG32UI picking preserved
 note=Engine source is not copied here. The build resolves this exact commit (scripts/test_view.sh: ENGINE_DIR).

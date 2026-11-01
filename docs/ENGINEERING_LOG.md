@@ -1,3 +1,13 @@
+## 2026-11-01 — Model tree renders the logical object registry (candidate; tests pending)
+
+- Root cause: `CAD.App.FeatureTree.Refresh` used hardcoded `Part1` / planes and only scanned Feature Graph, ignoring `TCADObjectModel`; the existing model changes were invisible in the Model tab.
+- Added read-only `ObjectCount` / `ObjectAt` iteration over stable object slots; consumers must filter `Active` tombstones.
+- Feature tree now shows actual Part, Origin, Datum planes, Body nodes with ordered Body history, and Sketch objects under Part. A Sketch node retains its evaluator Feature ID as activation tag, preserving edit/double-click behavior.
+- Existing unowned Feature Graph roots (notably Extrude in the legacy creation flow) remain visible. Bound Sketch evaluators are not recursively duplicated inside these roots. The tree refresh key now includes both Document and ObjectModel revisions.
+- Added TREE-001..TREE-008 tests for registry enumeration, Body/Sketch insertion and inactive tombstone filtering.
+- **Important remaining work:** current legacy editor still creates Sketch + Extrude without a Body; no fake Body is displayed. To show an Extrude inside Body history, creation must first route through the atomic Body Feature workflow. The tree is not yet a full hierarchical selection model for logical Object IDs.
+- App compile, headless tests and visual inspection pending; `main`/`dev` unchanged.
+
 ## 2026-11-01 — Sketch Editor → bound evaluator commit (candidate; tests pending)
 
 - Added `CAD.Core.SketchGeometryCommands.TCADCommitSketchCommand`: an editor snapshot commit atomically updates the bound evaluator's existing `geometry` and `contours` text parameters as **one History entry**, with Undo/Redo preserving the original values. No-op commits are dropped. Stale/invalid evaluator bindings are rejected.

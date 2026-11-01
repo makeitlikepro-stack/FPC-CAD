@@ -458,7 +458,7 @@ begin
         begin
           R1 := S.EntityRadius(C.A);
           R2 := S.EntityRadius(C.B);
-          if (C.Side < 0) and (R1 > R2) then R1 := -R1;
+          if (C.Side < 0) and (R1 < R2) then R1 := -R1;
           U := X1 + R1*DX/Dist;
           V := Y1 + R1*DY/Dist;
         end;

@@ -1,3 +1,10 @@
+## 2026-11-01 — Tangent arc bounded-region regression and relation symbols (candidate)
+
+- Diagnosed a topological ambiguity in `CAD.Sketch.Regions`: at a tangent junction, a straight segment and circular arc have the same mathematical outgoing tangent. Half-edge walking previously sorted solely by that derivative, so it could choose the wrong edge and miss the small corner face. `TopologyOutgoingAngle` now uses an infinitesimal chord direction for arcs while preserving the exact geometry and analytic area of original edges.
+- Added `REG-TAN-001..004` to `tests/sketch/region_tests.lpr`: rectangle with a quarter-arc tangent to top and left sides, point-on-line constraints, two independent region picks, and area conservation.
+- Replaced viewport relation abbreviations (H, V, T, On, etc.) with Unicode geometric symbols (━, ┃, ◯─, ⊙, etc.) in `CADRelationGlyph` and made overlay glyph width independent of UTF-8 byte length. These are font-rendered symbols, **not** new PNG/SVG assets; render quality depends on the installed symbol font.
+- Prior tangent anchor positioning and Coincident glyph fixes are retained. **Neither region regression nor on-screen results have been run locally in this environment**; user must run `scripts/test_sketch.sh` and inspect the viewport before merging. `dev`/`main` untouched.
+
 ## 2026-11-01 — Tangent glyph geometry anchoring (candidate)
 
 - Screenshot showed two `T` badges floating near the midpoints of horizontal/vertical rectangle edges even though the quarter-circle arc touches those edges near one corner. Root cause: `CADRelationAnchor` fell back to `EntityAnchor(C.A)` for `sckTangentLine`, and `EntityAnchor` places line markers at the midpoint.

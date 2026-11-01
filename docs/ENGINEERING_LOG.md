@@ -1,3 +1,12 @@
+## 2026-11-01 — Undo result not visible: direct document controls and persistent route indicator
+
+- User observed no status message after Undo, so the previous transient `StatusLabel` diagnostic was insufficient to determine whether `Ctrl+Z` reached document history.
+- Added **Undo** and **Redo** buttons to the Features ribbon, both calling exactly the same `TCADAppController.Run(cadUndo/cadRedo)` as the Edit menu and keyboard shortcut. This separates command execution from focused-widget/shortcut routing issues.
+- Added a dedicated persistent `UndoTraceLabel` in the bottom status bar that records `UNDO > Sketch editor`, `UNDO > no document action`, `UNDO > <actual history entry> | Sketches: N`, or `UNDO FAILED`. The normal status line remains for detailed exceptions.
+- Cleared stale `FLastSketch` after document Undo in the prior checkpoint; the `ATOM-013` core check asserts all Sketch and owner references are gone. Actual runtime behavior still needs local confirmation.
+- Verification: after exiting Sketch mode, click the new Features ribbon Undo button; inspect the persistent indicator and Model tree. Compare with keyboard Ctrl+Z and Edit > Undo. If a leftover Sketch remains while indicator shows the atomic command, investigate core rollback; if indicator shows `no document action`, investigate History entry registration; if no indicator change with Ctrl+Z but the button works, investigate shortcut forwarding.
+- Local build and GUI testing pending. No merges to dev/main.
+
 ## 2026-11-01 — Report: Sketch remains after Undo (diagnostic gate)
 
 - User reported that a Sketch remains after undoing Sketch+Extrude. Inspection confirms the composite command removes Extrude, unbinds the Sketch evaluator, detaches its feature and tombstones the Sketch object, so a retained Sketch may mean a different History entry was undone, a pre-existing independent Sketch was present, or Undo failed partway.

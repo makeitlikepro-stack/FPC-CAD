@@ -24,6 +24,7 @@ interface
 uses
   Classes, SysUtils, Math, LCLType,
   OpenGL.Types, OpenGL.ECS.Widgets, OpenGL.UI.Host, OpenGL.UI.Viewport3D,
+  OpenGL.UI.WidgetKit,
   OpenGL.Render.Picking3D,
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
@@ -77,14 +78,16 @@ type
     FExtrudePanel: TUIPanel;
     FExtrudePreviewButton, FExtrudeReverseButton, FExtrudeSymmetricButton: TUIButton;
     FExtrudeConfirmButton, FExtrudeCancelButton: TUIButton;
-    FExtrudeDepthEdit: TUIEdit;
-    FExtrudeDepthSlider: TUISlider;
-    FExtrudeStatus: TUILabel;
+    FExtrudeDepthEdit, FExtrudeHandleValueEdit: TUIEdit;
+    FExtrudeStatus, FExtrudeHandleUnit: TUILabel;
     FExtrudeSaved, FExtrudeDraft: TCADExtrudeOptions;
     FUpdatingExtrudeControls: Boolean;
     procedure ExtrudePreviewClick(Sender: TObject);
     procedure ExtrudeDepthKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
-    procedure ExtrudeDepthSliderChange(Sender: TObject);
+    procedure ExtrudeHandleDepthKeyDown(Sender: TObject;
+      var Key: Word; Shift: TShiftState);
+    procedure ExtrudeGripDepthChanged(Sender: TObject; ADepth: Double);
+    procedure UpdateExtrudeGripPosition;
     procedure ExtrudeReverseClick(Sender: TObject);
     procedure ExtrudeSymmetricClick(Sender: TObject);
     procedure ExtrudeConfirmClick(Sender: TObject);
@@ -246,14 +249,17 @@ begin
   FOverlay.RenderOrder := FOverlayOrder;
   FSketchMode := TCADSketchMode.Create(W.View);
   FSketchMode.OnChanged := @SketchChanged;
+  FSketchMode.OnExtrudeDepthChanged := @ExtrudeGripDepthChanged;
   FExtrudePanel := TUIPanel(CADDesignWidget(FLookup,
     'ExtrudeOptionsPanel', TUIPanel));
   FExtrudePreviewButton := TUIButton(CADDesignWidget(FLookup,
     'ExtrudePreviewButton', TUIButton));
   FExtrudeDepthEdit := TUIEdit(CADDesignWidget(FLookup,
     'ExtrudeDepthEdit', TUIEdit));
-  FExtrudeDepthSlider := TUISlider(CADDesignWidget(FLookup,
-    'ExtrudeDepthSlider', TUISlider));
+  FExtrudeHandleValueEdit := TUIEdit(CADDesignWidget(FLookup,
+    'ExtrudeHandleValueEdit', TUIEdit));
+  FExtrudeHandleUnit := TUILabel(CADDesignWidget(FLookup,
+    'ExtrudeHandleUnit', TUILabel));
   FExtrudeReverseButton := TUIButton(CADDesignWidget(FLookup,
     'ExtrudeReverseButton', TUIButton));
   FExtrudeSymmetricButton := TUIButton(CADDesignWidget(FLookup,
@@ -266,12 +272,14 @@ begin
     'ExtrudePreviewStatus', TUILabel));
   FExtrudePreviewButton.OnClick := @ExtrudePreviewClick;
   FExtrudeDepthEdit.OnKeyDown := @ExtrudeDepthKeyDown;
-  FExtrudeDepthSlider.OnChange := @ExtrudeDepthSliderChange;
+  FExtrudeHandleValueEdit.OnKeyDown := @ExtrudeHandleDepthKeyDown;
   FExtrudeReverseButton.OnClick := @ExtrudeReverseClick;
   FExtrudeSymmetricButton.OnClick := @ExtrudeSymmetricClick;
   FExtrudeConfirmButton.OnClick := @ExtrudeConfirmClick;
   FExtrudeCancelButton.OnClick := @ExtrudeCancelClick;
   FExtrudePanel.Visible := False;
+  FExtrudeHandleValueEdit.Visible := False;
+  FExtrudeHandleUnit.Visible := False;
   FExtrudePreviewButton.Visible := False;
   FSketchPanel := TCADSketchPanel.Create(UI, FLookup, FSketchMode);
   FSketchPanel.OnNewSketch := @NewSketch;
@@ -495,7 +503,7 @@ begin
   FUpdatingExtrudeControls := True;
   try
     FExtrudeDepthEdit.Text := FloatToStr(FExtrudeDraft.Depth);
-    FExtrudeDepthSlider.Value := Max(1, Min(200, FExtrudeDraft.Depth));
+    FExtrudeHandleValueEdit.Text := FloatToStr(FExtrudeDraft.Depth);
     if FExtrudeDraft.Reversed then
       FExtrudeReverseButton.Text := 'Reverse: On'
     else

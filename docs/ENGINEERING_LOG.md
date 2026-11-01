@@ -312,3 +312,13 @@
 - Engine release commit: `f7ca183c1d5d79887a755d496853746e447f8767` (contains the code, static regression contract and acceptance note). Engine `dev` and `main` were fast-forwarded without force.
 - This FPC-CAD release pins the **Engine main** commit `f7ca183c1d5d79887a755d496853746e447f8767` in `engine/ENGINE_REF.txt`, replacing the temporary feature-branch pin. The build helper reports the intended branch if the Engine checkout differs.
 - Verification: **user GUI PASS for rendering**; source static checks for color-versus-pick isolation passed. No new assistant-side Lazarus/FPC integration build performed. All other application rendering/geometry paths remain unchanged.
+
+## 2026-11-01 — CAD Object Model architecture design candidate
+
+- User elected to prioritize the **data structure and modelling lifecycle** over additional CAD modelling tools. This branch changes **documentation only**, not runtime Pascal code, OCCT, Engine, main or dev.
+- Baseline: `dev` at `98b91768c8dbb5a46fee6fe7ca096acd7587ea38`. Examined actual Document, Feature, Graph, Cache, History, Sketch, OCCT shape result, Feature Tree and View Sync implementations.
+- Verified structural gap: Document currently owns only Feature slots, while Part1/Datum planes are UI-only nodes, Sketch geometry is a text Feature parameter, and there are no explicit Body identity, Body tip, operation target or Part ownership records.
+- Added `docs/OBJECT_MODEL_DESIGN.md` with stable typed object identities, authority/ownership contracts, Body vs feature vs evaluated shape distinction, datum-supported Sketches, explicit multi-body operation targets, transactions, recompute boundaries, tree and viewport projection, legacy preservation and staged migration.
+- Added `docs/OBJECT_MODEL_TEST_PLAN.md` with 12 first-gate pure-core test scenarios plus Body/graph/Sketch/serialization/topological reference later gates.
+- Updated `docs/ARCHITECTURE.md` and `docs/ROADMAP.md` to make the object model foundational priority and preserve the existing tested solver/graph/cache.
+- **Test result:** documentation/source-contract review only. No Pascal files changed, so no new FPC build or runtime PASS is claimed. First coding step is a separate user-approved implementation gate from updated dev, with headless regression tests and no GUI/OCCT changes.

@@ -760,12 +760,12 @@ begin
     end;
     if not FHistory.Execute(TCADCommitSketchCommand.Create(
       CADObjectRef(cokSketch,SketchObjectId),
-      CADSketchValue(FSketchMode.Sketch).S,
+      CADSketchToText(FSketchMode.Sketch),
       FSketchMode.ContoursText)) then
     begin
       { An unchanged Sketch is a successful no-op; no history entry. }
       if (FDoc.Find(FEditSketch).GetParamValue('geometry').S <>
-           CADSketchValue(FSketchMode.Sketch).S) or
+           CADSketchToText(FSketchMode.Sketch)) or
          (FDoc.Find(FEditSketch).GetParamValue('contours').S <>
            FSketchMode.ContoursText) then
       begin

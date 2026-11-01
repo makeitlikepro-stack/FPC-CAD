@@ -2,16 +2,14 @@ unit CAD.App.FeatureTree;
 {$mode objfpc}{$H+}
 {$codepage utf8}
 
-{ ROLE:      the feature tree of the Model page (designed TreeView
-             FeatureTree): Part1 with the origin and the three planes, then
-             the document's features in creation order. A feature another
-             one consumes is shown under it (SolidWorks: the sketch under
-             its extrude, the boolean inputs under the boolean). Double click
-             / Enter on a node asks to edit that feature (OnEditFeature).
+{ ROLE:      Model tree from the document's logical object registry:
+             real Part, Origin, Datum planes, Body histories and Sketches.
+             Legacy unowned features remain visible for compatibility.
+             Sketch node activation still uses its evaluator Feature ID.
   CALLED BY: CAD.App.Controller (after every rebuild).
-  CALLS:     CAD.Core.Document, CAD.App.DesignLookup, engine TreeView.
+  CALLS:     CAD.Core.Document / ObjectModel, engine TreeView.
   THREADS:   UI thread.
-  SPEED:     rebuilt only when the document revision changed. }
+  SPEED:     rebuilt only when Document or ObjectModel revision changes. }
 
 interface
 
@@ -148,9 +146,7 @@ begin
     if (not O.Active) or
        (not CADSameObjectId(O.PartId,ParentObject.Id)) then Continue;
     if O.Kind = cokOrigin then
-    begin
       AddObjectNode(Part,O,'origin');
-    end;
   end;
   for I := 0 to ADoc.Objects.ObjectCount-1 do
   begin
@@ -159,7 +155,6 @@ begin
        (not CADSameObjectId(O.PartId,ParentObject.Id)) then Continue;
     if O.Kind = cokDatumPlane then AddObjectNode(Part,O,'plane');
   end;
-
 
   for I := 0 to ADoc.Objects.ObjectCount-1 do
   begin

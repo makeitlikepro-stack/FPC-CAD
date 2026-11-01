@@ -1,3 +1,10 @@
+## 2026-11-01 — Per-feature Model tree editing (candidate; tests pending)
+
+- Corrected `TCADAppController.EditFeature` dispatch on tree activation: Sketch opens Sketch Editor; Extrude resolves its actual Sketch input and immediately opens the existing Extrude options/OCCT preview panel (Depth, Reverse, Symmetric). Missing or non-Sketch inputs are rejected with status errors rather than silently editing unrelated geometry.
+- Existing node activation remains **double-click or Enter** through `TUITreeView.OnActivate`; a single click selects the node but does not automatically enter a destructive editing mode. A dedicated single-click property inspector for all component types is a future step. Other feature types still display an explicit “no editor” message.
+- Existing commit path persists Extrude parameter edits through FinishSketch; parameter edits are not yet bundled in the same Undo command as Sketch geometry changes.
+- GUI validation pending: activate Sketch; activate Extrude; change Depth/Reverse/Symmetric; Accept vs Discard; try missing Sketch input. `main`/`dev` untouched.
+
 ## 2026-11-01 — Show Sketch under its consuming Body Extrude (candidate; pending GUI test)
 
 - Fixed Model tree hierarchy: a Sketch referenced by an Extrude in a Body's ordered Feature History is now displayed beneath that Extrude in `Part → Body → History → Extrude → Sketch`.

@@ -143,6 +143,52 @@ begin
 end;
 
 
+procedure TestTreeObjectEnumeration;
+var
+  D: TCADDocument;
+  SId, BId: TCADObjectId;
+  I, Visible: Integer;
+  E: string;
+  O: TCADModelObject;
+begin
+  D := TCADDocument.Create;
+  try
+    Check(D.Objects.ObjectCount = 5,
+      'TREE-001 defaults contain Part, Origin and three Datum planes');
+    Check((D.Objects.ObjectAt(0).Kind = cokPart) and
+      (D.Objects.ObjectAt(1).Kind = cokOrigin) and
+      (D.Objects.ObjectAt(2).Kind = cokDatumPlane),
+      'TREE-002 stable object creation order');
+    Check(D.Objects.TryAddBody(
+      CADObjectRef(cokPart,D.Objects.PartId),'Body001',BId,E),
+      'TREE-003 create Body');
+    Check(D.Objects.TryAddSketch(
+      CADObjectRef(cokPart,D.Objects.PartId),
+      CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
+      'Sketch001',SId,E),'TREE-004 create Sketch');
+    Check((D.Objects.ObjectCount = 7) and
+      (D.Objects.ObjectAt(5).Kind = cokBody) and
+      (D.Objects.ObjectAt(6).Kind = cokSketch),
+      'TREE-005 enumerates logical Body and Sketch');
+    Check(D.Objects.TryRemove(CADObjectRef(cokBody,BId),E),
+      'TREE-006 remove Body as tombstone');
+    Visible := 0;
+    for I := 0 to D.Objects.ObjectCount-1 do
+    begin
+      O := D.Objects.ObjectAt(I);
+      if O.Active then Inc(Visible);
+    end;
+    Check((D.Objects.ObjectCount=7) and (Visible=6) and
+      (not D.Objects.ObjectAt(5).Active),
+      'TREE-007 enumeration retains inactive tombstones for filtering');
+    Check(D.Objects.TryRestore(CADObjectRef(cokBody,BId),E) and
+      D.Objects.ObjectAt(5).Active,
+      'TREE-008 restore keeps Body stable index');
+  finally
+    D.Free;
+  end;
+end;
+
 procedure TestEditorCommit;
 var
   D: TCADDocument;
@@ -206,6 +252,7 @@ end;
 begin
   TestBindings;
   TestEditorCommit;
+  TestTreeObjectEnumeration;
   if Failures=0 then
     WriteLn('PASS: CAD Sketch binding (',Checks,' checks)')
   else

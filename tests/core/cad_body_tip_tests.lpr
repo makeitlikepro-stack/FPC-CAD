@@ -411,6 +411,11 @@ begin
     Check((D.Objects.Find(CADObjectRef(cokSketch,SketchObjectId))=nil) and
       (D.Find(SketchId)=nil) and (D.Find(ExtrudeId)=nil) and
       (O.FeatureCount=0),'ATOM-005 whole chain removed');
+    Check((D.Objects.ActiveCount(cokSketch)=0) and
+      (not CADIdValid(O.TipFeatureId)) and
+      (not CADObjectIdValid(D.Objects.SketchFeatureOwner(SketchId))) and
+      (not CADObjectIdValid(D.Objects.FeatureOwner(ExtrudeId))),
+      'ATOM-013 no orphan Sketch, evaluator binding or Body tip after Undo');
     Check(H.Redo,'ATOM-006 one Redo');
     Check((D.Objects.Find(CADObjectRef(cokSketch,SketchObjectId))<>nil) and
       (D.Find(SketchId)<>nil) and (D.Find(ExtrudeId)<>nil) and

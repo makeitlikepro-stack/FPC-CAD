@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
 branch=feature/deep-clipping-2026-11-01
-commit=540b0b06b08db64746185b4bee7607e788c210c6
+commit=f1ce5adfdf1cd1cd5efebe03c2624a4f9c0ab1f9
 checkpoint=2026-11-01 Candidate: deep nested clip selection + Extrude overlay stacking
 note=Temporary experimental engine pin for local regression testing; do not merge before user PASS.

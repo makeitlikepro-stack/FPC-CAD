@@ -4,7 +4,8 @@ uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.Core.ObjectIds, CAD.Core.ObjectModel, CAD.Core.BodyTipCommands,
-  CAD.Core.History, CAD.Core.BodyFeatureCommands;
+  CAD.Core.History, CAD.Core.BodyFeatureCommands,
+  CAD.Core.SketchExtrudeCommand, CAD.Core.Values;
 
 type
   TSimpleFeature = class(TCADFeature)
@@ -15,7 +16,35 @@ type
     class function TypeName: string; override;
   end;
 
+  TMockSketch = class(TCADFeature)
+  protected
+    procedure DefineParams; override;
+    function Compute(const AInputs: array of TCADResult;
+      out AResult: TCADResult; out AError: string): Boolean; override;
+  public
+    class function TypeName: string; override;
+  end;
+
 var Checks, Failed: Integer;
+
+class function TMockSketch.TypeName: string;
+begin
+  Result := 'Sketch';
+end;
+
+procedure TMockSketch.DefineParams;
+begin
+  AddParam('geometry',CADText('test'));
+  AddParam('contours',CADText('ALL'));
+end;
+
+function TMockSketch.Compute(const AInputs: array of TCADResult;
+  out AResult: TCADResult; out AError: string): Boolean;
+begin
+  AResult := TCADResult.Create;
+  AError := '';
+  Result := True;
+end;
 
 class function TSimpleFeature.TypeName: string;
 begin
@@ -348,12 +377,68 @@ begin
   end;
 end;
 
+procedure TestAtomicSketchExtrudeHistory;
+var
+  D: TCADDocument;
+  H: TCADHistory;
+  B: TCADObjectId;
+  C: TCADCreateSketchExtrudeCommand;
+  SketchId, ExtrudeId: TCADId;
+  SketchObjectId: TCADObjectId;
+  O: TCADModelObject;
+  E: string;
+begin
+  D := TCADDocument.Create;
+  H := TCADHistory.Create(D);
+  try
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'Atomic Body',B,E),'ATOM-001 Body exists');
+    C := TCADCreateSketchExtrudeCommand.Create(
+      CADObjectRef(cokBody,B),
+      CADObjectRef(cokPart,D.Objects.PartId),
+      CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
+      TMockSketch.Create,TSimpleFeature.Create);
+    Check(H.Execute(C),'ATOM-002 one History command creates chain');
+    SketchId := C.SketchFeatureId;
+    SketchObjectId := C.SketchObjectId;
+    ExtrudeId := C.ExtrudeFeatureId;
+    O := D.Objects.Find(CADObjectRef(cokBody,B));
+    Check((D.Objects.Find(CADObjectRef(cokSketch,SketchObjectId))<>nil) and
+      (D.Find(SketchId)<>nil) and (D.Find(ExtrudeId)<>nil) and
+      CADSameObjectId(D.Objects.FeatureOwner(ExtrudeId),B) and
+      (O.FeatureCount=1),'ATOM-003 all three entities committed');
+    Check(H.Undo,'ATOM-004 one Undo');
+    Check((D.Objects.Find(CADObjectRef(cokSketch,SketchObjectId))=nil) and
+      (D.Find(SketchId)=nil) and (D.Find(ExtrudeId)=nil) and
+      (O.FeatureCount=0),'ATOM-005 whole chain removed');
+    Check(H.Redo,'ATOM-006 one Redo');
+    Check((D.Objects.Find(CADObjectRef(cokSketch,SketchObjectId))<>nil) and
+      (D.Find(SketchId)<>nil) and (D.Find(ExtrudeId)<>nil) and
+      CADIdEqual(O.TipFeatureId,ExtrudeId) and
+      CADSameObjectId(D.Objects.SketchFeatureOwner(SketchId),SketchObjectId),
+      'ATOM-007 exact IDs and bindings restored');
+
+    Check(not H.Execute(TCADCreateSketchExtrudeCommand.Create(
+      CADObjectRef(cokBody,B),
+      CADObjectRef(cokPart,D.Objects.PartId),
+      CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
+      TMockSketch.Create,TSimpleFeature.Create)),
+      'ATOM-008 reject nonempty Body');
+    Check((O.FeatureCount=1) and (D.Objects.ActiveCount(cokSketch)=1),
+      'ATOM-009 rejected operation does not mutate document');
+  finally
+    H.Free;
+    D.Free;
+  end;
+end;
+
 begin
   TestTipHistory;
   TestAtomicFeatureCommand;
   TestFailedUndoKeepsCommand;
   TestOrderedBodyHistory;
   TestInitialExtrudeBodyMembership;
+  TestAtomicSketchExtrudeHistory;
   if Failed=0 then
     WriteLn('PASS: CAD body tip ('+IntToStr(Checks)+' checks)')
   else

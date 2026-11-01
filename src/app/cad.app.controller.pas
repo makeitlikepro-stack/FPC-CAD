@@ -28,7 +28,8 @@ uses
   OpenGL.Render.Picking3D,
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
-  CAD.Core.Values, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
+  CAD.Core.Values, CAD.Core.ObjectIds, CAD.Core.History,
+  CAD.Core.SketchGeometryCommands, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
@@ -59,6 +60,7 @@ type
     FOverlay: TUIPanel;                   { over the view: dimension chips }
     FOCCT: TOCCTLibrary;
     FDoc: TCADDocument;
+    FHistory: TCADHistory; { document-level commits; separate from in-editor strokes }
     FTarget: TCADViewportTarget;
     FSync: TCADViewSync;
     FScene: TCADDemoScene;
@@ -105,6 +107,8 @@ type
     procedure SketchStatus(Sender: TObject; const AText: string);
     procedure RelationClick(Sender: TObject; AConstraint: Integer);
     procedure FinishSketch;
+    function EnsureSketchObject(const AFeature: TCADId;
+      out ASketchId: TCADObjectId; out AError: string): Boolean;
     procedure ShowDocumentObjects(AVisible: Boolean);
     procedure PickChanged(Sender: TObject);
     function LoadOCCT: string;
@@ -202,6 +206,7 @@ begin
     shapes, so it goes before the bridge. Widgets belong to the form. }
   FreeAndNil(FSync);
   FreeAndNil(FTarget);
+  FreeAndNil(FHistory);
   FreeAndNil(FDoc);
   if FOCCT <> nil then
   begin
@@ -315,6 +320,7 @@ begin
   Layout;
   Err := LoadOCCT;
   FDoc := TCADDocument.Create;
+  FHistory := TCADHistory.Create(FDoc);
   FTarget := TCADViewportTarget.Create(W.View);
   FSync := TCADViewSync.Create(FDoc, FTarget, @CADFillMeshFromResult);
   if Err = '' then
@@ -696,9 +702,33 @@ begin
   UpdateExtrudeGripPosition;
 end;
 
+{ Legacy documents may contain evaluator features without a logical Sketch
+  object. Bind them on the first edit without duplicating geometry. }
+function TCADAppController.EnsureSketchObject(const AFeature: TCADId;
+  out ASketchId: TCADObjectId; out AError: string): Boolean;
+var
+  Ref: TCADObjectRef;
+begin
+  ASketchId := FDoc.Objects.SketchFeatureOwner(AFeature);
+  if CADObjectIdValid(ASketchId) then Exit(True);
+  Result := FDoc.Objects.TryAddSketch(
+    CADObjectRef(cokPart,FDoc.Objects.PartId),
+    CADObjectRef(cokDatumPlane,FDoc.Objects.XYPlaneId),
+    FDoc.Find(AFeature).Name,ASketchId,AError);
+  if not Result then Exit;
+  Ref := CADObjectRef(cokSketch,ASketchId);
+  if FDoc.TryBindSketchFeature(Ref,AFeature,AError) then Exit(True);
+  { No partial logical Sketch on a failed bind. }
+  if not FDoc.Objects.TryRemove(Ref,AError) then
+    raise Exception.Create('Sketch object rollback failed: '+AError);
+  ASketchId := CADNoObjectId;
+  Result := False;
+end;
+
 procedure TCADAppController.FinishSketch;
 var
   Sk, Ex: TCADId;
+  SketchObjectId: TCADObjectId;
   F: TCADFeature;
   Err: string;
 begin
@@ -723,8 +753,26 @@ begin
   if CADIdValid(FEditSketch) and (FSketchMode.Sketch <> nil) then
   begin
     { Edited sketch and its existing linked extrusion retain their identity. }
-    FDoc.SetParam(FEditSketch, 'geometry', CADSketchValue(FSketchMode.Sketch));
-    FDoc.SetParam(FEditSketch, 'contours', CADText(FSketchMode.ContoursText));
+    if not EnsureSketchObject(FEditSketch,SketchObjectId,Err) then
+    begin
+      W.Status.Text := 'Cannot bind Sketch: '+Err;
+      Exit;
+    end;
+    if not FHistory.Execute(TCADCommitSketchCommand.Create(
+      CADObjectRef(cokSketch,SketchObjectId),
+      CADSketchValue(FSketchMode.Sketch).S,
+      FSketchMode.ContoursText)) then
+    begin
+      { An unchanged Sketch is a successful no-op; no history entry. }
+      if (FDoc.Find(FEditSketch).GetParamValue('geometry').S <>
+           CADSketchValue(FSketchMode.Sketch).S) or
+         (FDoc.Find(FEditSketch).GetParamValue('contours').S <>
+           FSketchMode.ContoursText) then
+      begin
+        W.Status.Text := 'Cannot commit Sketch geometry';
+        Exit;
+      end;
+    end;
     if CADIdValid(FEditExtrude) and
        (FDoc.Find(FEditExtrude) is TCADExtrudeFeature) then
     begin
@@ -744,6 +792,14 @@ begin
     F.SetParamValue('geometry', CADSketchValue(FSketchMode.Sketch));
     F.SetParamValue('contours', CADText(FSketchMode.ContoursText));
     Sk := FDoc.AttachFeature(F);
+    if not EnsureSketchObject(Sk,SketchObjectId,Err) then
+    begin
+      { Prevent saving an evaluator with no logical Sketch identity. }
+      F := FDoc.DetachFeature(Sk);
+      F.Free;
+      W.Status.Text := 'Cannot create Sketch object: '+Err;
+      Exit;
+    end;
     FLastSketch := Sk;
     F := TCADExtrudeFeature.Create;
     F.Name := Format('Extrude %d', [FSketchCount]);

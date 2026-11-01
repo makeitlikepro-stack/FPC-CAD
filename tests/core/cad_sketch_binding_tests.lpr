@@ -129,7 +129,7 @@ begin
     Check(History.Undo and not CADIdValid(O1.SketchFeatureId),
       'BIND-017 undo first Sketch binding');
     Detached := Doc.DetachFeature(F1);
-    Check(Detached<>nil and (Doc.Find(F1)=nil),
+    Check((Detached<>nil) and (Doc.Find(F1)=nil),
       'BIND-018 unbound evaluator can detach');
     Detached.Free;
     Check(Doc.Objects.TryRemove(CADObjectRef(cokSketch,S1),E),

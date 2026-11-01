@@ -295,11 +295,65 @@ begin
   end;
 end;
 
+procedure TestInitialExtrudeBodyMembership;
+var
+  D: TCADDocument;
+  H: TCADHistory;
+  B1, B2: TCADObjectId;
+  Sketch, ExtrudeId, Extrude2: TCADId;
+  C1, C2: TCADAddBodyFeatureCommand;
+  O1, O2: TCADModelObject;
+  E: string;
+begin
+  D := TCADDocument.Create;
+  H := TCADHistory.Create(D);
+  try
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'Body001',B1,E),'UIBODY-001 create first Body');
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'Body002',B2,E),'UIBODY-002 create second Body');
+    O1 := D.Objects.Find(CADObjectRef(cokBody,B1));
+    O2 := D.Objects.Find(CADObjectRef(cokBody,B2));
+    Sketch := D.AttachFeature(TSimpleFeature.Create);
+    C1 := TCADAddBodyFeatureCommand.Create(CADObjectRef(cokBody,B1),
+      TSimpleFeature.Create,[Sketch]);
+    Check(H.Execute(C1),'UIBODY-003 create first operation with Sketch input');
+    ExtrudeId := C1.Id;
+    Check((O1.FeatureCount=1) and
+      CADIdEqual(O1.TipFeatureId,ExtrudeId) and
+      CADIdEqual(O1.FeatureAt(0),ExtrudeId) and
+      CADSameObjectId(D.Objects.FeatureOwner(ExtrudeId),B1),
+      'UIBODY-004 real Body owns operation');
+    Check((Length(D.Find(ExtrudeId).Inputs)=1) and
+      CADIdEqual(D.Find(ExtrudeId).Inputs[0],Sketch),
+      'UIBODY-005 profile is first evaluator input');
+    Check(not D.TrySetBodyTip(CADObjectRef(cokBody,B2),ExtrudeId,E),
+      'UIBODY-006 cannot assign feature to second Body');
+    C2 := TCADAddBodyFeatureCommand.Create(CADObjectRef(cokBody,B2),
+      TSimpleFeature.Create,[Sketch]);
+    Check(H.Execute(C2),'UIBODY-007 second Body can own independent operation');
+    Extrude2 := C2.Id;
+    Check((O1.FeatureCount=1) and (O2.FeatureCount=1) and
+      not CADIdEqual(ExtrudeId,Extrude2),
+      'UIBODY-008 Body histories independent');
+    Check(H.Undo and (O2.FeatureCount=0) and
+      (D.Find(Extrude2)=nil) and (O1.FeatureCount=1),
+      'UIBODY-009 undo second Body operation');
+    Check(H.Redo and (O2.FeatureCount=1) and
+      CADIdEqual(O2.TipFeatureId,Extrude2),
+      'UIBODY-010 redo retains identity');
+  finally
+    H.Free;
+    D.Free;
+  end;
+end;
+
 begin
   TestTipHistory;
   TestAtomicFeatureCommand;
   TestFailedUndoKeepsCommand;
   TestOrderedBodyHistory;
+  TestInitialExtrudeBodyMembership;
   if Failed=0 then
     WriteLn('PASS: CAD body tip ('+IntToStr(Checks)+' checks)')
   else

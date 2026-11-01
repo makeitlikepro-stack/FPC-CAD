@@ -1,3 +1,11 @@
+## 2026-11-01 — New Body UI (candidate; tests pending)
+
+- Branch `feature/cad-body-ui-2026-11-01` was created after merging the approved Sketch/Editor/ModelTree/blank-start branch into both `dev` and `main` (same SHA `2200874bd1f03d793d6332ad382c49a4eeac576f`).
+- Added an enabled `New Body` button to the Features ribbon in `app/MainForm.fvform`. `CAD.App.Chrome` exposes the `OnNewBody` event; `CAD.App.Controller` executes the existing `TCADCreateBodyCommand` on the document's `TCADHistory` stack, generating a collision-free `Body###` label and refreshing the real Model tree. Shortcut: Ctrl+B outside Sketch.
+- Enabled document History Undo (Ctrl+Z) and Redo (Ctrl+Y) outside Sketch mode, leaving Sketch Editor's own per-stroke Undo/Redo unchanged. History exceptions surface in the status bar rather than losing commands.
+- **Scope:** this makes an empty Body object visible and undoable, not a solid Shape. Sketch/Extrude operations are not yet assigned to the selected Body or stored atomically in its Feature History; that is a separate next gate.
+- **Pending:** local FPC 3.2.2 compilation, full test suites, and GUI smoke test for New Body, Ctrl+B, Ctrl+Z, Ctrl+Y and tree updates. No merge approval implied.
+
 ## 2026-11-01 — Blank document startup (candidate; local tests pending)
 
 - Removed default `BuildDemoScene` invocation: the application opens with a clean `TCADDocument` containing only its logical Part, Origin and XY/XZ/YZ Datum planes.

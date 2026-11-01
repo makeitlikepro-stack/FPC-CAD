@@ -191,8 +191,8 @@ begin
     Rev := D.Revision;
     Check(not H.Redo and H.CanRedo and (D.Revision=Rev),
       'COMMIT-010 redo rejects stale geometry without data loss');
-    Check(D.Find(Other)<>nil and
-      not CADObjectIdValid(D.Objects.SketchFeatureOwner(Other)),
+    Check((D.Find(Other) <> nil) and
+      (not CADObjectIdValid(D.Objects.SketchFeatureOwner(Other))),
       'COMMIT-011 other evaluator unaffected');
     Check(not H.Execute(TCADCommitSketchCommand.Create(
       CADObjectRef(cokSketch,CADNoObjectId),'abc','ALL')),

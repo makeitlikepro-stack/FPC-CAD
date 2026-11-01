@@ -1,3 +1,12 @@
+## 2026-11-01 — Model tree interaction: select, double-click edit, right-click menu (candidate)
+
+- **Single click** only changes `TUITreeView.SelectedNode`, using `OnChange` without entering the sketch editor.
+- **Double click** invokes `OnNodeDoubleClick` and routes to the corresponding Sketch/Extrude editor; Enter still works through `OnActivate`.
+- **Right click** uses the Engine's existing `OnNodeContextMenu` event: the clicked row is selected, and a host-bounded context menu offers `Edit <feature>` or `Activate Body`. The menu action stores the node tag so closing a popup does not lose the target.
+- Engine main has no TreeView double-click event. Added a minimal feature branch `feature/tree-double-click-2026-11-01` in `makeitlikepro-stack/FPC-OpenGL-UI-Engine`, pinned to `84fd7606802789750ca985198aac51e1b42c47c2`. Its row handler detects a second click on the same node within 400ms, and clears tracking on node removal/reset. Engine main remains unchanged.
+- `engine/ENGINE_REF.txt` temporarily pins this exact Engine feature commit, so local build must switch both repositories to their feature branches.
+- **Pending local tests**: compile Engine/CAD, select without editing, double-click Sketch and Extrude, right-click Edit and Activate Body, right-click and Escape, fast clicks on different rows, Undo/Redo and model-tree rebuild. Do not merge either project before acceptance.
+
 ## 2026-11-01 — Actual TreeView selection event found in Engine (candidate; GUI test pending)
 
 - Source audit of `FPC-OpenGL-UI-Engine/src/ecs/widgets/opengl.ecs.widgets.navigation.inc` established the real behavior: `TUITreeView.RowClicked` calls `SetSelectedNode`; that setter fires `FOnChange(Self)`. Row buttons do **not** forward `TUITreeView.OnClick`, and `OnActivate` is reserved for keyboard activation.

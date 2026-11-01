@@ -87,6 +87,6 @@ Operations:
 4. If a gate needs a nontrivial schema change, document an explicit compatibility adapter and migration test first.
 5. Never rely on screenshots alone to validate object ownership, cache lifetime or undo correctness.
 
-## Not covered by this design pass
+## Not covered by this foundation implementation
 
-No new Pascal classes, no project loader/saver, no UI tree rework, no OCCT changes, no automated GitHub workflow and no application build have been performed in this branch. Gate A is the next coding task **after the object model contract is approved**.
+The new logical-object Pascal units and headless tests are present, but are **not yet confirmed compiled/executed with FPC 3.2.2**. There is still no project loader/saver, geometry ownership migration, feature-tip link, UI tree rework, or OCCT/GUI change. No GitHub Actions workflow is to be introduced. The next gate is local compilation, regression testing and user acceptance before merging.

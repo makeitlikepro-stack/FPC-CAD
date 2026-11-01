@@ -340,6 +340,7 @@ begin
   FHost.UI.ResizeWidgetKeepingChildren(FOverlay, Max(1, W.Root.Width), Max(1, W.Root.Height));
   FOverlay.Left := W.Root.Left;
   FOverlay.Top := W.Root.Top;
+  UpdateExtrudeGripPosition;
 end;
 
 { Sketch opened or closed: ribbon / left tab / corner, sketch buttons
@@ -366,6 +367,7 @@ begin
   FSketchPanel.UpdateEnabled;
   FExtrudePreviewButton.Visible := FSketchMode.Active;
   if not FSketchMode.Active then FExtrudePanel.Visible := False;
+  UpdateExtrudeGripPosition;
   FTyped.Hide;
 end;
 
@@ -547,6 +549,7 @@ begin
     FExtrudeStatus.Text := FSketchMode.ExtrudePreviewError
   else
     FExtrudeStatus.Text := Format('OCCT preview | %.3f mm', [FExtrudeDraft.Depth]);
+  UpdateExtrudeGripPosition;
 end;
 
 procedure TCADAppController.ExtrudePreviewClick(Sender: TObject);
@@ -570,12 +573,60 @@ begin
   RefreshExtrudeDraft;
 end;
 
-procedure TCADAppController.ExtrudeDepthSliderChange(Sender: TObject);
+procedure TCADAppController.ExtrudeHandleDepthKeyDown(Sender: TObject;
+  var Key: Word; Shift: TShiftState);
+var
+  Depth: Double;
 begin
-  if FUpdatingExtrudeControls or not FExtrudePanel.Visible then Exit;
-  FExtrudeDraft.Depth := FExtrudeDepthSlider.Value;
+  if Key <> VK_RETURN then Exit;
+  Key := 0;
+  if not FExtrudePanel.Visible then Exit;
+  if not CADParseExtrudeDepth(FExtrudeHandleValueEdit.Text, Depth) then
+  begin
+    FExtrudeStatus.Text := 'Invalid grip depth; enter a positive mm value';
+    Exit;
+  end;
+  FExtrudeDraft.Depth := Depth;
   UpdateExtrudeControls;
   RefreshExtrudeDraft;
+end;
+
+procedure TCADAppController.ExtrudeGripDepthChanged(Sender: TObject;
+  ADepth: Double);
+begin
+  { The SketchMode has already regenerated the exact OCCT preview.
+    Update the two number boxes without triggering another rebuild. }
+  if not FExtrudePanel.Visible then Exit;
+  FExtrudeDraft.Depth := ADepth;
+  UpdateExtrudeControls;
+  FExtrudeStatus.Text := Format('OCCT preview | %.3f mm', [ADepth]);
+  UpdateExtrudeGripPosition;
+end;
+
+procedure TCADAppController.UpdateExtrudeGripPosition;
+var
+  AX, AY, X, Y: Double;
+  Show: Boolean;
+begin
+  if (FExtrudeHandleValueEdit = nil) or (FExtrudeHandleUnit = nil) then Exit;
+  Show := (FExtrudePanel <> nil) and FExtrudePanel.Visible and
+          (FSketchMode <> nil) and FSketchMode.ExtrudePreviewActive;
+  if Show then
+  begin
+    Show := FSketchMode.ExtrudeGripScreen(AX, AY);
+    if Show then
+      Show := (AX >= 0) and (AY >= 0) and
+              (AX < W.View.Width) and (AY < W.View.Height);
+  end;
+  FExtrudeHandleValueEdit.Visible := Show;
+  FExtrudeHandleUnit.Visible := Show;
+  if not Show then Exit;
+  { View is a direct child of the designed root. Both widgets remain next
+    to the projected top-face grip while the camera is orbited or zoomed. }
+  X := W.View.Left + EnsureRange(AX + 24, 8.0, W.View.Width - 118);
+  Y := W.View.Top + EnsureRange(AY - 14, 8.0, W.View.Height - 36);
+  FExtrudeHandleValueEdit.SetBounds(X, Y, 84, 30);
+  FExtrudeHandleUnit.SetBounds(X + 87, Y + 4, 29, 23);
 end;
 
 procedure TCADAppController.ExtrudeReverseClick(Sender: TObject);
@@ -608,6 +659,7 @@ begin
   FExtrudePanel.Visible := False;
   FExtrudeDraft := FExtrudeSaved;
   FSketchMode.SetExtrudePreview(False, FExtrudeSaved);
+  UpdateExtrudeGripPosition;
 end;
 
 procedure TCADAppController.FinishSketch;
@@ -664,6 +716,7 @@ begin
   end;
   FSketchMode.Leave;
   FExtrudePanel.Visible := False;
+  UpdateExtrudeGripPosition;
   ShowDocumentObjects(True);
   Rebuild(True);
 end;
@@ -926,6 +979,7 @@ begin
   end
   else
     W.Status.Text := NavigationHint;
+  UpdateExtrudeGripPosition;
 end;
 
 procedure TCADAppController.RadiusChanged;

@@ -3,7 +3,8 @@ program region_tests;
 
 uses
   SysUtils, Math, CAD.Sketch.Model, CAD.Sketch.Regions,
-  CAD.Sketch.ContourSelection, CAD.Sketch.Profile, CAD.Sketch.Text;
+  CAD.Sketch.ContourSelection, CAD.Sketch.Outline,
+  CAD.Sketch.Profile, CAD.Sketch.Text;
 
 var
   Total, Failed:Integer;
@@ -195,6 +196,108 @@ begin
   finally S.Free; end;
 end;
 
+{ Selected faces must be unioned BEFORE OCCT. The first two adjacent
+  quadrants form one exterior polygon with no internal seam, while diagonal
+  selections remain separate islands. }
+procedure TestSelectedOutlineUnion;
+var
+  S: TCADSketch;
+  P, Subset, Outlined: TCADSketchProfile;
+  A: array[0..3] of Integer;
+  AllFaces: array[0..3] of Integer;
+  Diagonal: array[0..1] of Integer;
+  Pair: array[0..1] of Integer;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    Rectangle(S,0,0,10,10);
+    S.AddLineXY(5,-3,5,13);
+    S.AddLineXY(-3,5,13,5);
+    Check(CADBuildRegions(S,P) and (Length(P.Faces)=4),
+      'union outline: start with four virtual regions');
+    A[0] := CADPickRegion(P,2,2);
+    A[1] := CADPickRegion(P,8,2);
+    A[2] := CADPickRegion(P,2,8);
+    A[3] := CADPickRegion(P,8,8);
+    Pair[0] := A[0]; Pair[1] := A[1];
+    Subset := CADRegionProfileSubset(P, Pair);
+    Check(CADUnionSelectedOutlines(Subset,Outlined,Err) and
+      (Length(Outlined.Faces)=1) and
+      Near(Outlined.Faces[0].Area,50),
+      'union outline: two neighbouring regions share one clean outer boundary ('+Err+')');
+    Check(Length(Outlined.Faces[0].Holes)=0,
+      'union outline: adjacent regions create no artificial hole');
+
+    Diagonal[0] := A[0]; Diagonal[1] := A[3];
+    Subset := CADRegionProfileSubset(P,Diagonal);
+    Check(CADUnionSelectedOutlines(Subset,Outlined,Err) and
+      (Length(Outlined.Faces)=2),
+      'union outline: diagonal regions touching at a vertex are two islands');
+
+    AllFaces[0] := A[0]; AllFaces[1] := A[1];
+    AllFaces[2] := A[2]; AllFaces[3] := A[3];
+    Subset := CADRegionProfileSubset(P, AllFaces);
+    Check(CADUnionSelectedOutlines(Subset,Outlined,Err) and
+      (Length(Outlined.Faces)=1) and
+      Near(Outlined.Faces[0].Area,100),
+      'union outline: all four quadrants become one connected 100 mm2 face');
+  finally
+    S.Free;
+  end;
+end;
+
+procedure TestArcOutlineAndNestedHole;
+var
+  S: TCADSketch;
+  P, Subset, Outlined: TCADSketchProfile;
+  Pair: array[0..1] of Integer;
+  One: array[0..0] of Integer;
+  Err: string;
+begin
+  S := TCADSketch.Create;
+  try
+    S.AddCircle(S.AddPoint(0,0),5);
+    S.AddLineXY(-7,0,7,0);
+    Check(CADBuildRegions(S,P) and (Length(P.Faces)=2),
+      'union circle: secant produces two semicircles');
+    Pair[0] := CADPickRegion(P,0,2);
+    Pair[1] := CADPickRegion(P,0,-2);
+    Subset := CADRegionProfileSubset(P,Pair);
+    Check(CADUnionSelectedOutlines(Subset,Outlined,Err) and
+      (Length(Outlined.Faces)=1) and
+      Near(Outlined.Faces[0].Area,25*Pi),
+      'union circle: two curved regions become one complete disk ('+Err+')');
+  finally
+    S.Free;
+  end;
+
+  S := TCADSketch.Create;
+  try
+    S.AddCircle(S.AddPoint(0,0),10);
+    S.AddCircle(S.AddPoint(0,0),5);
+    Check(CADBuildRegions(S,P) and (Length(P.Faces)=2),
+      'union hole: nested circles build two regions');
+    One[0] := CADPickRegion(P,7,0);
+    Subset := CADRegionProfileSubset(P,One);
+    Check(CADUnionSelectedOutlines(Subset,Outlined,Err) and
+      (Length(Outlined.Faces)=1) and
+      (Length(Outlined.Faces[0].Holes)=1) and
+      Near(Outlined.Faces[0].Area,75*Pi),
+      'union hole: selected ring keeps exactly one centre hole ('+Err+')');
+    Pair[0] := CADPickRegion(P,0,0);
+    Pair[1] := CADPickRegion(P,7,0);
+    Subset := CADRegionProfileSubset(P,Pair);
+    Check(CADUnionSelectedOutlines(Subset,Outlined,Err) and
+      (Length(Outlined.Faces)=1) and
+      (Length(Outlined.Faces[0].Holes)=0) and
+      Near(Outlined.Faces[0].Area,100*Pi),
+      'union hole: selecting centre disk fills the hole and removes internal ring');
+  finally
+    S.Free;
+  end;
+end;
+
 procedure TestRegionSelectionPersistence;
 var
   S:TCADSketch;
@@ -249,6 +352,8 @@ begin
   TestConstructionAndUnconnected;
   TestOverlapRejection;
   TestRegionSelectionPersistence;
+  TestSelectedOutlineUnion;
+  TestArcOutlineAndNestedHole;
   if Failed=0 then
     WriteLn(Format('PASS: non-destructive region extraction (%d checks)',[Total]))
   else

@@ -80,8 +80,9 @@ begin
     Check(H.Redo and CADIdEqual(
       D.Objects.Find(CADObjectRef(cokBody,BodyA)).TipFeatureId,ModifierA),
       'TIP-010: redo restores modifier tip');
-    Check(not D.NeedsRecompute or (D.SlotCount=3),
-      'TIP-011: tip metadata has no extra feature slot');
+    D.Recompute;
+    Check(not D.NeedsRecompute and (D.SlotCount=3),
+      'TIP-011: tip metadata adds no recompute or feature slots');
     Check(H.Undo,'TIP-012: restore root before clearing tip');
     Check(H.Undo,'TIP-012: undo Body B first tip');
     Check(H.Undo and not CADIdValid(

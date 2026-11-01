@@ -27,11 +27,12 @@ type
     FRibbon, FLeftTabs: TUITabs;
     FCorner: TUIPanel;
     FModeLabel, FDofLabel: TUILabel;
-    FOnExtrude, FOnExitSketch, FOnDiscardSketch, FOnNormalTo: TNotifyEvent;
+    FOnExtrude, FOnNewBody, FOnExitSketch, FOnDiscardSketch, FOnNormalTo: TNotifyEvent;
     procedure ZoomFitClick(Sender: TObject);
     procedure NormalToClick(Sender: TObject);
     procedure EdgesClick(Sender: TObject);
     procedure ExtrudeClick(Sender: TObject);
+    procedure NewBodyClick(Sender: TObject);
     procedure ExitClick(Sender: TObject);
     procedure DiscardClick(Sender: TObject);
     procedure Bind(ALookup: TCADWidgetLookup; const AId: string; AHandler: TNotifyEvent);
@@ -44,6 +45,7 @@ type
     procedure ZoomFit;
     procedure ToggleEdges;
     property OnExtrude: TNotifyEvent read FOnExtrude write FOnExtrude;
+    property OnNewBody: TNotifyEvent read FOnNewBody write FOnNewBody;
     property OnExitSketch: TNotifyEvent read FOnExitSketch write FOnExitSketch;
     property OnDiscardSketch: TNotifyEvent read FOnDiscardSketch write FOnDiscardSketch;
     property OnNormalTo: TNotifyEvent read FOnNormalTo write FOnNormalTo;
@@ -79,6 +81,7 @@ begin
   Bind(ALookup, 'EdgesButton', @EdgesClick);
   Bind(ALookup, 'VtEdgesButton', @EdgesClick);
   Bind(ALookup, 'ExtrudeButton', @ExtrudeClick);
+  Bind(ALookup, 'NewBodyButton', @NewBodyClick);
   Bind(ALookup, 'ExitSketchCornerButton', @ExitClick);
   Bind(ALookup, 'DiscardSketchButton', @DiscardClick);
   SetSketchMode(False, 'Part1');
@@ -137,6 +140,12 @@ procedure TCADChrome.ExtrudeClick(Sender: TObject);
 begin
   if Assigned(FOnExtrude) then
     FOnExtrude(Self);
+end;
+
+procedure TCADChrome.NewBodyClick(Sender: TObject);
+begin
+  if Assigned(FOnNewBody) then
+    FOnNewBody(Self);
 end;
 
 procedure TCADChrome.ExitClick(Sender: TObject);

@@ -1,3 +1,12 @@
+## 2026-11-01 — Atomic Feature Editing: Sketch + Extrude (candidate)
+
+- New `CAD.Core.FeatureEditCommand` stores a five-field before/after snapshot: Sketch `geometry` and `contours`, plus optional linked Extrude `length`, `symmetric`, `reversed`.
+- The command checks the stable bound Sketch evaluator, the Extrude evaluator type and parameter kinds, and the actual Extrude -> Sketch graph dependency before mutation. New/undo snapshots are applied as one History entry; unexpected apply failures attempt restoring the current snapshot and report an error rather than recording success. Redo rejects stale external edits.
+- `TCADAppController.FinishSketch` now calls `TCADHistory.Execute(TCADFeatureEditCommand.Create(...))` for an **existing** Sketch, replacing direct Extrude `SetParam` calls that previously bypassed Undo. The initial Sketch + Extrude creation command stays unchanged.
+- A no-change edit creates no History entry. An Extrude-only Depth/Reverse/Symmetric edit does create one, even if Sketch geometry is unchanged. The editor stays open if a changed commit is rejected.
+- `tests/core/cad_sketch_binding_tests.lpr`: EDIT-001..018 validate all five parameters, one-step Undo/Redo, unchanged edit, depth-only edit, invalid depth, absent Extrude and stale Redo. Tests use mock evaluator features, avoiding an OCCT dependency.
+- Status: **source committed but FPC/Lazarus compilation and GUI behavior not yet verified**. No GitHub Actions. `dev`/`main` unchanged until explicit user acceptance.
+
 ## 2026-11-01 — Undo result not visible: direct document controls and persistent route indicator
 
 - User observed no status message after Undo, so the previous transient `StatusLabel` diagnostic was insufficient to determine whether `Ctrl+Z` reached document history.

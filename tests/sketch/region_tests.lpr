@@ -376,9 +376,12 @@ begin
     S.Tangent(TopLine,Arc);
     S.Tangent(LeftLine,Arc);
     Check(CADBuildRegions(S,P),'REG-TAN-001 tangent arc in rectangle builds regions: '+P.Error);
-    Check(Length(P.Faces)=2,'REG-TAN-002 small corner + large remainder are two faces');
     Small := CADPickRegion(P,1,19);
     Large := CADPickRegion(P,10,10);
+    if (Length(P.Faces)<>2) or (Small<0) or (Large<0) or (Small=Large) then
+      WriteLn(Format('DIAG REG-TAN: faces=%d, small=%d, large=%d, error=%s',
+        [Length(P.Faces),Small,Large,P.Error]));
+    Check(Length(P.Faces)=2,'REG-TAN-002 small corner + large remainder are two faces');
     Check((Small>=0) and (Large>=0) and (Small<>Large),
       'REG-TAN-003 small curved corner independently selectable');
     if Length(P.Faces)=2 then

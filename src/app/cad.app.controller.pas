@@ -30,7 +30,7 @@ uses
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Core.ObjectIds, CAD.Core.History,
   CAD.Core.SketchGeometryCommands, CAD.Core.ObjectCommands,
-  CAD.Core.ObjectModel, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
+  CAD.Core.ObjectModel, CAD.Core.BodyFeatureCommands, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
@@ -76,6 +76,7 @@ type
     FTree: TCADFeatureTree;
     FEditSketch: TCADId;                  { sketch feature being edited; CADNoId = new }
     FLastSketch: TCADId;
+    FActiveBody: TCADObjectId; { logical target for next Extrude }
     FSketchCount: Integer;
     FEditExtrude: TCADId;               { linked Extrude being edited, if any }
     FExtrudePanel, FExtrudeGripBadge: TUIPanel;
@@ -102,6 +103,7 @@ type
     function ReadExtrudeDepth: Boolean;
     procedure NewSketch(Sender: TObject);
     procedure NewBody(Sender: TObject);
+    procedure SelectBody(Sender: TObject; const AId: TCADObjectId);
     procedure FinishClick(Sender: TObject);
     procedure EditSketchClick(Sender: TObject);
     function SketchToEdit: TCADId;
@@ -192,6 +194,7 @@ begin
   FExtrudeSaved := CADDefaultExtrudeOptions;
   FExtrudeDraft := FExtrudeSaved;
   FLastSketch := CADNoId;
+  FActiveBody := CADNoObjectId;
 end;
 
 destructor TCADAppController.Destroy;
@@ -311,6 +314,7 @@ begin
   FTree := TCADFeatureTree.Create(FLookup, ExtractFilePath(ExpandFileName(ParamStr(0))) +
     'assets' + PathDelim + 'icons' + PathDelim + 'png' + PathDelim + '20' + PathDelim);
   FTree.OnEditFeature := @EditFeature;
+  FTree.OnSelectBody := @SelectBody;
   FContext := TCADSketchContextMenu.Create(UI, FSketchMode, FSketchPanel,
     ExtractFilePath(ExpandFileName(ParamStr(0))) + 'assets' + PathDelim + 'icons' + PathDelim +
     'png' + PathDelim + '20' + PathDelim);
@@ -408,6 +412,9 @@ begin
         try
           if FHistory.Undo then
           begin
+            { Undo may remove the currently active Body. }
+            if FDoc.Objects.Find(CADObjectRef(cokBody,FActiveBody)) = nil then
+              FActiveBody := CADNoObjectId;
             FTree.Refresh(FDoc,True);
             Rebuild(False);
           end;
@@ -762,8 +769,10 @@ end;
 
 procedure TCADAppController.FinishSketch;
 var
-  Sk, Ex: TCADId;
+  Sk: TCADId;
   SketchObjectId: TCADObjectId;
+  BodyObject: TCADModelObject;
+  AddExtrude: TCADAddBodyFeatureCommand;
   F: TCADFeature;
   Err: string;
 begin
@@ -821,6 +830,18 @@ begin
   end
   else if (FSketchMode.Sketch <> nil) and (FSketchMode.Sketch.EntityCount > 0) then
   begin
+    { Do not create unowned extrudes or replace a Body's existing solid. }
+    BodyObject := FDoc.Objects.Find(CADObjectRef(cokBody,FActiveBody));
+    if BodyObject = nil then
+    begin
+      W.Status.Text := 'Create New Body first, then finish the Sketch';
+      Exit;
+    end;
+    if BodyObject.FeatureCount <> 0 then
+    begin
+      W.Status.Text := 'Active Body is not empty: use New Body for a separate Extrude';
+      Exit;
+    end;
     Inc(FSketchCount);
     F := TCADSketchFeature.Create;
     F.Name := Format('Sketch %d', [FSketchCount]);
@@ -841,8 +862,25 @@ begin
     F.SetParamValue('length', CADFloat(FExtrudeSaved.Depth));
     F.SetParamValue('symmetric', CADBool(FExtrudeSaved.Symmetric));
     F.SetParamValue('reversed', CADBool(FExtrudeSaved.Reversed));
-    Ex := FDoc.AttachFeature(F);
-    FDoc.TryLink(Ex, Sk, Err);
+    AddExtrude := TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,FActiveBody),F,[Sk]);
+    if not FHistory.Execute(AddExtrude) then
+    begin
+      { The new Sketch is not consumed and may safely be discarded. }
+      if not FDoc.TryBindSketchFeature(
+        CADObjectRef(cokSketch,SketchObjectId),CADNoId,Err) then
+        raise Exception.Create('Sketch rollback unbind failed: '+Err);
+      if not FDoc.Objects.TryRemove(
+        CADObjectRef(cokSketch,SketchObjectId),Err) then
+        raise Exception.Create('Sketch rollback remove failed: '+Err);
+      F := FDoc.DetachFeature(Sk);
+      if F = nil then
+        raise Exception.Create('Sketch rollback detach failed');
+      F.Free;
+      FLastSketch := CADNoId;
+      W.Status.Text := 'Cannot add Extrude to Body history';
+      Exit;
+    end;
   end;
   FSketchMode.Leave;
   FExtrudePanel.Visible := False;
@@ -879,11 +917,24 @@ begin
     CADObjectRef(cokPart,FDoc.Objects.PartId),Name);
   if FHistory.Execute(C) then
   begin
+    FActiveBody := C.Id;
     FTree.Refresh(FDoc,True);
-    W.Status.Text := 'Created '+Name;
+    W.Status.Text := 'Created '+Name+' (active)';
   end
   else
     W.Status.Text := 'Could not create Body';
+end;
+
+procedure TCADAppController.SelectBody(Sender: TObject;
+  const AId: TCADObjectId);
+var
+  O: TCADModelObject;
+begin
+  if (FDoc = nil) or FSketchMode.Active then Exit;
+  O := FDoc.Objects.Find(CADObjectRef(cokBody,AId));
+  if O = nil then Exit;
+  FActiveBody := AId;
+  W.Status.Text := 'Active Body: '+O.Name;
 end;
 
 procedure TCADAppController.NewSketch(Sender: TObject);

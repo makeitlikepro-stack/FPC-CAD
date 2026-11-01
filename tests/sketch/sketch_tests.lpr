@@ -1,5 +1,6 @@
 program sketch_tests;
 {$mode objfpc}{$H+}
+{$codepage utf8}
 
 { Tests of the sketch model and solver (no OCCT, no GL).
   Run: bash scripts/test_sketch.sh
@@ -1163,7 +1164,7 @@ begin
     P := S.AddPoint(10, 20);
     Q := S.AddPoint(10, 20);
     C := S.Coincident(P,Q);
-    Check(CADRelationGlyph(S,C)='Coin',
+    Check(CADRelationGlyph(S,C)='●',
       'VIEW-REL-001 Coincident shows visible relation glyph');
     Check(CADRelationAnchor(S,C,U,V) and Near(U,10) and Near(V,20),
       'VIEW-REL-002 Coincident glyph anchored to constrained points');
@@ -1175,7 +1176,7 @@ begin
     Centre := S.AddPoint(5,5);
     Arc := S.AddArc(Centre,S.AddPoint(0,5),S.AddPoint(5,0));
     C := S.Tangent(HorizontalLine,Arc);
-    Check((CADRelationGlyph(S,C)='T') and
+    Check((CADRelationGlyph(S,C)='◯─') and
       CADRelationAnchor(S,C,U,V) and Near(U,5) and Near(V,0),
       'VIEW-REL-003 horizontal Tangent glyph at arc contact');
     C := S.Tangent(VerticalLine,Arc);

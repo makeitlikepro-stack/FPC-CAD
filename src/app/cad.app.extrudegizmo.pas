@@ -107,7 +107,15 @@ begin
   if Options.Symmetric then Factor := 0.5;
   if Options.Reversed then Factor := -Factor;
   SignedLength := Options.Depth * Factor;
-  Frame.Tip := V3Add(Frame.Base,V3Scale(Normal,SignedLength));
+  { The grip is a SHORT arrow immediately OUTSIDE the top face. The old
+    grip spanned the entire solid and showed a distracting crosshair. }
+  Frame.Base := V3Add(Frame.Base,V3Scale(Normal,SignedLength));
+  if Factor < 0 then
+    Frame.Tip := V3Sub(Frame.Base,V3Scale(Normal,
+      27*Camera.WorldPerPixel(AHeight)))
+  else
+    Frame.Tip := V3Add(Frame.Base,V3Scale(Normal,
+      27*Camera.WorldPerPixel(AHeight)));
   if not ProjectWorld(Camera,AWidth,AHeight,Frame.Tip,
     Frame.TipX,Frame.TipY) then Exit;
 
@@ -140,27 +148,71 @@ end;
 
 procedure CADBuildExtrudeHandleMesh(const Frame: TCADExtrudeHandleFrame;
   ASize: Double; Camera: TViewport3DCamera; AMesh: TV3DMeshData);
+const
+  Sides = 10;                       { smooth but lightweight 3D cone }
 var
-  R, U, LeftPt, RightPt, UpPt, DownPt: TV3Vec;
+  Axis, RightV, UpV, HeadBase, ShaftBase: TV3Vec;
+  P0, P1, Q0, Q1: TV3Vec;
+  ShaftRadius, HeadRadius, HeadLength, W, Angle0, Angle1: Double;
+  I: Integer;
+
+  function RingPoint(const Center: TV3Vec; R, Angle: Double): TV3Vec;
+  begin
+    Result := V3Add(Center,V3Add(
+      V3Scale(RightV,R*Cos(Angle)),
+      V3Scale(UpV,R*Sin(Angle))));
+  end;
+
+  procedure Facet(const A,B,C:TV3Vec);
+  var
+    Normal: TV3Vec;
+    V0,V1,V2:Cardinal;
+  begin
+    Normal := V3Cross(V3Sub(B,A),V3Sub(C,A));
+    if V3Length(Normal) < 1e-12 then Exit;
+    Normal := V3Normalize(Normal);
+    V0 := AMesh.AddVertex(A,Normal,0);
+    V1 := AMesh.AddVertex(B,Normal,0);
+    V2 := AMesh.AddVertex(C,Normal,0);
+    AMesh.AddTriangle(V0,V1,V2);
+  end;
+
 begin
-  if (AMesh = nil) or (Camera = nil) then Exit;
+  if AMesh = nil then Exit;
   AMesh.Clear;
-  ASize := Max(0.0001,ASize);
-  R := V3Scale(Camera.RightDir, ASize);
-  U := V3Scale(Camera.UpDir, ASize);
-  LeftPt := V3Sub(Frame.Tip,R);
-  RightPt := V3Add(Frame.Tip,R);
-  UpPt := V3Add(Frame.Tip,U);
-  DownPt := V3Sub(Frame.Tip,U);
-  { Axis stroke, diamond at top, and four outward arrow ticks. }
-  AMesh.AddPolylineEdge([Frame.Base,Frame.Tip],False,1);
-  AMesh.AddPolylineEdge([LeftPt,UpPt,RightPt,DownPt],True,2);
-  AMesh.AddPolylineEdge([V3Sub(Frame.Tip,V3Scale(R,1.5)),
-    V3Add(Frame.Tip,V3Scale(R,1.5))],False,3);
-  AMesh.AddPolylineEdge([V3Sub(Frame.Tip,V3Scale(U,1.5)),
-    V3Add(Frame.Tip,V3Scale(U,1.5))],False,4);
-  AMesh.AddVertex(Frame.Base,V3(0,0,1),0);
-  AMesh.AddVertex(Frame.Tip,V3(0,0,1),0);
+  if Camera = nil then Exit;
+  W := V3Length(V3Sub(Frame.Tip,Frame.Base));
+  if W <= 1e-10 then Exit;
+  Axis := V3Normalize(V3Sub(Frame.Tip,Frame.Base));
+  { Use the camera to orient the radial basis; the arrow geometry always
+    stays on the actual 3D extrusion normal and remains round when orbited. }
+  RightV := V3Cross(Axis,Camera.ForwardDir);
+  if V3Length(RightV) < 1e-6 then RightV := Camera.RightDir;
+  RightV := V3Normalize(RightV);
+  UpV := V3Normalize(V3Cross(Axis,RightV));
+  HeadLength := Min(W*0.50,Max(ASize*1.3,W*0.36));
+  HeadRadius := Max(ASize*0.65,0.0001);
+  ShaftRadius := HeadRadius*0.29;
+  ShaftBase := Frame.Base;
+  HeadBase := V3Sub(Frame.Tip,V3Scale(Axis,HeadLength));
+
+  { Solid cylindrical shaft and a smooth conical arrowhead. No cross ticks,
+    no long axis through the volume and no excessive wireframe edges. }
+  for I:=0 to Sides-1 do
+  begin
+    Angle0 := 2*Pi*I/Sides;
+    Angle1 := 2*Pi*(I+1)/Sides;
+    P0 := RingPoint(ShaftBase,ShaftRadius,Angle0);
+    P1 := RingPoint(ShaftBase,ShaftRadius,Angle1);
+    Q0 := RingPoint(HeadBase,ShaftRadius,Angle0);
+    Q1 := RingPoint(HeadBase,ShaftRadius,Angle1);
+    Facet(P0,P1,Q0);
+    Facet(P1,Q1,Q0);
+
+    P0 := RingPoint(HeadBase,HeadRadius,Angle0);
+    P1 := RingPoint(HeadBase,HeadRadius,Angle1);
+    Facet(P0,P1,Frame.Tip);
+  end;
 end;
 
 end.

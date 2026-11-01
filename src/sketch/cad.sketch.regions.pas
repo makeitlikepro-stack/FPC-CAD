@@ -184,6 +184,31 @@ begin
   else Result:=WrapAngle(A-Pi/2);
 end;
 
+{ At tangency a line and an arc have exactly the same tangent angle.
+  Using the derivative alone makes their outgoing halfedges indistinguishable
+  and the planar face walk can jump over the small curved region. Break
+  this tie by looking an infinitesimal distance ALONG the oriented edge:
+  its chord turns into the correct side of the tangent. This ordering
+  belongs only to the topology walker, not to model geometry or solver. }
+function TopologyOutgoingAngle(const E: TCADProfileEdge): Double;
+const
+  ProbeAngle = 1e-5;
+var
+  A, AEnd, Span, DA: Double;
+begin
+  Result := OutgoingAngle(E);
+  if E.Kind <> pekArc then Exit;
+  A := ArcTan2(E.Y1-E.CY,E.X1-E.CX);
+  AEnd := ArcTan2(E.Y2-E.CY,E.X2-E.CX);
+  if E.CCW then Span := Sweep(A,AEnd)
+  else Span := Sweep(AEnd,A);
+  DA := Min(ProbeAngle,Span*0.25);
+  if E.CCW then
+    Result := WrapAngle(Result + DA*0.5)
+  else
+    Result := WrapAngle(Result - DA*0.5);
+end;
+
 function ReverseEdge(const E:TCADProfileEdge):TCADProfileEdge;
 begin
   Result:=E;
@@ -262,14 +287,14 @@ var
     Halves[Q].Twin:=Q+1;
     Halves[Q].Next:=-1;
     Halves[Q].Curve:=F;
-    Halves[Q].Angle:=OutgoingAngle(F);
+    Halves[Q].Angle:=TopologyOutgoingAngle(F);
     Halves[Q].Visited:=False;
     Halves[Q+1].A:=B;
     Halves[Q+1].B:=A;
     Halves[Q+1].Twin:=Q;
     Halves[Q+1].Next:=-1;
     Halves[Q+1].Curve:=ReverseEdge(F);
-    Halves[Q+1].Angle:=OutgoingAngle(Halves[Q+1].Curve);
+    Halves[Q+1].Angle:=TopologyOutgoingAngle(Halves[Q+1].Curve);
     Halves[Q+1].Visited:=False;
   end;
 

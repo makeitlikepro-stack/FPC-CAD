@@ -40,6 +40,81 @@ begin
   end;
 end;
 
+procedure TestOrderedBodyHistory;
+var
+  D: TCADDocument;
+  H: TCADHistory;
+  A, B: TCADObjectId;
+  R, M, N, Other: TCADId;
+  ObjA, ObjB: TCADModelObject;
+  E: string;
+  Rev: QWord;
+begin
+  D := TCADDocument.Create;
+  H := TCADHistory.Create(D);
+  try
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'History A',A,E),'HIST-001: create A');
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'History B',B,E),'HIST-001: create B');
+    ObjA := D.Objects.Find(CADObjectRef(cokBody,A));
+    ObjB := D.Objects.Find(CADObjectRef(cokBody,B));
+    R := D.AttachFeature(TSimpleFeature.Create);
+    M := D.AttachFeature(TSimpleFeature.Create);
+    N := D.AttachFeature(TSimpleFeature.Create);
+    Other := D.AttachFeature(TSimpleFeature.Create);
+    Check(D.TryLink(M,R,E) and D.TryLink(N,M,E),
+      'HIST-002: modifier graph linked');
+    Check(H.Execute(TCADSetBodyTipCommand.Create(
+      CADObjectRef(cokBody,A),R)),'HIST-003: append root');
+    Check(H.Execute(TCADSetBodyTipCommand.Create(
+      CADObjectRef(cokBody,A),M)),'HIST-003: append modifier');
+    Check(H.Execute(TCADSetBodyTipCommand.Create(
+      CADObjectRef(cokBody,A),N)),'HIST-003: append final');
+    Check((ObjA.FeatureCount=3) and CADIdEqual(ObjA.FeatureAt(0),R) and
+      CADIdEqual(ObjA.FeatureAt(1),M) and CADIdEqual(ObjA.FeatureAt(2),N),
+      'HIST-004: ordered history is not inferred from graph');
+    Check(CADSameObjectId(D.Objects.FeatureOwner(M),A) and
+      (ObjB.FeatureCount=0),'HIST-005: feature has exactly one owner');
+    Rev := D.ObjectRevision;
+    Check(not D.TrySetBodyTip(CADObjectRef(cokBody,B),M,E) and
+      (D.ObjectRevision=Rev) and (ObjB.FeatureCount=0),
+      'HIST-006: cross-body duplicate rejected atomically');
+    Check(D.DetachFeature(R)=nil and D.DetachFeature(M)=nil,
+      'HIST-007: non-tip history features cannot detach');
+    Check(not D.Unlink(M,R),
+      'HIST-008: active history dependency cannot unlink');
+    Check(not D.TrySetBodyTip(CADObjectRef(cokBody,A),R,E) and
+      (ObjA.FeatureCount=3),
+      'HIST-009: cannot skip two history steps');
+    Check(H.Undo and (ObjA.FeatureCount=2) and
+      CADIdEqual(ObjA.TipFeatureId,M),
+      'HIST-010: undo removes last history entry');
+    Check(H.Redo and (ObjA.FeatureCount=3) and
+      CADIdEqual(ObjA.FeatureAt(2),N),
+      'HIST-011: redo restores same feature ID and order');
+    Check(H.Execute(TCADSetBodyTipCommand.Create(
+      CADObjectRef(cokBody,B),Other)) and (ObjB.FeatureCount=1) and
+      (ObjA.FeatureCount=3),
+      'HIST-012: independent Body history');
+    Check(H.Undo and (ObjB.FeatureCount=0) and (ObjA.FeatureCount=3),
+      'HIST-013: undo B leaves A unchanged');
+    Check(H.Undo and (ObjA.FeatureCount=2),
+      'HIST-014: undo A truncates its own history');
+    Check(H.Execute(TCADSetBodyTipCommand.Create(
+      CADObjectRef(cokBody,B),N)) and
+      CADSameObjectId(D.Objects.FeatureOwner(N),B),
+      'HIST-015: removed history entry can move to another Body');
+    Check(not H.Redo, 'HIST-016: fresh command clears redo branch');
+    Check(CADIdEqual(ObjA.TipFeatureId,M) and
+      CADIdEqual(ObjB.TipFeatureId,N),
+      'HIST-017: independent tips remain stable');
+  finally
+    H.Free;
+    D.Free;
+  end;
+end;
+
 procedure TestTipHistory;
 var
   D: TCADDocument;
@@ -99,6 +174,7 @@ end;
 
 begin
   TestTipHistory;
+  TestOrderedBodyHistory;
   if Failed=0 then
     WriteLn('PASS: CAD body tip ('+IntToStr(Checks)+' checks)')
   else

@@ -20,7 +20,8 @@ interface
 uses
   Classes, SysUtils, CAD.Core.Ids, CAD.Core.Values, CAD.Core.Feature,
   CAD.Core.Graph, CAD.Core.RecomputePlan, CAD.Core.WorkerPool,
-  CAD.Core.ResultCache, CAD.Core.DisplayPass, CAD.Config.Performance;
+  CAD.Core.ResultCache, CAD.Core.DisplayPass, CAD.Config.Performance,
+  CAD.Core.ObjectModel;
 
 type
   TCADRecomputeReport = record
@@ -43,6 +44,7 @@ type
     FGraph: TCADDependencyGraph;
     FPlan: TCADRecomputePlan;
     FCache: TCADResultCache;
+    FObjects: TCADObjectModel;       { logical Part, Datum, Sketch and Body IDs }
     FPool: TCADWorkerPool;
     FOptions: TCADPerformanceOptions;
     FChanged: TCADIntArray;           { slots edited since the last recompute }
@@ -97,6 +99,9 @@ type
     procedure SetOptions(const AOptions: TCADPerformanceOptions);
     property Options: TCADPerformanceOptions read FOptions;
     property Cache: TCADResultCache read FCache;
+    { Logical objects own no OCCT handles. Existing feature slots,
+      graph, cache and display remain unchanged in this foundation gate. }
+    property Objects: TCADObjectModel read FObjects;
     property Graph: TCADDependencyGraph read FGraph;
     property SlotCount: LongInt read FSlotCount;
     { Bumped by every structural or parameter change (UI refresh hint). }
@@ -117,6 +122,7 @@ begin
   FGraph := TCADDependencyGraph.Create;
   FPlan := TCADRecomputePlan.Create;
   FCache := TCADResultCache.Create(FOptions.Cache.Enabled, FOptions.Cache.MaxBytes);
+  FObjects := TCADObjectModel.Create;
   RebuildPool;
 end;
 
@@ -127,6 +133,7 @@ begin
   FPool.Free;                       { stop workers first }
   for I := 0 to FSlotCount - 1 do
     FSlots[I].Free;                 { results belong to the cache }
+  FObjects.Free;
   FCache.Free;
   FPlan.Free;
   FGraph.Free;

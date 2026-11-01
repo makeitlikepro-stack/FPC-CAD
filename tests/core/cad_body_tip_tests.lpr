@@ -4,7 +4,7 @@ uses
   {$ifdef unix}cthreads,{$endif}
   SysUtils, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.Core.ObjectIds, CAD.Core.ObjectModel, CAD.Core.BodyTipCommands,
-  CAD.Core.History;
+  CAD.Core.History, CAD.Core.BodyFeatureCommands;
 
 type
   TSimpleFeature = class(TCADFeature)
@@ -172,8 +172,88 @@ begin
   end;
 end;
 
+procedure TestAtomicFeatureCommand;
+var
+  D: TCADDocument;
+  H: TCADHistory;
+  A, B: TCADObjectId;
+  First, Second, Other, Bad: TCADAddBodyFeatureCommand;
+  FirstId, SecondId: TCADId;
+  ObjA, ObjB: TCADModelObject;
+  E: string;
+  RevisionBefore: QWord;
+  SlotsBefore: Integer;
+begin
+  D := TCADDocument.Create;
+  H := TCADHistory.Create(D);
+  try
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'Atomic A',A,E),'TX-001: create Body A');
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'Atomic B',B,E),'TX-001: create Body B');
+    ObjA := D.Objects.Find(CADObjectRef(cokBody,A));
+    ObjB := D.Objects.Find(CADObjectRef(cokBody,B));
+    First := TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,A),TSimpleFeature.Create,[]);
+    Check(H.Execute(First) and (ObjA.FeatureCount=1),
+      'TX-002: atomic root feature, graph and tip');
+    FirstId := First.Id;
+    Second := TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,A),TSimpleFeature.Create,[FirstId]);
+    Check(H.Execute(Second) and (ObjA.FeatureCount=2),
+      'TX-003: atomic modifier + dependency');
+    SecondId := Second.Id;
+    Check(D.Graph.HasLink(SecondId.Slot,FirstId.Slot) and
+      CADIdEqual(ObjA.TipFeatureId,SecondId),
+      'TX-004: graph and Body history agree');
+    Check(H.Undo and (ObjA.FeatureCount=1) and
+      (D.Find(SecondId)=nil) and CADIdEqual(ObjA.TipFeatureId,FirstId),
+      'TX-005: undo restores tip and detaches feature');
+    Check(H.Redo and (ObjA.FeatureCount=2) and
+      (D.Find(SecondId)<>nil) and
+      D.Graph.HasLink(SecondId.Slot,FirstId.Slot),
+      'TX-006: redo restores stable feature ID and graph');
+    RevisionBefore := D.ObjectRevision;
+    SlotsBefore := D.SlotCount;
+    Check(not H.Execute(TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,A),TSimpleFeature.Create,[])) and
+      (ObjA.FeatureCount=2) and
+      (D.ObjectRevision=RevisionBefore) and
+      (D.SlotCount=SlotsBefore),
+      'TX-007: missing previous tip input fails before mutation');
+    Check(not H.Execute(TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,A),TSimpleFeature.Create,[SecondId,SecondId])) and
+      (D.SlotCount=SlotsBefore),
+      'TX-008: duplicate input rejected before allocation');
+    Check(not H.Execute(TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,B),TSimpleFeature.Create,[CADId(99999)])) and
+      (ObjB.FeatureCount=0) and (D.SlotCount=SlotsBefore),
+      'TX-009: missing input rejected atomically');
+    Other := TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,B),TSimpleFeature.Create,[]);
+    Check(H.Execute(Other) and (ObjB.FeatureCount=1) and
+      (ObjA.FeatureCount=2),'TX-010: other Body unaffected');
+    Check(H.Undo and (ObjB.FeatureCount=0) and
+      (ObjA.FeatureCount=2),'TX-011: independent Undo');
+    Check(H.Redo and (ObjB.FeatureCount=1),
+      'TX-012: independent Redo');
+    Bad := TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,A),TSimpleFeature.Create,[SecondId]);
+    Check(H.Execute(Bad) and (ObjA.FeatureCount=3),
+      'TX-013: append after independent operation');
+    Check(H.Undo and (ObjA.FeatureCount=2),
+      'TX-014: undo append');
+    Check(H.Redo and (ObjA.FeatureCount=3),
+      'TX-015: redo append preserves history');
+  finally
+    H.Free;
+    D.Free;
+  end;
+end;
+
 begin
   TestTipHistory;
+  TestAtomicFeatureCommand;
   TestOrderedBodyHistory;
   if Failed=0 then
     WriteLn('PASS: CAD body tip ('+IntToStr(Checks)+' checks)')

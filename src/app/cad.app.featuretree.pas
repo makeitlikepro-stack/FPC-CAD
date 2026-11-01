@@ -112,10 +112,11 @@ end;
 
 procedure TCADFeatureTree.Refresh(ADoc: TCADDocument; AForce: Boolean);
 var
-  Part, N, BodyNode, SketchNode, HistoryNode: TUITreeNode;
-  S, I, J: LongInt;
-  F: TCADFeature;
-  O, ParentObject: TCADModelObject;
+  Part, N, BodyNode, HistoryNode: TUITreeNode;
+  S, I, J, K: LongInt;
+  F, Input: TCADFeature;
+  O, ParentObject, SketchObject: TCADModelObject;
+  ReferencedSketches: array of Boolean;
 
   procedure AddObjectNode(AParent: TUITreeNode;
     AObject: TCADModelObject; const AIcon: string);
@@ -124,6 +125,18 @@ var
   begin
     T := FTree.AddChild(AParent,UTF8String(AObject.Name),AIcon);
     T.Tag := NoFeatureTag;
+  end;
+
+  procedure AddSketchReference(AParent: TUITreeNode;
+    ASketch: TCADModelObject);
+  var
+    T: TUITreeNode;
+    Evaluator: TCADFeature;
+  begin
+    T := FTree.AddChild(AParent,UTF8String(ASketch.Name),'edit-sketch');
+    Evaluator := ADoc.Find(ASketch.SketchFeatureId);
+    if Evaluator <> nil then T.Tag := Evaluator.Id.Slot
+    else T.Tag := NoFeatureTag;
   end;
 
 begin
@@ -141,15 +154,12 @@ begin
   Part := FTree.AddRoot(UTF8String(ParentObject.Name),'part');
   Part.Tag := NoFeatureTag;
 
-  { Datum objects and their labels always come from the document registry.
-    No more separate hard-coded plane nodes or fictitious Body. }
   for I := 0 to ADoc.Objects.ObjectCount-1 do
   begin
     O := ADoc.Objects.ObjectAt(I);
     if (not O.Active) or
        (not CADSameObjectId(O.PartId,ParentObject.Id)) then Continue;
-    if O.Kind = cokOrigin then
-      AddObjectNode(Part,O,'origin');
+    if O.Kind = cokOrigin then AddObjectNode(Part,O,'origin');
   end;
   for I := 0 to ADoc.Objects.ObjectCount-1 do
   begin
@@ -159,13 +169,17 @@ begin
     if O.Kind = cokDatumPlane then AddObjectNode(Part,O,'plane');
   end;
 
+  { This is a presentation relationship, not a change of Sketch ownership.
+    Sketch evaluators stay independent, and several Bodies may depend on
+    the same Sketch. A referenced Sketch appears under each consuming
+    operation; only unreferenced Sketches remain directly under Part. }
+  SetLength(ReferencedSketches,ADoc.Objects.ObjectCount);
   for I := 0 to ADoc.Objects.ObjectCount-1 do
   begin
     O := ADoc.Objects.ObjectAt(I);
     if (not O.Active) or (O.Kind <> cokBody) or
        (not CADSameObjectId(O.PartId,ParentObject.Id)) then Continue;
     BodyNode := FTree.AddChild(Part,UTF8String(O.Name),'part');
-    { Negative node tags distinguish logical Body IDs from feature slots. }
     BodyNode.Tag := -2 - LongInt(O.Id.Value);
     HistoryNode := FTree.AddChild(BodyNode,'History','history');
     HistoryNode.Tag := NoFeatureTag;
@@ -173,29 +187,44 @@ begin
     begin
       F := ADoc.Find(O.FeatureAt(J));
       if F = nil then Continue;
-      N := FTree.AddChild(BodyNode,UTF8String(F.Name),IconOf(F));
+      N := FTree.AddChild(HistoryNode,UTF8String(F.Name),IconOf(F));
       N.Tag := F.Id.Slot;
+      { Follow the actual graph edges instead of guessing by name or
+        creation order. This also keeps old projects and multiple Bodies
+        deterministic after Undo/Redo. }
+      for K := 0 to High(F.Inputs) do
+      begin
+        Input := ADoc.Find(F.Inputs[K]);
+        if Input = nil then Continue;
+        SketchObject := ADoc.Objects.Find(CADObjectRef(cokSketch,
+          ADoc.Objects.SketchFeatureOwner(Input.Id)));
+        if SketchObject = nil then Continue;
+        AddSketchReference(N,SketchObject);
+        if (SketchObject.Id.Value >= 1) and
+           (SketchObject.Id.Value <= QWord(Length(ReferencedSketches))) then
+          ReferencedSketches[Integer(SketchObject.Id.Value)-1] := True;
+      end;
+      N.Expanded := True;
     end;
+    HistoryNode.Expanded := True;
     BodyNode.Expanded := True;
   end;
 
-  { Sketch objects have their own identity, support and evaluator reference.
-    The evaluator's feature ID is retained as the node tag so existing
-    double-click / Enter opens exactly the same Sketch editor. }
+  { A free Sketch belongs to Part, e.g. one created before Extrude, or a
+    Sketch whose Body operation has been undone. Never duplicate it there
+    if an active Body feature references it. }
   for I := 0 to ADoc.Objects.ObjectCount-1 do
   begin
     O := ADoc.Objects.ObjectAt(I);
     if (not O.Active) or (O.Kind <> cokSketch) or
        (not CADSameObjectId(O.PartId,ParentObject.Id)) then Continue;
-    SketchNode := FTree.AddChild(Part,UTF8String(O.Name),'edit-sketch');
-    F := ADoc.Find(O.SketchFeatureId);
-    if F <> nil then SketchNode.Tag := F.Id.Slot
-    else SketchNode.Tag := NoFeatureTag;
+    if ReferencedSketches[I] then Continue;
+    AddSketchReference(Part,O);
   end;
 
-  { Compatibility: existing non-Body features (e.g. Sketch -> Extrude from
-    the current editor) still appear. A logically bound Sketch is not shown
-    a second time inside its Extrude input subtree. }
+  { Show only genuinely unowned feature roots. Existing legacy Extrudes
+    continue to work; sketch evaluators already bound to logical Sketches
+    are shown by their logical nodes, not duplicated. }
   for S := 0 to ADoc.SlotCount-1 do
   begin
     F := ADoc.Find(CADId(S));

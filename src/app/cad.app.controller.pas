@@ -401,8 +401,34 @@ begin
   if FSketchMode = nil then
     Exit;
   case ACommand of
-    cadUndo: if FSketchMode.Active then FSketchToolbar.Run(ctaUndo);
-    cadRedo: if FSketchMode.Active then FSketchToolbar.Run(ctaRedo);
+    cadUndo:
+      if FSketchMode.Active then FSketchToolbar.Run(ctaUndo)
+      else if (FHistory <> nil) and FHistory.CanUndo then
+      begin
+        try
+          if FHistory.Undo then
+          begin
+            FTree.Refresh(FDoc,True);
+            Rebuild(False);
+          end;
+        except
+          on E: Exception do W.Status.Text := 'Undo: '+E.Message;
+        end;
+      end;
+    cadRedo:
+      if FSketchMode.Active then FSketchToolbar.Run(ctaRedo)
+      else if (FHistory <> nil) and FHistory.CanRedo then
+      begin
+        try
+          if FHistory.Redo then
+          begin
+            FTree.Refresh(FDoc,True);
+            Rebuild(False);
+          end;
+        except
+          on E: Exception do W.Status.Text := 'Redo: '+E.Message;
+        end;
+      end;
     cadZoomFit: FChrome.ZoomFit;
     cadNormalTo: NormalToClick(nil);
     cadToggleEdges: FChrome.ToggleEdges;
@@ -909,6 +935,18 @@ begin
   end;
   if not FSketchMode.Active then
   begin
+    if (Key = VK_Z) and (Shift * [ssCtrl,ssAlt,ssShift] = [ssCtrl]) then
+    begin
+      Run(cadUndo);
+      Key := 0;
+      Exit;
+    end;
+    if (Key = VK_Y) and (Shift * [ssCtrl,ssAlt,ssShift] = [ssCtrl]) then
+    begin
+      Run(cadRedo);
+      Key := 0;
+      Exit;
+    end;
     if (Key = VK_B) and (Shift * [ssCtrl, ssAlt, ssShift] = [ssCtrl]) then
     begin
       NewBody(nil);

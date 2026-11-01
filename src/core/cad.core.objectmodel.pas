@@ -153,6 +153,7 @@ begin
   FPartId := O.Id;
   O := AddObject(cokOrigin, FPartId,
     CADNoObjectId, 'Origin', True);
+  O.FFrame := CADDefaultDatumFrame(cdkXY);
   FOriginId := O.Id;
   O := AddObject(cokDatumPlane, FPartId, FOriginId,
     'XY Plane', True);

@@ -35,6 +35,8 @@ type
     property Visible: Boolean read FVisible;
     property IsDefault: Boolean read FIsDefault;
     property DatumKind: TCADDatumKind read FDatumKind;
+    { Origin and Datum frames are in Part coordinates. A Sketch frame is
+      local to SupportId (identity at creation), not a duplicated Datum. }
     property Frame: TCADDatumFrame read FFrame;
   end;
 
@@ -258,6 +260,9 @@ begin
     Exit(False);
   end;
   D := AddObject(cokSketch,P.Id,D.Id,AName,False);
+  { A new Sketch uses identity local coordinates on its support Datum.
+    A zero frame would have no valid axes for later Sketch evaluation. }
+  D.FFrame := CADDefaultDatumFrame(cdkXY);
   AId := D.Id;
   Result := True;
 end;

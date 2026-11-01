@@ -172,6 +172,50 @@ begin
   end;
 end;
 
+procedure TestFailedUndoKeepsCommand;
+var
+  D: TCADDocument;
+  H: TCADHistory;
+  B: TCADObjectId;
+  C: TCADAddBodyFeatureCommand;
+  UserFeature, BodyFeature: TCADId;
+  E: string;
+  Raised: Boolean;
+begin
+  D := TCADDocument.Create;
+  H := TCADHistory.Create(D);
+  try
+    Check(D.Objects.TryAddBody(CADObjectRef(cokPart,D.Objects.PartId),
+      'Protected',B,E),'TX-016: create Body');
+    C := TCADAddBodyFeatureCommand.Create(
+      CADObjectRef(cokBody,B),TSimpleFeature.Create,[]);
+    Check(H.Execute(C),'TX-017: create Body feature');
+    BodyFeature := C.Id;
+    UserFeature := D.AttachFeature(TSimpleFeature.Create);
+    Check(D.TryLink(UserFeature,BodyFeature,E),
+      'TX-018: external feature consumes tip');
+    Raised := False;
+    try
+      H.Undo;
+    except
+      on Ex: Exception do Raised := True;
+    end;
+    Check(Raised and H.CanUndo and (D.Find(BodyFeature)<>nil) and
+      CADIdEqual(D.Objects.Find(CADObjectRef(cokBody,B)).TipFeatureId,
+        BodyFeature),
+      'TX-019: failed undo preserves command and tip');
+    Check(D.Unlink(UserFeature,BodyFeature),
+      'TX-020: remove external dependency');
+    Check(H.Undo and (D.Find(BodyFeature)=nil) and H.CanRedo,
+      'TX-021: original command can undo after repair');
+    Check(H.Redo and (D.Find(BodyFeature)<>nil),
+      'TX-022: redo restores original identity');
+  finally
+    H.Free;
+    D.Free;
+  end;
+end;
+
 procedure TestAtomicFeatureCommand;
 var
   D: TCADDocument;
@@ -254,6 +298,7 @@ end;
 begin
   TestTipHistory;
   TestAtomicFeatureCommand;
+  TestFailedUndoKeepsCommand;
   TestOrderedBodyHistory;
   if Failed=0 then
     WriteLn('PASS: CAD body tip ('+IntToStr(Checks)+' checks)')

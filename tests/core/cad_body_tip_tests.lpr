@@ -426,6 +426,20 @@ begin
       'ATOM-008 reject nonempty Body');
     Check((O.FeatureCount=1) and (D.Objects.ActiveCount(cokSketch)=1),
       'ATOM-009 rejected operation does not mutate document');
+    Check(not H.Execute(TCADCreateSketchExtrudeCommand.Create(
+      CADObjectRef(cokBody,CADNoObjectId),
+      CADObjectRef(cokPart,D.Objects.PartId),
+      CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
+      TMockSketch.Create,TSimpleFeature.Create)),
+      'ATOM-010 invalid Body preflight');
+    Check(not H.Execute(TCADCreateSketchExtrudeCommand.Create(
+      CADObjectRef(cokBody,B),
+      CADObjectRef(cokPart,D.Objects.PartId),
+      CADObjectRef(cokDatumPlane,CADNoObjectId),
+      TMockSketch.Create,TSimpleFeature.Create)),
+      'ATOM-011 invalid Datum support preflight');
+    Check((D.Objects.ActiveCount(cokSketch)=1) and
+      (O.FeatureCount=1),'ATOM-012 failed preflight leaves no orphan');
   finally
     H.Free;
     D.Free;

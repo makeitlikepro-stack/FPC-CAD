@@ -1,6 +1,6 @@
 # CAD Object Model — Architecture Contract (Design Candidate)
 
-**Status:** DESIGN ONLY — proposed for review; no runtime code or document format has been changed.
+**Status:** APPROVED DESIGN CONTRACT. First implementation candidate adds a headless logical registry; full Body-tip/Sketch geometry migration, UI and file format remain future work.
 **Baseline:** `dev` / `main` at `98b91768c8dbb5a46fee6fe7ca096acd7587ea38`.
 **Objective:** Give Sketch, Body, Part and Datum entities real, durable identities and explicit relationships, while keeping the existing FPC recompute engine and OCCT bridge intact.
 
@@ -100,14 +100,15 @@ This is *contract pseudocode*, not a compiled API yet.
 
 ## 5. Typing and evaluation boundaries
 
-Recommended new core units (later stage; no files/classes created in this design phase):
+Proposed/core units (first foundation candidates implemented; other stages pending):
 
-- `src/core/cad.core.objectids.pas` — `TCADObjectId`, typed refs, registry lookup errors.
+- `src/core/cad.core.objectids.pas` — implemented `TCADObjectId` and typed refs.
 - `src/core/cad.core.part.pas` — Part membership and object collections.
 - `src/core/cad.core.body.pas` — Body identity, visibility, target/tip and invariants.
 - `src/core/cad.core.sketchobject.pas` — Sketch identity and support reference; references the existing sketch model through a small adapter, not OCCT.
 - `src/core/cad.core.datum.pas` — coordinate systems, datum planes and support transforms.
-- `src/core/cad.core.objectmodel.pas` — mutation/transaction facade, validation and read-only queries.
+- `src/core/cad.core.objectmodel.pas` — implemented basic object registry, validation, tombstone removal and restoration; **not yet an atomic multi-feature transaction engine**.
+- `src/core/cad.core.objectcommands.pas` — implemented single-object create/remove/rename/visibility commands on the existing `TCADHistory`.
 
 **Dependency direction:** `core` stays headless and OCCT/GUI-free. Do not introduce a core -> app/view/OCCT dependency to make the Feature Tree convenient. Keep 650-line unit and 90-line routine architecture gates; prefer small, meaningful units and descriptive Pascal names.
 
@@ -166,7 +167,7 @@ The detailed executable scenarios appear in `docs/OBJECT_MODEL_TEST_PLAN.md`.
 
 **Gate A (this stage, design):** verify actual code seams, ratify ownership/ID/tip contracts, and define acceptance tests. No runtime implementation or new user-visible feature.
 
-**Gate B (next implementation task):** a headless Part/Datum/Body registry with stable IDs, typed lookup, ownership and atomic Create/Remove/Undo; existing `scripts/test_core.sh` remains PASS. No GUI changes.
+**Gate B (current feature branch):** a headless Part/Datum/Body/Sketch identity registry, stable IDs and single-object commands with Undo/Redo. Local `scripts/test_core.sh` and user acceptance are still required before PASS. No GUI changes.
 
 **Gate C:** Body tip/history management with graph integration and unrelated-Body isolation, then the Sketch object adapter.
 

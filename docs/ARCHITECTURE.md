@@ -20,6 +20,15 @@
   silently re-point to wrong faces (topological naming is an open risk, see ROADMAP).
 - Every mutation goes through a command object so Undo/Redo stays correct.
 - Build resolves the pinned engine commit; never compile against a moving HEAD.
+- A logical Part/Body/Sketch/Datum must not be confused with a Feature
+  computation or an OCCT result handle. Object identity and cache lifetime
+  are independent; object ownership lives in the Document/Part registries.
+- Do not infer Body history or Part structure from dependency-graph leaves.
+  These are distinct, explicitly owned relationships.
+- The proposed object-model contracts and headless acceptance matrix are in
+  [OBJECT_MODEL_DESIGN.md](OBJECT_MODEL_DESIGN.md) and
+  [OBJECT_MODEL_TEST_PLAN.md](OBJECT_MODEL_TEST_PLAN.md). These are a design
+  candidate, NOT implemented runtime features.
 
 ## Status
 

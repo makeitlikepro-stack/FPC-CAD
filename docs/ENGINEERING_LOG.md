@@ -1,3 +1,10 @@
+## 2026-11-01 — Core test failure ATOM-002: invalid unnamed mock Sketch
+
+- Local build passed, but `scripts/test_core.sh` reported ATOM-002/003/004/006/007/009/012 as failed.
+- Root cause identified in test fixture: `TestAtomicSketchExtrudeHistory` passed `TMockSketch.Create` with no Name to `TCADCreateSketchExtrudeCommand`; the command propagates that name to `TryAddSketch`, which correctly rejects blank names (`Sketch name cannot be empty`). Real UI explicitly names Sketch features before creation.
+- Fixed the fixture with named `NewAtomicTestSketch` / `NewAtomicTestExtrude` constructors. Also guarded later access to `C` on a failed `History.Execute`, since History owns/frees failed commands. Prevents cascading failures and use-after-free if this test fails again.
+- This is a test-fixture fix; no behavior changes to the underlying creation Command or the new atomic edit Command. Local tests must be rerun. No merge.
+
 ## 2026-11-01 — Atomic Feature Editing: Sketch + Extrude (candidate)
 
 - New `CAD.Core.FeatureEditCommand` stores a five-field before/after snapshot: Sketch `geometry` and `contours`, plus optional linked Extrude `length`, `symmetric`, `reversed`.

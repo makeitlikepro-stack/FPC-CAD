@@ -62,9 +62,10 @@ begin
     if FileExists(AIconFolder + K + '.png') then
       FIcons.Add(K, AIconFolder + K + '.png');
   FTree.ImageList := FIcons;
-  { A row click must edit the selected component. OnActivate alone depends
-    on the engine's double-click / keyboard activation semantics. }
-  FTree.OnClick := @Activate;
+  { TUITreeView.RowClicked selects the node and fires OnChange from
+    SetSelectedNode. The inherited OnClick is NOT sent by row buttons.
+    OnActivate remains for Enter on an already selected node. }
+  FTree.OnChange := @Activate;
   FTree.OnActivate := @Activate;
 end;
 

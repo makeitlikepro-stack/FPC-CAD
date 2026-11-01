@@ -405,6 +405,12 @@ begin
     AError := 'target feature does not exist';
     Exit(False);
   end;
+  if CADIdValid(ANewTip) and
+     CADObjectIdValid(FObjects.SketchFeatureOwner(ANewTip)) then
+  begin
+    AError := 'Sketch evaluator cannot become a Body history feature';
+    Exit(False);
+  end;
   { A forward transition must consume the old tip. A backward transition
     is allowed for Undo when the old tip consumes the target feature. }
   if CADIdValid(OldTip) and CADIdValid(ANewTip) then

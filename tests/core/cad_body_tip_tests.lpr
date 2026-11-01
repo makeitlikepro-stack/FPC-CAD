@@ -377,6 +377,18 @@ begin
   end;
 end;
 
+function NewAtomicTestSketch: TMockSketch;
+begin
+  Result := TMockSketch.Create;
+  Result.Name := 'Sketch001';
+end;
+
+function NewAtomicTestExtrude: TSimpleFeature;
+begin
+  Result := TSimpleFeature.Create;
+  Result.Name := 'Extrude001';
+end;
+
 procedure TestAtomicSketchExtrudeHistory;
 var
   D: TCADDocument;
@@ -387,6 +399,7 @@ var
   SketchObjectId: TCADObjectId;
   O: TCADModelObject;
   E: string;
+  Created: Boolean;
 begin
   D := TCADDocument.Create;
   H := TCADHistory.Create(D);
@@ -397,8 +410,11 @@ begin
       CADObjectRef(cokBody,B),
       CADObjectRef(cokPart,D.Objects.PartId),
       CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
-      TMockSketch.Create,TSimpleFeature.Create);
-    Check(H.Execute(C),'ATOM-002 one History command creates chain');
+      NewAtomicTestSketch,NewAtomicTestExtrude);
+    Created := H.Execute(C);
+    Check(Created,'ATOM-002 one History command creates chain');
+    { History.Execute frees failed commands. Never read C on failure. }
+    if not Created then Exit;
     SketchId := C.SketchFeatureId;
     SketchObjectId := C.SketchObjectId;
     ExtrudeId := C.ExtrudeFeatureId;
@@ -427,7 +443,7 @@ begin
       CADObjectRef(cokBody,B),
       CADObjectRef(cokPart,D.Objects.PartId),
       CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
-      TMockSketch.Create,TSimpleFeature.Create)),
+      NewAtomicTestSketch,NewAtomicTestExtrude)),
       'ATOM-008 reject nonempty Body');
     Check((O.FeatureCount=1) and (D.Objects.ActiveCount(cokSketch)=1),
       'ATOM-009 rejected operation does not mutate document');
@@ -435,13 +451,13 @@ begin
       CADObjectRef(cokBody,CADNoObjectId),
       CADObjectRef(cokPart,D.Objects.PartId),
       CADObjectRef(cokDatumPlane,D.Objects.XYPlaneId),
-      TMockSketch.Create,TSimpleFeature.Create)),
+      NewAtomicTestSketch,NewAtomicTestExtrude)),
       'ATOM-010 invalid Body preflight');
     Check(not H.Execute(TCADCreateSketchExtrudeCommand.Create(
       CADObjectRef(cokBody,B),
       CADObjectRef(cokPart,D.Objects.PartId),
       CADObjectRef(cokDatumPlane,CADNoObjectId),
-      TMockSketch.Create,TSimpleFeature.Create)),
+      NewAtomicTestSketch,NewAtomicTestExtrude)),
       'ATOM-011 invalid Datum support preflight');
     Check((D.Objects.ActiveCount(cokSketch)=1) and
       (O.FeatureCount=1),'ATOM-012 failed preflight leaves no orphan');

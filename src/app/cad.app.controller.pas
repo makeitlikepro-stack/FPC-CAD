@@ -107,6 +107,7 @@ type
     function Describe(const AId: TPick3DId): string;
     procedure ModeChanged;
     procedure OpenSketchOf(const AId: TCADId);
+    function LinkedExtrudeOfSketch(const AId: TCADId): TCADId;
     procedure DiscardSketch;
     procedure EditFeature(Sender: TObject; const AId: TCADId);
     procedure DiscardClick(Sender: TObject);
@@ -799,6 +800,25 @@ begin
     W.Status.Text := F.Name + ': no sketch to edit (only sketches and extrudes for now)';
 end;
 
+{ Editing an existing Sketch directly from the tree must load the settings
+  of its linked extrusion too, not silently fall back to 10 mm. The slot
+  array contains stable feature IDs, so search from newest to oldest. }
+function TCADAppController.LinkedExtrudeOfSketch(const AId: TCADId): TCADId;
+var
+  I: Integer;
+  F: TCADFeature;
+begin
+  Result := CADNoId;
+  if (FDoc = nil) or not CADIdValid(AId) then Exit;
+  for I := FDoc.SlotCount - 1 downto 0 do
+  begin
+    F := FDoc.Find(CADId(I));
+    if not (F is TCADExtrudeFeature) then Continue;
+    if (Length(F.Inputs) > 0) and CADIdEqual(F.Inputs[0], AId) then
+      Exit(F.Id);
+  end;
+end;
+
 procedure TCADAppController.OpenSketchOf(const AId: TCADId);
 var
   Id: TCADId;
@@ -820,6 +840,8 @@ begin
   FEditSketch := Id;
   FSketchMode.EnterSketch(S);
   FSketchMode.LoadContours(FDoc.Find(Id).GetParamValue('contours').S);
+  if not CADIdValid(FEditExtrude) then
+    FEditExtrude := LinkedExtrudeOfSketch(Id);
   FExtrudeSaved := CADDefaultExtrudeOptions;
   if CADIdValid(FEditExtrude) and
      (FDoc.Find(FEditExtrude) is TCADExtrudeFeature) then

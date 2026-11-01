@@ -29,7 +29,7 @@ uses
   CAD.Config.Performance, CAD.Core.Ids, CAD.Core.Feature, CAD.Core.Document,
   CAD.OCCT.Bridge, CAD.View.MeshConvert, CAD.View.Sync, CAD.View.ViewportTarget,
   CAD.Core.Values, CAD.Core.ObjectIds, CAD.Core.History,
-  CAD.Core.SketchGeometryCommands, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
+  CAD.Core.SketchGeometryCommands, CAD.Core.ObjectCommands, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
@@ -100,6 +100,7 @@ type
     procedure RefreshExtrudeDraft;
     function ReadExtrudeDepth: Boolean;
     procedure NewSketch(Sender: TObject);
+    procedure NewBody(Sender: TObject);
     procedure FinishClick(Sender: TObject);
     procedure EditSketchClick(Sender: TObject);
     function SketchToEdit: TCADId;
@@ -302,6 +303,7 @@ begin
   FTyped.OnStatus := @SketchStatus;
   FChrome := TCADChrome.Create(FLookup, W.View);
   FChrome.OnExtrude := @NewSketch;
+  FChrome.OnNewBody := @NewBody;
   FChrome.OnExitSketch := @FinishClick;
   FChrome.OnDiscardSketch := @DiscardClick;
   FChrome.OnNormalTo := @NormalToClick;
@@ -822,6 +824,27 @@ begin
   Rebuild(True);
 end;
 
+procedure TCADAppController.NewBody(Sender: TObject);
+var
+  C: TCADCreateBodyCommand;
+  N: Integer;
+  Name: string;
+begin
+  if (FDoc = nil) or (FHistory = nil) or FSketchMode.Active then Exit;
+  { An empty Body has no BRep. It becomes the home for later features. }
+  N := FDoc.Objects.ActiveCount(cokBody) + 1;
+  Name := Format('Body%.3d',[N]);
+  C := TCADCreateBodyCommand.Create(
+    CADObjectRef(cokPart,FDoc.Objects.PartId),Name);
+  if FHistory.Execute(C) then
+  begin
+    FTree.Refresh(FDoc,True);
+    W.Status.Text := 'Created '+Name;
+  end
+  else
+    W.Status.Text := 'Could not create Body';
+end;
+
 procedure TCADAppController.NewSketch(Sender: TObject);
 begin
   if FDoc = nil then
@@ -870,7 +893,14 @@ begin
     Exit;
   end;
   if not FSketchMode.Active then
+  begin
+    if (Key = VK_B) and (Shift * [ssCtrl, ssAlt, ssShift] = [ssCtrl]) then
+    begin
+      NewBody(nil);
+      Key := 0;
+    end;
     Exit;
+  end;
   { a digit starts a typed value (its character goes into the box) }
   if FTyped.KeyStarts(Key, Shift) then
     Exit;

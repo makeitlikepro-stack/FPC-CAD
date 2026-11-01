@@ -391,6 +391,8 @@ end;
 function CADRelationAnchor(S: TCADSketch; AIndex: Integer; out U, V: Double): Boolean;
 var
   C: TCADSketchConstraint;
+  L, A, B: TCADSketchEntity;
+  X1, Y1, DX, DY, CX, CY, Len2, T, Dist, R1, R2: Double;
 begin
   U := 0;
   V := 0;
@@ -410,6 +412,56 @@ begin
       begin
         U := S.PointX(C.A);
         V := S.PointY(C.A);
+      end;
+    sckTangentLine:
+      begin
+        { Tangency is at the perpendicular foot of the circle/arc centre
+          on the supporting LINE, not the midpoint of that line.
+          C.A = line, C.B = circle/arc (see TCADSketch.Tangent). }
+        L := S.Entities[C.A];
+        B := S.Entities[C.B];
+        X1 := S.PointX(L.P1);
+        Y1 := S.PointY(L.P1);
+        DX := S.PointX(L.P2) - X1;
+        DY := S.PointY(L.P2) - Y1;
+        Len2 := Sqr(DX) + Sqr(DY);
+        if Len2 <= 1e-20 then
+          Result := EntityAnchor(S, C.A, U, V)
+        else
+        begin
+          CX := S.PointX(B.Center);
+          CY := S.PointY(B.Center);
+          { The geometric tangent point can be outside a finite segment;
+            keep its marker at the nearest visible point of that segment. }
+          T := EnsureRange(((CX - X1)*DX + (CY - Y1)*DY)/Len2, 0.0, 1.0);
+          U := X1 + T*DX;
+          V := Y1 + T*DY;
+        end;
+      end;
+    sckTangentCircles:
+      begin
+        { Contact point lies on the line of centres. Outside tangency
+          touches the first circle toward the second; for internal
+          tangency the smaller circle touches the larger from inside. }
+        A := S.Entities[C.A];
+        B := S.Entities[C.B];
+        X1 := S.PointX(A.Center);
+        Y1 := S.PointY(A.Center);
+        CX := S.PointX(B.Center);
+        CY := S.PointY(B.Center);
+        DX := CX - X1;
+        DY := CY - Y1;
+        Dist := Hypot(DX,DY);
+        if Dist <= 1e-12 then
+          Result := EntityAnchor(S, C.A, U, V)
+        else
+        begin
+          R1 := S.EntityRadius(C.A);
+          R2 := S.EntityRadius(C.B);
+          if (C.Side < 0) and (R1 > R2) then R1 := -R1;
+          U := X1 + R1*DX/Dist;
+          V := Y1 + R1*DY/Dist;
+        end;
       end;
     sckSymmetric:
       Result := EntityAnchor(S, C.C, U, V);

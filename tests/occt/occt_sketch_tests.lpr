@@ -346,6 +346,17 @@ begin
       D.Find(Ex).GetParamValue('symmetric').B and
       D.Find(Ex).GetParamValue('reversed').B,
       'extrude preview settings: persisted depth/direction control final solid');
+    { Two diagonal quadrants touch only at one vertex: two distinct solids
+      must remain and their surface areas must not be merged. }
+    Check(Near(OCCT.ShapeArea(ShapeOf(D, Ex)), 900),
+      'extrude outline: diagonal regions keep separate 5 x 5 x 20 solids');
+    { Two neighbouring quadrants have one common side: their internal
+      wall must disappear from the final OCCT B-rep (area 700, not 900). }
+    D.SetParam(Sk, 'contours', CADText('v1:2,2;8,2'));
+    D.Recompute;
+    Check(Near(Vol(D, Ex), 1000) and
+      Near(OCCT.ShapeArea(ShapeOf(D, Ex)), 700),
+      'extrude outline: adjacent faces yield one 10 x 5 x 20 solid without internal walls');
     D.SetParam(Sk, 'contours', CADText('v1:2,2'));
     D.Recompute;
     Check(Near(Vol(D, Ex), 500),

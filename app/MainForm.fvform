@@ -153,7 +153,8 @@
     </Panel>
     <Edit id="DrawValueEdit" left="760" top="360" width="170" height="28" placeholder="length, angle, Enter"/>
     <Panel id="StatusBar" left="0" top="874" width="1440" height="26" backgroundColor="#FFFFFF" anchors="left,right,bottom">
-      <Label id="StatusLabel" left="12" top="3" width="880" height="20" text="" textColor="#4A5260" anchors="left,top,right"/>
+      <Label id="StatusLabel" left="12" top="3" width="540" height="20" text="" textColor="#4A5260" anchors="left,top"/>
+      <Label id="UndoTraceLabel" left="552" top="3" width="355" height="20" text="" fontSize="11" textColor="#17658B" anchors="top"/>
       <Label id="ModeLabel" left="920" top="3" width="220" height="20" text="Part1" textColor="#4A5260" anchors="top,right"/>
       <Label id="DofStatusLabel" left="1150" top="3" width="200" height="20" text="" textColor="#4A5260" anchors="top,right"/>
       <Label id="UnitsLabel" left="1370" top="3" width="60" height="20" text="MMGS" textColor="#4A5260" anchors="top,right"/>

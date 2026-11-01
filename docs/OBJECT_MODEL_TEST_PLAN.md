@@ -1,12 +1,12 @@
 # Object Model — Headless Acceptance Matrix
 
-**Status:** proposed tests, not implemented; accompanies `OBJECT_MODEL_DESIGN.md`.
+**Status:** Gate A headless registry tests added in `tests/core/cad_object_model_tests.lpr`, not yet compiled/run by the authoring environment. The deeper cross-Part/compound-transaction/OCCT scenarios are pending.
 **Target runtime:** FPC 3.2.2, Lazarus 3.4 (GUI only in later gates). No GitHub Actions.
 **Baseline gate:** run `bash scripts/test_core.sh`, `bash scripts/test_sketch.sh`, `bash scripts/test_occt.sh`, `bash scripts/test_view.sh` before and after each migration step. Keep all existing tests PASS.
 
 ## A. Model registry — FIRST IMPLEMENTATION GATE
 
-The first code branch should add the new registry, object IDs and pure core tests **without changing** Sketch, Extrude, the OCCT ABI, UI or serialization.
+This foundation branch adds the new registry, object IDs and headless tests **without changing** Sketch, Extrude, OCCT ABI, UI or serialization.
 
 | ID | Scenario | Required assertion |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ The first code branch should add the new registry, object IDs and pure core test
 | OM-011 | Create 1000 objects, delete every other, then create 100 more | IDs are unique/nonzero; dead slots never resolve to another object, and lookups are deterministic. |
 | OM-012 | Create Part/Body/Datum core model without OCCT/LCL/OpenGL loaded | Compilation and all tests succeed on headless FPC (pure core boundary). |
 
-Gate A release threshold: **OM-001..012 PASS**, existing core suite PASS, no new production dependency from `src/core` to `src/occt`, `src/view`, or `src/app`.
+Gate A release threshold: all **applicable** OM-001..012 assertions and the existing core suite PASS; code remains OCCT/LCL/GL-free. OM-006 cross-Part validation is deferred because the MVP deliberately creates one Part per document. OM-010 currently covers an atomic single-object failure; multi-feature transactional rollback is a separate gate. Do not claim these as tested before a real local FPC run.
 
 ## B. Body tip, graph and recompute — SECOND GATE
 

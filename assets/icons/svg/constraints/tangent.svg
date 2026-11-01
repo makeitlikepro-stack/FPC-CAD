@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Technical tangent constraint: the straight stroke touches the circular arc at one point. -->
+  <g fill="none" stroke="#278648" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="16" cy="19" r="10"/>
+    <path d="M2 9 H30"/>
+  </g>
+</svg>

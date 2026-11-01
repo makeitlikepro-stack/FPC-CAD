@@ -31,7 +31,8 @@ uses
   CAD.Core.Values, CAD.Core.ObjectIds, CAD.Core.History,
   CAD.Core.SketchGeometryCommands, CAD.Core.ObjectCommands,
   CAD.Core.ObjectModel, CAD.Core.BodyFeatureCommands,
-  CAD.Core.SketchExtrudeCommand, CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
+  CAD.Core.SketchExtrudeCommand, CAD.Core.FeatureEditCommand,
+  CAD.Sketch.Model, CAD.Sketch.Text, CAD.Sketch.Editor,
   CAD.Sketch.Commands, CAD.Sketch.Solver, CAD.Features.Sketch, CAD.Features.Extrude,
   CAD.App.DemoScene, CAD.App.SketchMode, CAD.App.SketchPanel, CAD.App.SketchDims,
   CAD.App.SketchToolbar, CAD.App.DesignLookup, CAD.App.TypedValue,
@@ -842,27 +843,28 @@ begin
       W.Status.Text := 'Cannot bind Sketch: '+Err;
       Exit;
     end;
-    if not FHistory.Execute(TCADCommitSketchCommand.Create(
-      CADObjectRef(cokSketch,SketchObjectId),
-      CADSketchToText(FSketchMode.Sketch),
-      FSketchMode.ContoursText)) then
+    { One snapshot command commits BOTH Sketch and Extrude parameters.
+      Unchanged edits do not create a history entry. }
+    if not FHistory.Execute(TCADFeatureEditCommand.Create(
+      CADObjectRef(cokSketch,SketchObjectId),FEditExtrude,
+      CADSketchToText(FSketchMode.Sketch),FSketchMode.ContoursText,
+      FExtrudeSaved.Depth,FExtrudeSaved.Symmetric,FExtrudeSaved.Reversed)) then
     begin
-      { An unchanged Sketch is a successful no-op; no history entry. }
-      if (FDoc.Find(FEditSketch).GetParamValue('geometry').S <>
-           CADSketchToText(FSketchMode.Sketch)) or
-         (FDoc.Find(FEditSketch).GetParamValue('contours').S <>
-           FSketchMode.ContoursText) then
+      { An unchanged editor is a successful no-op; a changed editor
+        rejected by the command must remain open for correction. }
+      F := FDoc.Find(FEditSketch);
+      if (F = nil) or
+         (F.GetParamValue('geometry').S <> CADSketchToText(FSketchMode.Sketch)) or
+         (F.GetParamValue('contours').S <> FSketchMode.ContoursText) or
+         (CADIdValid(FEditExtrude) and
+          ((FDoc.Find(FEditExtrude) = nil) or
+           (FDoc.Find(FEditExtrude).GetParamValue('length').F <> FExtrudeSaved.Depth) or
+           (FDoc.Find(FEditExtrude).GetParamValue('symmetric').B <> FExtrudeSaved.Symmetric) or
+           (FDoc.Find(FEditExtrude).GetParamValue('reversed').B <> FExtrudeSaved.Reversed))) then
       begin
-        W.Status.Text := 'Cannot commit Sketch geometry';
+        W.Status.Text := 'Cannot commit Sketch/Extrude edit';
         Exit;
       end;
-    end;
-    if CADIdValid(FEditExtrude) and
-       (FDoc.Find(FEditExtrude) is TCADExtrudeFeature) then
-    begin
-      FDoc.SetParam(FEditExtrude, 'length', CADFloat(FExtrudeSaved.Depth));
-      FDoc.SetParam(FEditExtrude, 'symmetric', CADBool(FExtrudeSaved.Symmetric));
-      FDoc.SetParam(FEditExtrude, 'reversed', CADBool(FExtrudeSaved.Reversed));
     end;
     FLastSketch := FEditSketch;
     FEditSketch := CADNoId;

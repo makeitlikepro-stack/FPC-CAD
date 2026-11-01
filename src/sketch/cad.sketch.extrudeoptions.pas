@@ -20,6 +20,10 @@ function CADDefaultExtrudeOptions: TCADExtrudeOptions;
 function CADValidateExtrudeOptions(const AOptions: TCADExtrudeOptions;
   out AError: string): Boolean;
 function CADParseExtrudeDepth(const AText: string; out ADepth: Double): Boolean;
+{ Project mouse displacement onto the projected normal, in pixels/mm.
+  AAxis carries Reverse and Symmetric scaling. }
+function CADDraggedExtrudeDepth(AStartDepth, ADX, ADY,
+  AAxisX, AAxisY: Double): Double;
 
 implementation
 
@@ -62,6 +66,17 @@ begin
   if not Result then Exit;
   Result := (not IsNan(ADepth)) and (not IsInfinite(ADepth)) and
             (ADepth > 0) and (ADepth <= 1000000);
+end;
+
+function CADDraggedExtrudeDepth(AStartDepth, ADX, ADY,
+  AAxisX, AAxisY: Double): Double;
+var
+  Den: Double;
+begin
+  Den := Sqr(AAxisX)+Sqr(AAxisY);
+  if Den <= 1e-12 then Exit(AStartDepth);
+  Result := EnsureRange(AStartDepth +
+    (ADX*AAxisX+ADY*AAxisY)/Den,0.01,1000000.0);
 end;
 
 end.

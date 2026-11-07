@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
 branch=claude/stacking-order
-commit=0093852f228fa8acfe84eff3f0a34bf91f116033
-checkpoint=2026-11-07 TEST ONLY: Engine candidate claude/stacking-order (clip chain + stacking-context paint order + plan perf) on dev 8c4b5e2
+commit=b5283be7803f620796fc44d5860bee59f1bd8f48
+checkpoint=2026-11-07 TEST ONLY: Engine candidate claude/stacking-order (clip chain + stacking-context paint order + plan perf) on dev 389439c
 note=Temporary test pin for the user's visual check. Never merge this pin to dev/main; repin to released Engine main after acceptance.

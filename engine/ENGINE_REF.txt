@@ -1,5 +1,5 @@
 repository=makeitlikepro-stack/FPC-OpenGL-UI-Engine
-branch=claude/clip-chain
-commit=776cc3c03bad72d39f26dd307bcd9112dfd48d7a
-checkpoint=2026-11-07 TEST ONLY: Engine candidate claude/clip-chain (one clip path, unlimited nested clipping, clipped paint footprints) on dev 8c4b5e2
+branch=claude/stacking-order
+commit=f5bc2fd59214e4d53abb89808ebb9ca50c50c2dc
+checkpoint=2026-11-07 TEST ONLY: Engine candidate claude/stacking-order (clip chain + stacking-context paint order + plan perf) on dev 8c4b5e2
 note=Temporary test pin for the user's visual check. Never merge this pin to dev/main; repin to released Engine main after acceptance.
